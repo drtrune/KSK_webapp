@@ -49,7 +49,7 @@ function kskApp() {
       MA_DAN_TOC: '01',
       SO_CCCD: '',
       NGAYCAP_CCCD: '',
-      NOICAP_CCCD: 'Cục Cảnh sát QLHC về TTXH',
+      NOICAP_CCCD: 'Cục Cảnh sát Quản lý hành chính về trật tự xã hội',
       MATINH_CU_TRU: '11221',
       MAXA_CU_TRU: '',
       DIA_CHI: '',
@@ -327,7 +327,7 @@ function kskApp() {
     initIcdMultiSelect(el, fieldName) {
       if (typeof TomSelect === 'undefined' || !el) return;
       if (this.tomInstances[fieldName]) {
-        try { this.tomInstances[fieldName].destroy(); } catch (e) {}
+        try { this.tomInstances[fieldName].destroy(); } catch (e) { }
       }
 
       const instance = new TomSelect(el, {
@@ -343,21 +343,21 @@ function kskApp() {
           fetch(`/api/catalogs?cat_type=ICD10&q=${encodeURIComponent(query.trim())}&limit=30`, {
             headers: { 'Authorization': `Bearer ${this.token}` }
           })
-          .then(response => response.json())
-          .then(data => {
-            const results = (data || []).map(item => ({
-              value: item.code,
-              text: `${item.code} - ${item.name}`
-            }));
-            callback(results);
-          })
-          .catch(() => callback());
+            .then(response => response.json())
+            .then(data => {
+              const results = (data || []).map(item => ({
+                value: item.code,
+                text: `${item.code} - ${item.name}`
+              }));
+              callback(results);
+            })
+            .catch(() => callback());
         },
         render: {
-          item: function(data, escape) {
+          item: function (data, escape) {
             return `<div>${escape(data.text || data.value)}</div>`;
           },
-          option: function(data, escape) {
+          option: function (data, escape) {
             return `<div><span class="font-bold text-sky-700">${escape(data.value)}</span> - ${escape(data.text ? data.text.replace(data.value + ' - ', '') : '')}</div>`;
           }
         },
@@ -442,7 +442,7 @@ function kskApp() {
     // Khởi tạo tất cả Searchable Select ở Tiếp nhận
     initAllSearchableSelects() {
       this.updateSearchableSelect('select_noicap_cccd', 'NOICAP_CCCD', this.catalogs.noi_cap, 'Cục Cảnh sát QLHC về TTXH', true);
-      this.updateSearchableSelect('select_nhom_mau', 'NHOM_MAU', this.catalogs.nhom_mau && this.catalogs.nhom_mau.length ? this.catalogs.nhom_mau : [{name:'A'},{name:'B'},{name:'AB'},{name:'O'}], '', true);
+      this.updateSearchableSelect('select_nhom_mau', 'NHOM_MAU', this.catalogs.nhom_mau && this.catalogs.nhom_mau.length ? this.catalogs.nhom_mau : [{ name: 'A' }, { name: 'B' }, { name: 'AB' }, { name: 'O' }], '', true);
       this.updateSearchableSelect('select_ma_dan_toc', 'MA_DAN_TOC', this.catalogs.dan_toc, '01');
       this.updateSearchableSelect('select_ma_nghe_nghiep', 'MA_NGHE_NGHIEP', this.catalogs.nghe_nghiep, '00');
       this.updateSearchableSelect('select_matinh_cu_tru', 'MATINH_CU_TRU', this.catalogs.tinh, '11221');
@@ -596,7 +596,7 @@ function kskApp() {
 
         const localVersionsStr = localStorage.getItem('ksk_catalog_versions');
         let localVersions = {};
-        try { localVersions = JSON.parse(localVersionsStr || '{}'); } catch (e) {}
+        try { localVersions = JSON.parse(localVersionsStr || '{}'); } catch (e) { }
 
         // Danh mục cần cho Tiếp nhận & Nghiệp vụ thông thường (không bao gồm ICD10, XA_PHUONG)
         const catalogDefs = [
@@ -619,7 +619,7 @@ function kskApp() {
             try {
               this.catalogs[item.key] = JSON.parse(cachedData);
               continue;
-            } catch (e) {}
+            } catch (e) { }
           }
 
           // Ngược lại, fetch từ server và cập nhật cache
@@ -678,7 +678,7 @@ function kskApp() {
           this.catalogs.xa = JSON.parse(cached);
           this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', this.catalogs.xa, this.form.MAXA_CU_TRU);
           return;
-        } catch (e) {}
+        } catch (e) { }
       }
 
       try {
@@ -688,7 +688,7 @@ function kskApp() {
         if (res.ok) {
           const list = await res.json();
           this.catalogs.xa = list;
-          try { sessionStorage.setItem(cacheKey, JSON.stringify(list)); } catch (e) {}
+          try { sessionStorage.setItem(cacheKey, JSON.stringify(list)); } catch (e) { }
           this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', this.catalogs.xa, this.form.MAXA_CU_TRU);
         }
       } catch (e) {
@@ -811,22 +811,30 @@ function kskApp() {
       }
     },
 
-    loadRecordIntoForm(rec) {
+    async loadRecordIntoForm(rec) {
       this.recordId = rec.id;
       this.recordStatus = rec.status;
       this.updatedBy = rec.updated_by || '';
       this.updatedAt = rec.updated_at || '';
 
-      const payload = rec.payload 
-        ? rec.payload 
+      const payload = rec.payload
+        ? rec.payload
         : (typeof rec.payload_json === 'string' ? JSON.parse(rec.payload_json || '{}') : (rec.payload_json || {}));
+
+      // Chuẩn hóa mã tỉnh/xã cũ (nếu có) sang mã mới trong danh mục
+      if (payload.MATINH_CU_TRU === '52' || payload.MATINH_CU_TRU === '64' || !payload.MATINH_CU_TRU) {
+        payload.MATINH_CU_TRU = '11221';
+      }
+      if (payload.MAXA_CU_TRU === '21907' || payload.MAXA_CU_TRU === '21592' || payload.MAXA_CU_TRU === '21562') {
+        payload.MAXA_CU_TRU = rec.ma_tiep_nhan === 'TN.2611.0004019' ? '13339' : '13338';
+      }
 
       this.form = { ...this.form, ...payload, id: rec.id };
       this.form.MA_TIEP_NHAN = rec.ma_tiep_nhan || this.form.MA_TIEP_NHAN;
 
       // Nạp xã phường của tỉnh tương ứng nếu có
       if (this.form.MATINH_CU_TRU) {
-        this.loadWardsForProvince(this.form.MATINH_CU_TRU);
+        await this.loadWardsForProvince(this.form.MATINH_CU_TRU);
       }
 
       this.syncAllSelects();
@@ -990,19 +998,36 @@ function kskApp() {
       }
     },
 
-    // In Phiếu Tiếp Nhận (In phôi trắng với các dòng ..... để bác sĩ ghi tay)
+    // In Phiếu Tiếp Nhận (In phôi 4 trang chỉ có dữ liệu hành chính)
+    async printBlank() {
+      if (this.form.MATINH_CU_TRU && (!this.catalogs.xa || !this.catalogs.xa.length)) {
+        await this.loadWardsForProvince(this.form.MATINH_CU_TRU);
+      }
+      const code = this.form.MA_TIEP_NHAN || '0';
+      if (typeof JsBarcode !== 'undefined') {
+        ['p1', 'p2', 'p3', 'p4'].forEach(p => {
+          const el = document.querySelector('#print_barcode_' + p);
+          if (el) {
+            JsBarcode('#print_barcode_' + p, code, {
+              format: 'CODE128',
+              displayValue: false,
+              margin: 0,
+              width: 1.4,
+              height: 40
+            });
+          }
+        });
+      }
+      this.$nextTick(() => window.print());
+    },
+
     printReceptionBlank() {
       if (!this.form.MA_TIEP_NHAN) {
         this.toast('Vui lòng nhập Mã tiếp nhận trước khi in phôi!', 'error');
         return;
       }
       this.printModeReception = true;
-      this.$nextTick(() => {
-        this.renderPrintBarcodes();
-        setTimeout(() => {
-          window.print();
-        }, 150);
-      });
+      this.printBlank();
     },
 
     // In Phiếu KSK Hoàn chỉnh
@@ -1012,12 +1037,7 @@ function kskApp() {
         return;
       }
       this.printModeReception = false;
-      this.$nextTick(() => {
-        this.renderPrintBarcodes();
-        setTimeout(() => {
-          window.print();
-        }, 150);
-      });
+      this.printBlank();
     },
 
     // Tải file DOCX (Word)
@@ -1486,36 +1506,34 @@ function kskApp() {
       return parts[partIndex] || '';
     },
 
-    // Helper tra cứu tên từ danh mục cho bản in
-    getCatalogName(list, code) {
+    // Helper tra cứu tên từ danh mục cho bản in (luôn lấy Tên tỉnh/xã/nghề nghiệp thay vì mã code)
+    getCatalogName(list, code, fieldName = '') {
       if (!code) return '';
-      const item = (list || []).find(c => String(c.code) === String(code));
-      return item ? item.name : code;
+      const s = String(code).trim();
+      const item = (list || []).find(c => String(c.code).trim() === s || String(c.name).trim() === s);
+      if (item && item.name) return item.name;
+      if (fieldName && this.tomInstances[fieldName] && this.tomInstances[fieldName].options[s]) {
+        const txt = String(this.tomInstances[fieldName].options[s].text || '');
+        return txt.includes(' - ') ? txt.split(' - ').slice(1).join(' - ').trim() : txt;
+      }
+      if (s.includes(' - ')) return s.split(' - ').slice(1).join(' - ').trim();
+      return '';
     },
 
     // Render Barcode Code128 bằng JsBarcode
     renderPrintBarcodes() {
-      const codeVal = this.form.MA_TIEP_NHAN || 'TN.2611.0000000';
+      const code = this.form.MA_TIEP_NHAN || '0';
       if (typeof JsBarcode !== 'undefined') {
         try {
-          const barcodeConfigs = [
-            { sel: '#print_barcode_p1', width: 2.2, height: 46, fontSize: 12 },
-            { sel: '#print_barcode_p2', width: 1.8, height: 32, fontSize: 11 },
-            { sel: '#print_barcode_p3', width: 1.8, height: 32, fontSize: 11 },
-            { sel: '#print_barcode_p4', width: 1.8, height: 32, fontSize: 11 },
-          ];
-          barcodeConfigs.forEach(cfg => {
-            const el = document.querySelector(cfg.sel);
+          ['p1', 'p2', 'p3', 'p4'].forEach(p => {
+            const el = document.querySelector('#print_barcode_' + p);
             if (el) {
-              JsBarcode(cfg.sel, codeVal, {
-                format: "CODE128",
-                width: cfg.width,
-                height: cfg.height,
-                displayValue: true,
-                fontSize: cfg.fontSize,
-                font: "monospace",
-                fontOptions: "bold",
-                margin: 0
+              JsBarcode('#print_barcode_' + p, code, {
+                format: 'CODE128',
+                displayValue: false,
+                margin: 0,
+                width: 1.4,
+                height: 40
               });
             }
           });
