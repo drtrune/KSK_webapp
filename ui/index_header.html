@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hệ thống Khám Sức Khỏe</title>
+
+  <!-- TAILWINDCSS & ALPINE.JS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="/static/js/alpine.min.js"></script>
+
+  <!-- FLATPICKR (DAYPICKER - FORMAT DD/MM/YYYY) -->
+  <link rel="stylesheet" href="/static/css/flatpickr.min.css">
+  <script src="/static/js/flatpickr.min.js"></script>
+  <script src="/static/js/flatpickr.vn.js"></script>
+
+  <!-- TOM SELECT (SEARCHABLE DROPDOWN & MULTI-SELECT ICD-10) -->
+  <link rel="stylesheet" href="/static/css/tom-select.bootstrap5.min.css">
+  <script src="/static/js/tom-select.complete.min.js"></script>
+
+  <!-- JSBARCODE (BARCODE CODE128 OFFLINE) -->
+  <script src="/static/js/JsBarcode.all.min.js"></script>
+
+  <!-- CUSTOM STYLESHEET (DESIGN SYSTEM SPEC - design.md) -->
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="bg-[#F4F6F8] text-[#2C3E50] min-h-screen text-[13.5px]" x-data="kskApp()" x-init="initApp()">
+
+  <!-- ===================================================================== -->
+  <!-- THÔNG BÁO TOAST - VỊ TRÍ GÓC DƯỚI CÙNG BÊN PHẢI THEO DESIGN.MD       -->
+  <!-- ===================================================================== -->
+  <div class="fixed bottom-6 right-6 z-50 space-y-2 no-print" aria-live="polite">
+    <template x-for="t in toasts" :key="t.id">
+      <div
+        class="px-4 py-3 rounded-xl shadow-lg border flex items-center gap-3 min-w-[280px] max-w-md transition-all text-xs bg-white"
+        :class="t.type === 'error' ? 'border-[#E74C3C]/40 text-[#C0392B]' : 'border-[#2ECC71]/40 text-[#27AE60]'"
+      >
+        <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="t.type === 'error' ? 'bg-[#E74C3C]' : 'bg-[#2ECC71]'"></span>
+        <div class="font-medium flex-1 text-[#2C3E50]" x-text="t.message"></div>
+      </div>
+    </template>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MÀN HÌNH ĐĂNG NHẬP                                                    -->
+  <!-- ===================================================================== -->
+  <div x-show="!token" x-cloak class="min-h-screen flex items-center justify-center p-4 bg-[#F4F6F8] no-print">
+    <div class="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-sm p-6 space-y-5">
+      <div class="text-center space-y-1">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#3498DB] text-white font-bold text-lg mb-2 shadow-sm">KSK</div>
+        <h1 class="text-lg font-bold text-[#2C3E50]">Đăng nhập Hệ thống</h1>
+        <p class="text-xs text-[#7F8C8D]">Phần mềm Quản lý Khám Sức Khỏe</p>
+      </div>
+
+      <form @submit.prevent="handleLogin()" class="space-y-4">
+        <div>
+          <label class="label-title">Tên đăng nhập:</label>
+          <input type="text" x-model="loginForm.username" placeholder="letan / bstheluc / admin..." class="input-box" autofocus />
+        </div>
+        <div>
+          <label class="label-title">Mật khẩu:</label>
+          <input type="password" x-model="loginForm.password" placeholder="••••••" class="input-box" />
+        </div>
+        <button type="submit" :disabled="loginLoading" class="w-full py-2.5 bg-[#3498DB] hover:bg-[#2980B9] disabled:opacity-50 text-white rounded-lg font-medium text-xs transition-colors shadow-sm">
+          <span x-text="loginLoading ? 'Đang xác thực...' : 'Đăng nhập'"></span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- GIAO DIỆN CHÍNH (KHI ĐÃ ĐĂNG NHẬP) - 16:9 MINIMALISM YOUTUBE-STYLE     -->
+  <!-- ===================================================================== -->
+  <div x-show="token" x-cloak class="min-h-screen flex flex-col bg-[#F4F6F8]">
+
+    <!-- 1. THANH ĐIỀU HƯỚNG TRÊN CÙNG (HEADER 64PX THEO DESIGN.MD) -->
+    <header class="h-16 bg-white border-b border-[#E2E8F0] sticky top-0 z-40 px-4 shadow-xs flex items-center no-print">
+      <div class="w-full flex items-center justify-between gap-4">
+        
+        <!-- Logo & Nút Toggle Hamburger -->
+        <div class="flex items-center gap-3">
+          <!-- Nút Hamburger Icon theo design.md 3.1 -->
+          <button type="button" @click="sidebarOpen = !sidebarOpen" class="p-2 text-[#2C3E50] hover:text-[#3498DB] hover:bg-[#F4F6F8] rounded-full transition-colors" title="Thu gọn / Mở rộng Sidebar">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+
+          <div class="flex items-center gap-2 cursor-pointer" @click="resetForm()">
+            <span class="w-8 h-8 rounded-lg bg-[#3498DB] text-white flex items-center justify-center font-bold text-sm tracking-tight shadow-xs">KSK</span>
+            <span class="font-bold text-[#2C3E50] text-sm hidden sm:inline">Khám Sức Khỏe</span>
+          </div>
+          <span class="text-[#E2E8F0] hidden md:inline">|</span>
+          <span class="text-xs text-[#7F8C8D] font-medium hidden md:inline truncate max-w-xs" x-text="facility.ten_cskcb"></span>
+        </div>
+
+        <!-- Ô Tìm kiếm YouTube Tối Giản Bo Tròn 20px (design.md 3.1) -->
+        <div class="flex-1 max-w-xl mx-2">
+          <form @submit.prevent="handleSearchOrHis()" class="flex items-center">
+            <div class="relative w-full flex items-center">
+              <input
+                type="text"
+                x-model="searchMaTn"
+                placeholder="Nhập Mã tiếp nhận (Ví dụ: TN.2611.0004018)..."
+                class="w-full pl-4 pr-16 py-2 rounded-l-full border border-r-0 border-[#E2E8F0] focus:outline-none focus:border-[#3498DB] text-xs text-[#2C3E50] bg-[#FFFFFF] shadow-inner"
+              />
+              <!-- Nút xóa nhanh nội dung tìm kiếm -->
+              <button
+                type="button"
+                x-show="searchMaTn"
+                @click="searchMaTn = ''"
+                class="absolute right-3 text-[#7F8C8D] hover:text-[#2C3E50] p-0.5 rounded-full"
+                title="Xóa nhanh"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <button
+              type="submit"
+              :disabled="searchLoading"
+              class="px-5 py-2 bg-[#F4F6F8] hover:bg-[#E2E8F0] border border-[#E2E8F0] rounded-r-full text-[#2C3E50] text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+              title="Tìm kiếm"
+            >
+              <svg class="w-3.5 h-3.5 text-[#2C3E50]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <span class="hidden sm:inline">Tìm</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Icon Chuông (chấm xanh #2ECC71), Tạo mới & User Avatar -->
+        <div class="flex items-center gap-2.5">
+          <!-- Chuông thông báo kèm chấm xanh #2ECC71 theo design.md 3.1 -->
+          <div class="relative p-2 text-[#2C3E50] hover:bg-[#F4F6F8] rounded-full cursor-pointer transition-colors" title="Thông báo hệ thống">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+            <span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#2ECC71] ring-2 ring-white"></span>
+          </div>
+
+          <!-- Nút Tạo mới -->
+          <button type="button" @click="resetForm()" class="px-3.5 py-1.5 bg-[#F4F6F8] hover:bg-[#E2E8F0] text-[#2C3E50] rounded-lg text-xs font-medium transition-colors border border-[#E2E8F0] flex items-center gap-1.5 shadow-xs" title="Tạo hồ sơ mới">
+            <svg class="w-3.5 h-3.5 text-[#3498DB]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            <span class="hidden sm:inline">Mới</span>
+          </button>
+
+          <!-- Xuất CSV -->
+          <button type="button" @click="downloadCsv()" class="px-3 py-1.5 bg-[#FFFFFF] hover:bg-[#F4F6F8] text-[#27AE60] border border-[#2ECC71]/40 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs" title="Xuất CSV 89 cột">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span class="hidden md:inline">Xuất CSV</span>
+          </button>
+
+          <div class="h-6 w-px bg-[#E2E8F0] mx-0.5"></div>
+
+          <!-- User Avatar & Đăng xuất -->
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-full bg-[#3498DB]/15 text-[#3498DB] font-bold text-xs flex items-center justify-center border border-[#3498DB]/30" :title="currentUser?.full_name">
+              <span x-text="(currentUser?.full_name || 'U').charAt(0)"></span>
+            </div>
+            <div class="text-right hidden sm:block">
+              <div class="font-semibold text-[#2C3E50] text-xs truncate max-w-[110px]" x-text="currentUser?.full_name"></div>
+              <div class="text-[10px] text-[#7F8C8D] font-mono truncate max-w-[110px]" x-text="currentUser?.role"></div>
+            </div>
+            <button type="button" @click="logout()" class="p-1.5 text-[#7F8C8D] hover:text-[#E74C3C] rounded-lg hover:bg-[#F4F6F8] transition-colors" title="Đăng xuất">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 2. THANH TAB QUY TRÌNH (YOUTUBE-STYLE CHIPS / PILLS - design.md 3.3) -->
+    <nav class="bg-white border-b border-[#E2E8F0] px-4 py-2.5 overflow-x-auto shadow-xs sticky top-16 z-30 no-print">
+      <div class="w-full flex items-center gap-2">
+        <button type="button" @click="activeTab = 'reception'" :class="activeTab === 'reception' ? 'active' : ''" class="yt-chip">
+          <span>1. Tiếp nhận</span>
+        </button>
+
+        <button type="button" @click="activeTab = 'history'" :class="activeTab === 'history' ? 'active' : ''" class="yt-chip">
+          <span>2. Tiền sử bệnh</span>
+        </button>
+
+        <button type="button" @click="activeTab = 'physical'" :class="activeTab === 'physical' ? 'active' : ''" class="yt-chip">
+          <span>3. Thể lực</span>
+        </button>
+
+        <button type="button" @click="activeTab = 'clinical'" :class="activeTab === 'clinical' ? 'active' : ''" class="yt-chip">
+          <span>4. Khám lâm sàng</span>
+        </button>
+
+        <button type="button" @click="activeTab = 'paraclinical'" :class="activeTab === 'paraclinical' ? 'active' : ''" class="yt-chip">
+          <span>5. Cận lâm sàng</span>
+          <span class="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-full font-normal">(Đi làm/học)</span>
+        </button>
+
+        <button type="button" @click="activeTab = 'conclusion'" :class="activeTab === 'conclusion' ? 'active' : ''" class="yt-chip">
+          <span>6. Kết luận & Ký</span>
+          <span x-show="isLocked" class="w-2 h-2 rounded-full bg-[#E74C3C]"></span>
+        </button>
+
+        <button x-show="isAdmin" type="button" @click="activeTab = 'admin'" :class="activeTab === 'admin' ? 'active' : ''" class="yt-chip text-[#8E44AD]">
+          <span>⚙ Quản trị & Cấu hình</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- 3. BỐ CỤC CHÍNH 16:9 FULL-WIDTH TRÀN 2 BÊN: COLLAPSIBLE SIDEBAR + WORKSPACE -->
+    <div class="flex-1 flex overflow-hidden w-full">
+
+      <!-- ============================================================== -->
+      <!-- COLLAPSIBLE SIDEBAR THEO DESIGN.MD 3.2                         -->
+      <!-- - TRẠNG THÁI MỞ RỘNG: 240px (w-60)                            -->
+      <!-- - TRẠNG THÁI THU GỌN: 72px (w-[72px] mini sidebar)            -->
+      <!-- ============================================================== -->
+      <aside
+        class="bg-white border-r border-[#E2E8F0] flex flex-col shrink-0 h-[calc(100vh-112px)] sticky top-[112px] z-20 transition-all duration-200 ease-in-out no-print"
+        :class="sidebarOpen ? 'w-60 xl:w-64' : 'w-[72px]'"
+      >
+        <!-- A. GIAO DIỆN KHI MỞ RỘNG (240PX) -->
+        <div x-show="sidebarOpen" class="flex flex-col h-full overflow-hidden">
+          <!-- Tiêu đề sidebar & Bộ lọc -->
+          <div class="p-3 border-b border-[#E2E8F0] space-y-2.5">
+            <div class="flex items-center justify-between">
+              <div class="font-bold text-xs uppercase tracking-wider text-[#2C3E50] flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-[#2ECC71]"></span>
+                <span>Danh sách khám</span>
+                <span class="text-[11px] font-mono text-[#7F8C8D]" x-text="'(' + recordsList.length + ')'"></span>
+              </div>
+              <button type="button" @click="loadRecordsList()" :disabled="recordsLoading" class="text-[#7F8C8D] hover:text-[#2C3E50] text-xs flex items-center gap-1" title="Tải lại danh sách">
+                <svg class="w-3.5 h-3.5" :class="recordsLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              </button>
+            </div>
+
+            <!-- Ô tìm nhanh trong danh sách -->
+            <div class="relative">
+              <input
+                type="text"
+                x-model="recordsSearchQ"
+                @input.debounce.300ms="loadRecordsList()"
+                placeholder="Lọc tên, CCCD, Mã TN..."
+                class="w-full pl-7 pr-3 py-1 rounded-lg border border-[#E2E8F0] text-xs bg-[#F4F6F8] focus:bg-white focus:outline-none focus:border-[#3498DB]"
+              />
+              <svg class="w-3.5 h-3.5 text-[#7F8C8D] absolute left-2 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+
+            <!-- Lọc trạng thái (Tất cả, Đang khám, Đã khóa) -->
+            <div class="flex items-center gap-1 text-[11px]">
+              <button type="button" @click="recordsFilterStatus = ''; loadRecordsList()" :class="recordsFilterStatus === '' ? 'bg-[#2C3E50] text-white font-medium' : 'bg-[#F4F6F8] text-[#7F8C8D] hover:bg-[#E2E8F0]'" class="px-2 py-0.5 rounded transition-colors">Tất cả</button>
+              <button type="button" @click="recordsFilterStatus = '0'; loadRecordsList()" :class="recordsFilterStatus === '0' ? 'bg-[#2ECC71] text-white font-medium' : 'bg-[#F4F6F8] text-[#7F8C8D] hover:bg-[#E2E8F0]'" class="px-2 py-0.5 rounded transition-colors">Đang khám</button>
+              <button type="button" @click="recordsFilterStatus = '1'; loadRecordsList()" :class="recordsFilterStatus === '1' ? 'bg-[#E74C3C] text-white font-medium' : 'bg-[#F4F6F8] text-[#7F8C8D] hover:bg-[#E2E8F0]'" class="px-2 py-0.5 rounded transition-colors">Đã khóa</button>
+            </div>
+          </div>
+
+          <!-- Danh sách cuộn các bệnh nhân -->
+          <div class="flex-1 overflow-y-auto divide-y divide-[#E2E8F0]/60">
+            <template x-if="recordsLoading">
+              <div class="p-4 text-center text-xs text-[#7F8C8D]">Đang tải danh sách...</div>
+            </template>
+
+            <template x-if="!recordsLoading && recordsList.length === 0">
+              <div class="p-6 text-center text-xs text-[#7F8C8D] space-y-1">
+                <div>Chưa có hồ sơ khám nào</div>
+                <div class="text-[11px] text-[#7F8C8D]">Hãy tiếp nhận bệnh nhân mới để bắt đầu khám</div>
+              </div>
+            </template>
+
+            <template x-for="r in recordsList" :key="r.id">
+              <div
+                @click="selectRecord(r)"
+                class="p-2.5 hover:bg-[#EBF5FB]/60 cursor-pointer transition-colors space-y-1"
+                :class="recordId === r.id ? 'bg-[#EBF5FB] border-l-4 border-[#3498DB] pl-2' : ''"
+              >
+                <div class="flex items-center justify-between">
+                  <span class="font-semibold text-[#2C3E50] text-xs uppercase truncate max-w-[140px]" x-text="r.ho_ten || 'Chưa có tên'"></span>
+                  <span
+                    class="px-1.5 py-0.2 rounded text-[10px] font-semibold tracking-tight"
+                    :class="r.status === 1 ? 'bg-[#FDEDEC] text-[#C0392B] border border-[#FADBD8]' : 'bg-[#E8F8F5] text-[#1E8449] border border-[#D4EFDF]'"
+                    x-text="r.status === 1 ? 'Đã khóa' : 'Đang khám'"
+                  ></span>
+                </div>
+
+                <div class="flex items-center justify-between text-[11px] text-[#7F8C8D] font-mono">
+                  <span x-text="r.ma_tiep_nhan"></span>
+                  <span x-text="r.gioi_tinh === '2' ? 'Nữ' : 'Nam'"></span>
+                </div>
+
+                <div class="flex items-center justify-between text-[10.5px] text-[#7F8C8D]">
+                  <span x-text="r.ngay_sinh ? ('Sinh: ' + r.ngay_sinh) : ''"></span>
+                  <span x-text="r.ngay_vao"></span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- B. GIAO DIỆN MINI SIDEBAR (72PX THEO DESIGN.MD 3.2) -->
+        <div x-show="!sidebarOpen" class="flex flex-col items-center py-3 space-y-4 h-full">
+          <button type="button" @click="sidebarOpen = true" class="flex flex-col items-center gap-1 text-[#2C3E50] hover:text-[#3498DB] p-2 rounded-lg hover:bg-[#F4F6F8] transition-colors" title="Mở danh sách khám">
+            <svg class="w-5 h-5 text-[#3498DB]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            <span class="text-[10px] font-medium text-center">DS Khám</span>
+            <span class="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-[#EBF5FB] text-[#3498DB]" x-text="recordsList.length"></span>
+          </button>
+
+          <div class="w-8 h-px bg-[#E2E8F0]"></div>
+
+          <!-- Nút Tạo mới ở mini sidebar -->
+          <button type="button" @click="resetForm()" class="flex flex-col items-center gap-1 text-[#7F8C8D] hover:text-[#2ECC71] p-2 rounded-lg hover:bg-[#F4F6F8] transition-colors" title="Tiếp nhận mới">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            <span class="text-[10px]">Tạo mới</span>
+          </button>
+
+          <!-- Nút Xuất CSV ở mini sidebar -->
+          <button type="button" @click="downloadCsv()" class="flex flex-col items-center gap-1 text-[#7F8C8D] hover:text-[#3498DB] p-2 rounded-lg hover:bg-[#F4F6F8] transition-colors" title="Xuất CSV">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span class="text-[10px]">Xuất CSV</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- KHU VỰC NHẬP LIỆU CHÍNH (MAIN CONTENT AREA TRÀN 2 BÊN) -->
+      <main class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 h-[calc(100vh-112px)] w-full">

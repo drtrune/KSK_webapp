@@ -1,0 +1,15 @@
+database_path = "ksk_data.db"
+server_host = "0.0.0.0"
+server_port = 8080
+ma_cskcb = "52208"
+ma_gtin_cskcb = "8930000522080"
+ten_cskcb = "BỆNH VIỆN BÌNH ĐỊNH"
+dia_danh = "Gia Lai"
+his_use_mock = true
+his_api_url = "http://127.0.0.1:8080/api/his/mock"
+his_http_method = "POST"
+his_auth_header = "x-api-key"
+his_api_key = "HIS_SECRET_API_KEY_2026"
+his_payload_template = '{"ma_tiep_nhan": "{{ma_tn}}"}'
+his_timeout_seconds = 10
+template_docx_path = "asset/template18.docx"

@@ -1,0 +1,331 @@
+<!-- TAB 4: KHÁM LÂM SÀNG CÁC CHUYÊN KHOA -->
+<div x-show="activeTab === 'clinical'" class="space-y-5 no-print">
+
+  <!-- 1. NỘI KHOA (BS_NOI) -->
+  <fieldset :disabled="!canEditClinicalNoi" class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800">1. Nội khoa</h3>
+      </div>
+      <div class="text-xs text-slate-500">
+        <span x-show="!canEditClinicalNoi" class="text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Chỉ xem (Cần quyền BS Nội)</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- Tuần hoàn -->
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="flex justify-between items-center">
+          <label class="label-title font-semibold text-slate-800 mb-0">a) Tuần hoàn</label>
+          <select x-model="form.NOI_KHOA_TUAN_HOAN_PL" class="input-box w-28 text-xs py-1">
+            <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+          </select>
+        </div>
+        <input type="text" x-model="form.NOI_KHOA_TUAN_HOAN" placeholder="Tiếng tim đều, rõ, chưa phát hiện bệnh lý..." class="input-box bg-white text-xs" />
+      </div>
+
+      <!-- Hô hấp -->
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="flex justify-between items-center">
+          <label class="label-title font-semibold text-slate-800 mb-0">b) Hô hấp</label>
+          <select x-model="form.NOI_KHOA_HO_HAP_PL" class="input-box w-28 text-xs py-1">
+            <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+          </select>
+        </div>
+        <input type="text" x-model="form.NOI_KHOA_HO_HAP" placeholder="Phổi trong, rì rào phế nang êm dịu..." class="input-box bg-white text-xs" />
+      </div>
+
+      <!-- Tiêu hóa -->
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="flex justify-between items-center">
+          <label class="label-title font-semibold text-slate-800 mb-0">c) Tiêu hóa</label>
+          <select x-model="form.NOI_KHOA_TIEU_HOA_PL" class="input-box w-28 text-xs py-1">
+            <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+          </select>
+        </div>
+        <input type="text" x-model="form.NOI_KHOA_TIEU_HOA" placeholder="Bụng mềm, gan lách không to..." class="input-box bg-white text-xs" />
+      </div>
+
+      <!-- Thận - Tiết niệu - Sinh dục -->
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="flex justify-between items-center">
+          <label class="label-title font-semibold text-slate-800 mb-0">d) Thận - Tiết niệu - Sinh dục</label>
+          <select x-model="form.NOI_KHOA_THAN_TIETNIEU_PL" class="input-box w-28 text-xs py-1">
+            <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+          </select>
+        </div>
+        <input type="text" x-model="form.NOI_KHOA_THAN_TN_SD" placeholder="Chạm thận âm tính, không tiểu buốt rắt..." class="input-box bg-white text-xs" />
+      </div>
+
+      <!-- Nội tiết -->
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="flex justify-between items-center">
+          <label class="label-title font-semibold text-slate-800 mb-0">e) Nội tiết</label>
+          <select x-model="form.NOI_KHOA_NOI_TIET_PL" class="input-box w-28 text-xs py-1">
+            <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+          </select>
+        </div>
+        <input type="text" x-model="form.NOI_KHOA_NOI_TIET" placeholder="Tuyến giáp không to, không hội chứng cushing..." class="input-box bg-white text-xs" />
+      </div>
+
+      <!-- Cơ - Xương - Khớp -->
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="flex justify-between items-center">
+          <label class="label-title font-semibold text-slate-800 mb-0">g) Cơ - Xương - Khớp</label>
+          <select x-model="form.NOI_KHOA_CO_XUONG_KHOP_PL" class="input-box w-28 text-xs py-1">
+            <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+          </select>
+        </div>
+        <input type="text" x-model="form.NOI_KHOA_CO_XUONG_KHOP" placeholder="Khớp vận động bình thường, không biến dạng..." class="input-box bg-white text-xs" />
+      </div>
+
+      <!-- Thần kinh -->
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="flex justify-between items-center">
+          <label class="label-title font-semibold text-slate-800 mb-0">h) Thần kinh</label>
+          <select x-model="form.NOI_KHOA_THAN_KINH_PL" class="input-box w-28 text-xs py-1">
+            <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+          </select>
+        </div>
+        <input type="text" x-model="form.NOI_KHOA_THAN_KINH" placeholder="Phản xạ gân xương bình thường, không liệt khu trú..." class="input-box bg-white text-xs" />
+      </div>
+
+      <!-- Tâm thần -->
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="flex justify-between items-center">
+          <label class="label-title font-semibold text-slate-800 mb-0">i) Tâm thần</label>
+          <select x-model="form.NOI_KHOA_TAM_THAN_PL" class="input-box w-28 text-xs py-1">
+            <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+          </select>
+        </div>
+        <input type="text" x-model="form.NOI_KHOA_TAM_THAN" placeholder="Tiếp xúc tốt, tư duy bình thường..." class="input-box bg-white text-xs" />
+      </div>
+    </div>
+
+    <div class="pt-2 max-w-sm">
+      <label class="label-title">Bác sĩ khám Nội khoa:</label>
+      <input type="text" x-model="form.BS_NOI" placeholder="Họ và tên bác sĩ Nội..." class="input-box" />
+    </div>
+  </fieldset>
+
+  <!-- 2. NGOẠI KHOA (BS_NGOAI) & 3. DA LIỄU (BS_DALIEU) -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+    <!-- Ngoại khoa -->
+    <fieldset :disabled="!canEditClinicalNgoai" class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-3">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
+          <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800">2. Ngoại khoa</h3>
+        </div>
+        <select x-model="form.KHAM_NGOAI_KHOA_PL" class="input-box w-28 text-xs py-1">
+          <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+        </select>
+      </div>
+      <div>
+        <label class="label-title">Kết quả khám Ngoại khoa:</label>
+        <textarea x-model="form.KET_QUA_KHAM_NGOAI_KHOA" rows="2" placeholder="Không có sẹo mổ cũ bất thường, không trĩ, không thoát vị..." class="input-box text-xs"></textarea>
+      </div>
+      <div>
+        <label class="label-title">Bác sĩ Ngoại khoa:</label>
+        <input type="text" x-model="form.BS_NGOAI" placeholder="Họ và tên bác sĩ Ngoại..." class="input-box text-xs" />
+      </div>
+    </fieldset>
+
+    <!-- Da liễu -->
+    <fieldset :disabled="!canEditClinicalDaLieu" class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-3">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
+          <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800">3. Da liễu</h3>
+        </div>
+        <select x-model="form.KHAM_DA_LIEU_PL" class="input-box w-28 text-xs py-1">
+          <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+        </select>
+      </div>
+      <div>
+        <label class="label-title">Kết quả khám Da liễu:</label>
+        <textarea x-model="form.KET_QUA_KHAM_DA_LIEU" rows="2" placeholder="Không phát hiện tổn thương da, nấm móng, dị ứng..." class="input-box text-xs"></textarea>
+      </div>
+      <div>
+        <label class="label-title">Bác sĩ Da liễu:</label>
+        <input type="text" x-model="form.BS_DA_LIEU" placeholder="Họ và tên bác sĩ Da liễu..." class="input-box text-xs" />
+      </div>
+    </fieldset>
+  </div>
+
+  <!-- 4. SẢN PHỤ KHOA (BS_SAN - CHỈ DÀNH CHO NỮ) -->
+  <fieldset x-show="form.GIOI_TINH === '2'" :disabled="!canEditClinicalSan" class="bg-pink-50/50 rounded-xl p-5 border border-pink-200 shadow-sm space-y-3" x-cloak>
+    <div class="flex items-center justify-between border-b border-pink-200 pb-2">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-pink-500"></span>
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-pink-900">4. Sản phụ khoa (Dành riêng cho Nữ)</h3>
+      </div>
+      <select x-model="form.KHAM_SAN_PHU_KHOA_PL" class="input-box w-28 text-xs py-1 bg-white">
+        <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+      </select>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="label-title text-pink-900">Kết quả khám Sản phụ khoa:</label>
+        <textarea x-model="form.KET_QUA_KHAM_SAN_PHU_KHOA" rows="2" placeholder="Cơ quan sinh dục bình thường, không viêm nhiễm..." class="input-box bg-white text-xs"></textarea>
+      </div>
+      <div>
+        <label class="label-title text-pink-900">Bác sĩ Sản phụ khoa:</label>
+        <input type="text" x-model="form.BS_SAN" placeholder="Họ và tên bác sĩ Sản..." class="input-box bg-white text-xs" />
+      </div>
+    </div>
+  </fieldset>
+
+  <!-- 5. MẮT (BS_MAT) -->
+  <fieldset :disabled="!canEditClinicalMat" class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-cyan-500"></span>
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800">5. Mắt</h3>
+      </div>
+      <select x-model="form.KHAM_MAT_PL" class="input-box w-28 text-xs py-1">
+        <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+      </select>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="font-medium text-xs text-slate-700">Thị lực không kính:</div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label-title text-[11px]">Mắt phải:</label>
+            <input type="text" x-model="form.KHONG_KINH_MAT_PHAI" placeholder="10/10" class="input-box bg-white text-xs" />
+          </div>
+          <div>
+            <label class="label-title text-[11px]">Mắt trái:</label>
+            <input type="text" x-model="form.KHONG_KINH_MAT_TRAI" placeholder="10/10" class="input-box bg-white text-xs" />
+          </div>
+        </div>
+      </div>
+
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="font-medium text-xs text-slate-700">Thị lực có kính (nếu có):</div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label-title text-[11px]">Mắt phải:</label>
+            <input type="text" x-model="form.CO_KINH_MAT_PHAI" placeholder="" class="input-box bg-white text-xs" />
+          </div>
+          <div>
+            <label class="label-title text-[11px]">Mắt trái:</label>
+            <input type="text" x-model="form.CO_KINH_MAT_TRAI" placeholder="" class="input-box bg-white text-xs" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="label-title">Bệnh khác về mắt (nếu có):</label>
+        <input type="text" x-model="form.BENH_KHAC_MAT" placeholder="Không có bệnh mắt..." class="input-box text-xs" />
+      </div>
+      <div>
+        <label class="label-title">Bác sĩ khám Mắt:</label>
+        <input type="text" x-model="form.BS_MAT" placeholder="Họ và tên bác sĩ Mắt..." class="input-box text-xs" />
+      </div>
+    </div>
+  </fieldset>
+
+  <!-- 6. TAI MŨI HỌNG (BS_TMH) -->
+  <fieldset :disabled="!canEditClinicalTmh" class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-violet-500"></span>
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800">6. Tai - Mũi - Họng</h3>
+      </div>
+      <select x-model="form.KHAM_TAI_MUI_HONG_PL" class="input-box w-28 text-xs py-1">
+        <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+      </select>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="font-medium text-xs text-slate-700">Tai trái (mét):</div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label-title text-[11px]">Nói thường (m):</label>
+            <input type="text" x-model="form.TAI_TRAI_NOI_THUONG" placeholder="5.0" class="input-box bg-white text-xs" />
+          </div>
+          <div>
+            <label class="label-title text-[11px]">Nói thầm (m):</label>
+            <input type="text" x-model="form.TAI_TRAI_NOI_THAM" placeholder="0.5" class="input-box bg-white text-xs" />
+          </div>
+        </div>
+      </div>
+
+      <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-2">
+        <div class="font-medium text-xs text-slate-700">Tai phải (mét):</div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label-title text-[11px]">Nói thường (m):</label>
+            <input type="text" x-model="form.TAI_PHAI_NOI_THUONG" placeholder="5.0" class="input-box bg-white text-xs" />
+          </div>
+          <div>
+            <label class="label-title text-[11px]">Nói thầm (m):</label>
+            <input type="text" x-model="form.TAI_PHAI_NOI_THAM" placeholder="0.5" class="input-box bg-white text-xs" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="label-title">Bệnh khác về TMH (nếu có):</label>
+        <input type="text" x-model="form.BENH_KHAC_TAI_MUI_HONG" placeholder="Không có bệnh lý tai mũi họng..." class="input-box text-xs" />
+      </div>
+      <div>
+        <label class="label-title">Bác sĩ khám TMH:</label>
+        <input type="text" x-model="form.BS_TMH" placeholder="Họ và tên bác sĩ TMH..." class="input-box text-xs" />
+      </div>
+    </div>
+  </fieldset>
+
+  <!-- 7. RĂNG HÀM MẶT (BS_RHM) -->
+  <fieldset :disabled="!canEditClinicalRhm" class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800">7. Răng - Hàm - Mặt</h3>
+      </div>
+      <select x-model="form.KHAM_RANG_HAM_MAT_PL" class="input-box w-28 text-xs py-1">
+        <option value="1">Loại 1</option><option value="2">Loại 2</option><option value="3">Loại 3</option><option value="4">Loại 4</option><option value="5">Loại 5</option>
+      </select>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="label-title">Hàm trên:</label>
+        <input type="text" x-model="form.HAM_TREN" placeholder="Răng bình thường, không sâu..." class="input-box text-xs" />
+      </div>
+      <div>
+        <label class="label-title">Hàm dưới:</label>
+        <input type="text" x-model="form.HAM_DUOI" placeholder="Răng bình thường, không sâu..." class="input-box text-xs" />
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="label-title">Bệnh khác về RHM (nếu có):</label>
+        <input type="text" x-model="form.BENH_KHAC_RANG_HAM_MAT" placeholder="Không có bệnh lý răng hàm mặt..." class="input-box text-xs" />
+      </div>
+      <div>
+        <label class="label-title">Bác sĩ khám RHM:</label>
+        <input type="text" x-model="form.BS_RHM" placeholder="Họ và tên bác sĩ RHM..." class="input-box text-xs" />
+      </div>
+    </div>
+  </fieldset>
+
+  <!-- Nút Lưu Khám Lâm Sàng -->
+  <div class="flex items-center justify-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+    <button type="button" @click="handleSave()" :disabled="isLocked || saving" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-sm transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+      <span x-text="saving ? 'Đang lưu...' : 'Lưu kết quả khám lâm sàng'"></span>
+    </button>
+  </div>
+</div>
+

@@ -1,0 +1,149 @@
+<!-- TAB 2: TIỀN SỬ BỆNH (PHÂN QUYỀN ĐỘC LẬP: TIENSU) -->
+<div x-show="activeTab === 'history'" class="space-y-4 no-print">
+  <fieldset :disabled="!canEditHistory" class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-5">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-800">2. Tiền sử Bệnh lý (Gia đình & Bản thân)</h2>
+      </div>
+      <div class="text-xs text-slate-500 flex items-center gap-3">
+        <span x-show="!canEditHistory" class="text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Chỉ xem (Cần quyền Tiền sử bệnh hoặc Admin)</span>
+      </div>
+    </div>
+
+    <!-- I. TIỀN SỬ GIA ĐÌNH -->
+    <div class="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-3">
+      <div class="font-semibold text-slate-800 text-xs uppercase tracking-wide flex items-center gap-2">
+        <span>A. Tiền sử gia đình</span>
+        <span class="text-[11px] text-slate-500 font-normal">(Có ai trong gia đình mắc các bệnh truyền nhiễm, tim mạch, đái tháo đường, lao, hen suyễn, ung thư, động kinh...)</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+        <div class="flex items-center gap-6 bg-white px-4 py-2 rounded-lg border border-slate-200">
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="TSGD_MAC_BENH" value="0" x-model="form.TSGD_MAC_BENH" class="text-sky-600 focus:ring-sky-500" />
+            <span class="font-medium text-slate-700">0 - Không</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="TSGD_MAC_BENH" value="1" x-model="form.TSGD_MAC_BENH" class="text-sky-600 focus:ring-sky-500" />
+            <span class="font-medium text-red-600">1 - Có</span>
+          </label>
+        </div>
+        <div class="md:col-span-2" x-show="form.TSGD_MAC_BENH === '1'" x-cloak>
+          <label class="label-title">Nếu Có, mã bệnh tiền sử gia đình (ICD-10 - Cho phép tìm kiếm và chọn nhiều mã):</label>
+          <select id="select_tsgd_ma_benh" multiple x-init="initIcdMultiSelect($el, 'TSGD_MA_BENH')" class="input-box text-xs"></select>
+          <div class="text-[11px] text-slate-500 italic mt-1">Gõ mã ICD-10 (VD: I10, E11...) hoặc tên bệnh. Nhiều mã cách nhau bằng dấu chấm phẩy (;).</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- II. TIỀN SỬ BẢN THÂN (22 BỆNH LÝ) -->
+    <div class="space-y-3">
+      <div class="font-semibold text-slate-800 text-xs uppercase tracking-wide flex items-center justify-between">
+        <span>B. Tiền sử bản thân (22 bệnh lý quy định tại QĐ 3176/QĐ-BYT & TT 25/2026/TT-BYT)</span>
+        <span class="text-[11px] text-slate-500 font-normal">Tất cả mục phải chọn Không (0) hoặc Có (1)</span>
+      </div>
+
+      <div class="overflow-x-auto border border-slate-200 rounded-xl">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="bg-slate-100/80 text-slate-700 font-semibold border-b border-slate-200">
+              <th class="py-2 px-3 text-center w-12">STT</th>
+              <th class="py-2 px-3">Tên bệnh lý / Tình trạng sức khỏe</th>
+              <th class="py-2 px-4 text-center w-28 bg-emerald-50/50">Không (0)</th>
+              <th class="py-2 px-4 text-center w-28 bg-red-50/50">Có (1)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200 bg-white">
+            <template x-for="(d, idx) in historyDiseases" :key="d.field">
+              <tr class="hover:bg-slate-50/70 transition-colors" :class="form[d.field] === '1' ? 'bg-red-50/20' : ''">
+                <td class="py-2 px-3 text-center text-slate-500 font-medium" x-text="idx + 1"></td>
+                <td class="py-2 px-3 font-medium text-slate-800">
+                  <div x-text="d.label"></div>
+                  <!-- Nếu là bệnh khác và chọn Có -> hiện ô nhập -->
+                  <div x-show="d.field === 'TSBT_BENH_KHAC' && form.TSBT_BENH_KHAC === '1'" class="mt-2" x-cloak>
+                    <label class="label-title text-xs text-slate-600 mb-1">Mã bệnh khác (ICD-10 - Cho phép tìm kiếm và chọn nhiều mã):</label>
+                    <select id="select_tsbt_ma_benh_khac" multiple x-init="initIcdMultiSelect($el, 'TSBT_MA_BENH_KHAC')" class="input-box text-xs"></select>
+                  </div>
+                </td>
+                <td class="py-2 px-4 text-center bg-emerald-50/20">
+                  <input type="radio" :name="d.field" value="0" x-model="form[d.field]" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
+                </td>
+                <td class="py-2 px-4 text-center bg-red-50/20">
+                  <input type="radio" :name="d.field" value="1" x-model="form[d.field]" class="w-4 h-4 text-red-600 focus:ring-red-500 cursor-pointer" />
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- III. ĐANG ĐIỀU TRỊ BỆNH -->
+    <div class="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-3">
+      <div class="font-semibold text-slate-800 text-xs uppercase tracking-wide">
+        C. Hiện tại có đang điều trị bệnh nào không?
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+        <div class="flex items-center gap-6 bg-white px-4 py-2 rounded-lg border border-slate-200">
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="TSBT_DANG_DIEU_TRI_BENH" value="0" x-model="form.TSBT_DANG_DIEU_TRI_BENH" class="text-sky-600 focus:ring-sky-500" />
+            <span class="font-medium text-slate-700">0 - Không</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="TSBT_DANG_DIEU_TRI_BENH" value="1" x-model="form.TSBT_DANG_DIEU_TRI_BENH" class="text-sky-600 focus:ring-sky-500" />
+            <span class="font-medium text-red-600">1 - Có</span>
+          </label>
+        </div>
+        <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3" x-show="form.TSBT_DANG_DIEU_TRI_BENH === '1'" x-cloak>
+          <div>
+            <label class="label-title">Tên bệnh đang điều trị / Mã ICD-10 (chọn nhiều mã):</label>
+            <select id="select_tsbt_ma_benh" multiple x-init="initIcdMultiSelect($el, 'TSBT_MA_BENH')" class="input-box text-xs"></select>
+          </div>
+          <div>
+            <label class="label-title">Thuốc và liều lượng sử dụng:</label>
+            <input type="text" x-model="form.TSBT_TEN_THUOC_LIEU_LUONG" placeholder="Tên thuốc, hàm lượng..." class="input-box bg-white" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IV. TIỀN SỬ THAI SẢN (CHỈ DÀNH CHO NỮ) -->
+    <div x-show="form.GIOI_TINH === '2'" class="bg-pink-50/60 p-4 rounded-xl border border-pink-200/80 space-y-3" x-cloak>
+      <div class="font-semibold text-pink-900 text-xs uppercase tracking-wide flex items-center justify-between">
+        <span>D. Tiền sử thai sản (Chỉ áp dụng đối với Nữ)</span>
+        <span class="text-[11px] text-pink-700 font-medium">Bệnh nhân Nữ</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+        <div class="flex items-center gap-6 bg-white px-4 py-2 rounded-lg border border-pink-200">
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="TSBT_THAI_SAN" value="0" x-model="form.TSBT_THAI_SAN" class="text-pink-600 focus:ring-pink-500" />
+            <span class="font-medium text-slate-700">0 - Không</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="TSBT_THAI_SAN" value="1" x-model="form.TSBT_THAI_SAN" class="text-pink-600 focus:ring-pink-500" />
+            <span class="font-medium text-pink-600">1 - Có</span>
+          </label>
+        </div>
+        <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3" x-show="form.TSBT_THAI_SAN === '1'" x-cloak>
+          <div>
+            <label class="label-title text-pink-900">Mã bệnh / Tình trạng thai sản (ICD-10 - chọn nhiều mã):</label>
+            <select id="select_tsbt_ma_benh_thai_san" multiple x-init="initIcdMultiSelect($el, 'TSBT_MA_BENH_THAI_SAN')" class="input-box text-xs"></select>
+          </div>
+          <div>
+            <label class="label-title text-pink-900">Thuốc điều trị thai sản nếu có:</label>
+            <input type="text" x-model="form.TSBT_TEN_THUOC_THAI_SAN" placeholder="Tên thuốc..." class="input-box bg-white" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </fieldset>
+
+  <!-- Nút Lưu Tiền sử -->
+  <div class="flex items-center justify-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+    <button type="button" @click="handleSave()" :disabled="!canEditHistory || saving" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-sm transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+      <span x-text="saving ? 'Đang lưu...' : 'Lưu tiền sử bệnh lý'"></span>
+    </button>
+  </div>
+</div>
+

@@ -1,0 +1,111 @@
+<!-- TAB 5: CẬN LÂM SÀNG (BS_CLS) -->
+<div x-show="activeTab === 'paraclinical'" class="space-y-4 no-print">
+
+  <!-- Ghi chú nghiệp vụ quan trọng theo yêu cầu người dùng -->
+  <div class="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl flex items-start gap-3 shadow-sm">
+    <svg class="w-5 h-5 text-amber-600 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+    <div class="text-xs space-y-1">
+      <div class="font-bold text-amber-950 uppercase tracking-wide">Ghi chú nghiệp vụ Cận lâm sàng</div>
+      <div>Phần Cận lâm sàng chỉ tiếp nhận và thực hiện trong <strong>Khám sức khỏe đi làm, đi học</strong> hoặc trường hợp <strong>Khám sức khỏe định kỳ theo chỉ định của bác sĩ</strong>.</div>
+    </div>
+  </div>
+
+  <fieldset :disabled="!canEditParaclinical" class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-5">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800">5. Kết quả Xét nghiệm & Cận lâm sàng</h3>
+      </div>
+      <div class="text-xs text-slate-500">
+        <span x-show="!canEditParaclinical" class="text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Chỉ xem (Cần quyền Cận lâm sàng hoặc Admin)</span>
+      </div>
+    </div>
+
+    <!-- Xét nghiệm máu -->
+    <div class="space-y-3">
+      <div class="font-semibold text-slate-800 text-xs uppercase tracking-wide">a) Xét nghiệm huyết học & sinh hóa máu</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="label-title">Huyết học (Công thức máu / Tế bào ngoại vi):</label>
+          <input type="text" x-model="form.CLS_HUYET_HOC" placeholder="Hồng cầu, Bạch cầu, Tiểu cầu, Hb bình thường..." class="input-box text-xs" />
+        </div>
+        <div>
+          <label class="label-title">Sinh hóa máu - Đường máu (Glucose):</label>
+          <input type="text" x-model="form.CLS_DUONG_MAU" placeholder="5.2 mmol/L (bình thường)..." class="input-box text-xs" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label class="label-title">Urê máu:</label>
+          <input type="text" x-model="form.CLS_URE" placeholder="5.1 mmol/L" class="input-box text-xs" />
+        </div>
+        <div>
+          <label class="label-title">Creatinin máu:</label>
+          <input type="text" x-model="form.CLS_CREATININ" placeholder="78 µmol/L" class="input-box text-xs" />
+        </div>
+        <div>
+          <label class="label-title">ASAT (GOT):</label>
+          <input type="text" x-model="form.CLS_ASAT_GOT" placeholder="24 U/L" class="input-box text-xs" />
+        </div>
+        <div>
+          <label class="label-title">ALAT (GPT):</label>
+          <input type="text" x-model="form.CLS_ALAT_GPT" placeholder="22 U/L" class="input-box text-xs" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Nước tiểu & X-quang -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+      <div>
+        <label class="label-title font-semibold">b) Tổng phân tích nước tiểu:</label>
+        <textarea x-model="form.CLS_NUOC_TIEU" rows="2" placeholder="10 thông số trong giới hạn bình thường..." class="input-box text-xs"></textarea>
+      </div>
+      <div>
+        <label class="label-title font-semibold">c) Chẩn đoán hình ảnh (X-quang tim phổi thẳng):</label>
+        <textarea x-model="form.CLS_XQ_TIM_PHOI" rows="2" placeholder="Hình tim phổi bình thường, không tổn thương thâm nhiễm..." class="input-box text-xs"></textarea>
+      </div>
+    </div>
+
+    <!-- Cận lâm sàng khác -->
+    <div class="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-3">
+      <div class="font-semibold text-slate-800 text-xs uppercase tracking-wide">d) Kết quả khám Cận lâm sàng khác</div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+        <div class="flex items-center gap-6 bg-white px-4 py-2 rounded-lg border border-slate-200">
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="CLS_KHAC_CO" value="0" x-model="form.CLS_KHAC_CO" class="text-sky-600 focus:ring-sky-500" />
+            <span class="font-medium text-slate-700">0 - Không</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="CLS_KHAC_CO" value="1" x-model="form.CLS_KHAC_CO" class="text-sky-600 focus:ring-sky-500" />
+            <span class="font-medium text-red-600">1 - Có</span>
+          </label>
+        </div>
+        <div class="md:col-span-2" x-show="form.CLS_KHAC_CO === '1'" x-cloak>
+          <label class="label-title">Chi tiết cận lâm sàng khác:</label>
+          <input type="text" x-model="form.CLS_KHAC_MO_TA" placeholder="Siêu âm ổ bụng, Điện tim ECG,..." class="input-box bg-white text-xs" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Chỉ định & kết quả CLS khám định kỳ -->
+    <div>
+      <label class="label-title font-semibold">e) Khám sức khỏe định kỳ (Cận lâm sàng theo chỉ định của bác sĩ):</label>
+      <textarea x-model="form.CLS_DINH_KY_KET_QUA" rows="3" placeholder="Ghi nhận các chỉ định xét nghiệm và kết quả cụ thể trong KSK định kỳ..." class="input-box text-xs"></textarea>
+    </div>
+
+    <div class="max-w-sm">
+      <label class="label-title">Bác sĩ / Cán bộ Cận lâm sàng:</label>
+      <input type="text" x-model="form.BS_CLS" placeholder="Họ và tên bác sĩ CLS..." class="input-box text-xs" />
+    </div>
+  </fieldset>
+
+  <!-- Nút Lưu CLS -->
+  <div class="flex items-center justify-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+    <button type="button" @click="handleSave()" :disabled="!canEditParaclinical || saving" class="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-sm transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+      <span x-text="saving ? 'Đang lưu...' : 'Lưu kết quả Cận lâm sàng'"></span>
+    </button>
+  </div>
+</div>
+

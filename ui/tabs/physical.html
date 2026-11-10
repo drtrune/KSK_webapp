@@ -1,0 +1,72 @@
+<!-- TAB 3: KHÁM THỂ LỰC (BS_THELUC) -->
+<div x-show="activeTab === 'physical'" class="space-y-4 no-print">
+  <fieldset :disabled="!canEditPhysical" class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-5">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-800">3. Khám Thể lực & Chỉ số Sinh tồn</h2>
+      </div>
+      <div class="text-xs text-slate-500 flex items-center gap-3">
+        <span x-show="!canEditPhysical" class="text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Chỉ xem (Cần quyền Khám thể lực hoặc Admin)</span>
+      </div>
+    </div>
+
+    <!-- Hàng 1: Chiều cao, Cân nặng, BMI (tự động tính) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="label-title">Chiều cao (cm) <span class="text-red-500">*</span></label>
+        <input type="number" step="0.1" x-model="form.CHIEU_CAO" @input="calcBmi()" placeholder="Ví dụ: 168.5" class="input-box font-medium" />
+      </div>
+      <div>
+        <label class="label-title">Cân nặng (kg) <span class="text-red-500">*</span></label>
+        <input type="number" step="0.1" x-model="form.CAN_NANG" @input="calcBmi()" placeholder="Ví dụ: 62.0" class="input-box font-medium" />
+      </div>
+      <div>
+        <label class="label-title">Chỉ số BMI (Tự động tính = kg / m²)</label>
+        <div class="flex items-center">
+          <input type="text" x-model="form.CHI_SO_BMI" readonly class="input-box bg-slate-100 font-bold text-indigo-700" placeholder="Tự động tính..." />
+          <span class="ml-2 text-xs text-slate-500" x-show="form.CHI_SO_BMI">
+            <span x-text="parseFloat(form.CHI_SO_BMI) < 18.5 ? '(Gầy)' : (parseFloat(form.CHI_SO_BMI) <= 24.9 ? '(Bình thường)' : '(Tiền béo phì / Thừa cân)')"></span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hàng 2: Mạch, Huyết áp, Phân loại thể lực -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="label-title">Mạch (lần/phút)</label>
+        <input type="number" x-model="form.MACH" placeholder="Ví dụ: 78" class="input-box" />
+      </div>
+      <div>
+        <label class="label-title">Huyết áp (mmHg)</label>
+        <input type="text" x-model="form.HUYET_AP" placeholder="Ví dụ: 120/80" class="input-box" />
+      </div>
+      <div>
+        <label class="label-title">Phân loại thể lực <span class="text-red-500">*</span></label>
+        <select x-model="form.KHAM_THE_LUC_PL" class="input-box font-medium text-slate-800">
+          <option value="1">Loại 1 - Rất tốt</option>
+          <option value="2">Loại 2 - Tốt</option>
+          <option value="3">Loại 3 - Khá</option>
+          <option value="4">Loại 4 - Trung bình</option>
+          <option value="5">Loại 5 - Yếu</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Hàng 3: Bác sĩ / Cán bộ khám thể lực -->
+    <div class="max-w-md">
+      <label class="label-title">Bác sĩ / Cán bộ khám thể lực</label>
+      <input type="text" x-model="form.BS_THE_LUC" placeholder="Họ và tên bác sĩ / điều dưỡng..." class="input-box" />
+    </div>
+  </fieldset>
+
+  <!-- Nút Lưu Thể Lực -->
+  <div class="flex items-center justify-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+    <button type="button" @click="handleSave()" :disabled="!canEditPhysical || saving" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-sm transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+      <span x-text="saving ? 'Đang lưu...' : 'Lưu kết quả thể lực'"></span>
+    </button>
+  </div>
+</div>
+

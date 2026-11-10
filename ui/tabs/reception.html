@@ -1,0 +1,164 @@
+<!-- TAB 1: TIẾP NHẬN HÀNH CHÍNH -->
+<div x-show="activeTab === 'reception'" class="space-y-4 no-print">
+  <fieldset :disabled="!canEditReception" class="card-panel p-5 space-y-4">
+    <div class="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-[#3498DB]"></span>
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-[#2C3E50]">1. Thông tin Hành chính & Tiếp nhận</h2>
+      </div>
+      <div class="text-xs text-[#7F8C8D] flex items-center gap-3">
+        <span x-show="!canEditReception" class="text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Chỉ xem (Cần quyền Lễ tân hoặc Admin)</span>
+      </div>
+    </div>
+
+    <!-- Hàng 1: Mã tiếp nhận, Mã y tế, Ngày vào khám -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="label-title">Mã tiếp nhận <span class="text-red-500">*</span></label>
+        <div class="flex gap-2">
+          <input type="text" x-model="form.MA_TIEP_NHAN" placeholder="TN.2611.xxxx" class="input-box font-medium text-sky-900 bg-sky-50/50" />
+          <button type="button" @click="handleSearchOrHis()" :disabled="searchLoading" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 whitespace-nowrap transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span x-text="searchLoading ? 'Đang tải...' : 'Lấy HIS'"></span>
+          </button>
+        </div>
+        <!-- Gợi ý mã mẫu thử nghiệm Mock API HIS -->
+        <div class="flex items-center gap-1.5 mt-1.5 text-[11px] text-slate-500">
+          <span>Mã mẫu Mock HIS:</span>
+          <button type="button" @click="handleSearchOrHis('TN.2611.0004018')" class="text-sky-700 hover:underline font-mono bg-sky-50 px-1.5 py-0.2 rounded border border-sky-200" title="Bệnh nhân Nam 2000">TN.2611.0004018</button>
+          <button type="button" @click="handleSearchOrHis('TN.2611.0004019')" class="text-pink-700 hover:underline font-mono bg-pink-50 px-1.5 py-0.2 rounded border border-pink-200" title="Bệnh nhân Nữ 1995">TN.2611.0004019</button>
+        </div>
+      </div>
+      <div>
+        <label class="label-title">Mã y tế (Mã BN)</label>
+        <input type="text" x-model="form.MA_Y_TE" placeholder="2300xxxx" class="input-box" />
+      </div>
+      <div>
+        <label class="label-title">Ngày vào khám (DD/MM/YYYY) <span class="text-red-500">*</span></label>
+        <input type="text" x-model="form.NGAY_VAO" x-init="initDatePicker($el, 'NGAY_VAO')" placeholder="DD/MM/YYYY" class="input-box bg-white" />
+      </div>
+    </div>
+
+    <!-- Hàng 2: Họ tên, Giới tính, Ngày sinh, CCCD -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="md:col-span-2">
+        <label class="label-title">Họ và tên bệnh nhân <span class="text-red-500">*</span></label>
+        <input type="text" x-model="form.HO_TEN" placeholder="NGUYỄN VĂN A" class="input-box uppercase font-semibold text-slate-900" />
+      </div>
+      <div>
+        <label class="label-title">Giới tính <span class="text-red-500">*</span></label>
+        <select x-model="form.GIOI_TINH" class="input-box font-medium">
+          <option value="1">1 - Nam</option>
+          <option value="2">2 - Nữ</option>
+        </select>
+      </div>
+      <div>
+        <label class="label-title">Ngày sinh (DD/MM/YYYY) <span class="text-red-500">*</span></label>
+        <input type="text" x-model="form.NGAY_SINH" x-init="initDatePicker($el, 'NGAY_SINH')" placeholder="31/01/2000" class="input-box bg-white" />
+      </div>
+    </div>
+
+    <!-- Hàng 3: CCCD, Ngày cấp, Nơi cấp -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="label-title">Số CCCD / Định danh cá nhân <span class="text-red-500">*</span></label>
+        <input type="text" x-model="form.SO_CCCD" maxlength="12" placeholder="0260xxxxxxxx" class="input-box font-mono" />
+      </div>
+      <div>
+        <label class="label-title">Ngày cấp CCCD (DD/MM/YYYY)</label>
+        <input type="text" x-model="form.NGAYCAP_CCCD" x-init="initDatePicker($el, 'NGAYCAP_CCCD')" placeholder="DD/MM/YYYY" class="input-box bg-white" />
+      </div>
+      <div>
+        <label class="label-title">Nơi cấp CCCD (Tìm kiếm hoặc gõ mới)</label>
+        <select id="select_noicap_cccd" class="input-box"></select>
+      </div>
+    </div>
+
+    <!-- Hàng 4: Dân tộc, Nghề nghiệp, Số điện thoại, Nhóm máu -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div>
+        <label class="label-title">Dân tộc (Tìm kiếm)</label>
+        <select id="select_ma_dan_toc" class="input-box"></select>
+      </div>
+      <div>
+        <label class="label-title">Nghề nghiệp (Tìm kiếm theo mã/tên)</label>
+        <select id="select_ma_nghe_nghiep" class="input-box"></select>
+      </div>
+      <div>
+        <label class="label-title">Số điện thoại liên hệ</label>
+        <input type="text" x-model="form.DIEN_THOAI" placeholder="09xxxxxxx" class="input-box" />
+      </div>
+      <div>
+        <label class="label-title">Nhóm máu (Tìm kiếm hoặc gõ)</label>
+        <select id="select_nhom_mau" class="input-box"></select>
+      </div>
+    </div>
+
+    <!-- Hàng 5: Địa chỉ thường trú (Tỉnh/TP, Xã/Phường, Chi tiết) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="label-title">Tỉnh / Thành phố cư trú (Tìm kiếm)</label>
+        <select id="select_matinh_cu_tru" class="input-box"></select>
+      </div>
+      <div>
+        <label class="label-title">Phường / Xã cư trú (Tìm kiếm)</label>
+        <select id="select_maxa_cu_tru" class="input-box"></select>
+      </div>
+      <div>
+        <label class="label-title">Số nhà, thôn xóm, đường phố</label>
+        <input type="text" x-model="form.DIA_CHI" placeholder="Số 123 Đường B..." class="input-box" />
+      </div>
+    </div>
+
+    <!-- Hàng 6: Đối tượng, Nguồn chi trả, Đơn vị công tác/học tập -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="label-title">Đối tượng KSK (Tìm kiếm)</label>
+        <select id="select_doi_tuong" class="input-box"></select>
+      </div>
+      <div>
+        <label class="label-title">Nguồn chi trả (Tìm kiếm)</label>
+        <select id="select_nguon_chi_tra" class="input-box"></select>
+      </div>
+      <div>
+        <label class="label-title">Nơi làm việc / Học tập</label>
+        <input type="text" x-model="form.NOI_LAM_VIEC_HOC_TAP" placeholder="Công ty CP / Trường THPT..." class="input-box" />
+      </div>
+    </div>
+
+    <!-- Hàng 7: Lý do vào viện -->
+    <div>
+      <label class="label-title">Lý do khám sức khỏe / vào viện <span class="text-red-500">*</span></label>
+      <input type="text" x-model="form.LY_DO_VV" placeholder="Khám sức khỏe đi làm / đi học / định kỳ..." class="input-box" />
+      <input type="hidden" x-model="form.MA_LOAI_KCB" value="15" />
+    </div>
+  </fieldset>
+
+  <!-- Thanh nút hành động Tiếp nhận -->
+  <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#E2E8F0] shadow-xs">
+    <div class="flex items-center gap-2">
+      <span class="text-xs" :class="isSaved ? 'text-[#27AE60] font-medium' : 'text-amber-700'">
+        <span x-text="isSaved ? '● Hồ sơ đã được lưu trên hệ thống' : '○ Hồ sơ chưa lưu. Hãy bấm nút Lưu để mở quyền In phôi!'"></span>
+      </span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button type="button" @click="handleSave()" :disabled="!canEditReception || saving" class="px-5 py-2 bg-[#3498DB] hover:bg-[#2980B9] disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-xs transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+        <span x-text="saving ? 'Đang lưu...' : 'Lưu thông tin tiếp nhận'"></span>
+      </button>
+
+      <!-- Nút In Phôi: Chỉ cần có Mã tiếp nhận -->
+      <button type="button" @click="printReceptionBlank()" :disabled="!form.MA_TIEP_NHAN" :class="form.MA_TIEP_NHAN ? 'bg-[#2C3E50] hover:bg-[#1A252F] text-white cursor-pointer' : 'bg-[#F4F6F8] text-[#7F8C8D] cursor-not-allowed border border-[#E2E8F0]'" class="px-4 py-2 rounded-lg font-medium text-xs flex items-center gap-2 transition-colors shadow-xs" title="In phôi giấy khám sức khỏe A4 gửi bệnh nhân">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+        <span>In phôi tiếp nhận (gửi khách)</span>
+      </button>
+
+      <button type="button" @click="downloadDocx('reception')" :disabled="!isSaved" :class="isSaved ? 'bg-white hover:bg-[#F4F6F8] text-[#2C3E50] border border-[#E2E8F0]' : 'bg-[#F4F6F8] text-[#7F8C8D] cursor-not-allowed border border-[#E2E8F0]'" class="px-3 py-2 rounded-lg font-medium text-xs flex items-center gap-1.5 transition-colors shadow-xs">
+        <svg class="w-4 h-4 text-[#3498DB]" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/></svg>
+        <span>Tải Word phôi</span>
+      </button>
+    </div>
+  </div>
+</div>
+
