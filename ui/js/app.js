@@ -8,6 +8,7 @@ function kskApp() {
     token: localStorage.getItem('ksk_token') || '',
     currentUser: null,
     activeTab: 'reception',
+    clinicalSubTab: 'noi', // Tab con chuyên khoa khám lâm sàng (noi, ngoai, dalieu, san, mat, tmh, rhm, all)
     loginForm: { username: '', password: '' },
     loginLoading: false,
 
@@ -310,6 +311,96 @@ function kskApp() {
     get isLocked() { return this.recordStatus === 1; },
     get isSaved() { return !!this.recordId; },
 
+    /**
+     * Xác định Tab chính và Tab con chuyên khoa dựa trên phân quyền người dùng (User Role)
+     * Quy tắc: Nếu người dùng có nhiều vai trò (Multi-Role), ưu tiên chọn vai trò đầu tiên trong danh sách
+     * @returns {{ tab: string, subTab: string }} Thông tin tab và sub-tab tương ứng
+     */
+    getDestinationTabForUser() {
+      if (!this.currentUser) return { tab: 'reception', subTab: 'noi' };
+
+      // Tách danh sách quyền của tài khoản hiện tại
+      const rawRoles = (this.currentUser.role || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (rawRoles.length === 0) return { tab: 'reception', subTab: 'noi' };
+
+      // Bảng tra cứu vai trò -> Tab quy trình và Tab con chuyên khoa
+      const roleTabMap = {
+        'reception': { tab: 'reception', subTab: 'noi' },
+        'tiensu': { tab: 'history', subTab: 'noi' },
+        'bs_theluc': { tab: 'physical', subTab: 'noi' },
+        'bs_noi': { tab: 'clinical', subTab: 'noi' },
+        'bs_ngoai': { tab: 'clinical', subTab: 'ngoai' },
+        'bs_dalieu': { tab: 'clinical', subTab: 'dalieu' },
+        'bs_san': { tab: 'clinical', subTab: 'san' },
+        'bs_mat': { tab: 'clinical', subTab: 'mat' },
+        'bs_tmh': { tab: 'clinical', subTab: 'tmh' },
+        'bs_rhm': { tab: 'clinical', subTab: 'rhm' },
+        'bs_cls': { tab: 'paraclinical', subTab: 'noi' },
+        'bs_ketluan': { tab: 'conclusion', subTab: 'noi' },
+      };
+
+      // Duyệt danh sách quyền được phân, lấy vai trò đầu tiên có trong bảng cấu hình
+      for (const r of rawRoles) {
+        if (roleTabMap[r]) {
+          return roleTabMap[r];
+        }
+      }
+
+      // Trường hợp tài khoản chỉ có quyền admin đơn thuần
+      return { tab: 'reception', subTab: 'noi' };
+    },
+
+    /**
+     * Tự động điều hướng đến đúng màn hình chuyên khoa người dùng được phân công
+     */
+    navigateToUserDefaultTab() {
+      const dest = this.getDestinationTabForUser();
+      this.activeTab = dest.tab;
+      if (dest.tab === 'clinical') {
+        this.clinicalSubTab = dest.subTab;
+      }
+    },
+
+    /**
+     * Tự động gán họ tên bác sĩ khám theo tài khoản đăng nhập khi thực hiện lưu dữ liệu
+     * Đảm bảo các chỉ tiêu BS_* được điền đầy đủ cho báo cáo và in ấn
+     */
+    autoFillDoctorNames() {
+      if (!this.currentUser || !this.currentUser.full_name) return;
+      const docName = this.currentUser.full_name;
+
+      if (this.canEditClinicalNoi) {
+        this.form.BS_NOI = docName;
+      }
+      if (this.canEditClinicalNgoai) {
+        this.form.BS_NGOAI = docName;
+      }
+      if (this.canEditClinicalDaLieu) {
+        this.form.BS_DA_LIEU = docName;
+      }
+      if (this.canEditClinicalSan) {
+        this.form.BS_SAN = docName;
+      }
+      if (this.canEditClinicalMat) {
+        this.form.BS_MAT = docName;
+      }
+      if (this.canEditClinicalTmh) {
+        this.form.BS_TMH = docName;
+      }
+      if (this.canEditClinicalRhm) {
+        this.form.BS_RHM = docName;
+      }
+      if (this.canEditPhysical) {
+        this.form.BS_THE_LUC = docName;
+      }
+      if (this.canEditParaclinical) {
+        this.form.BS_CLS = docName;
+      }
+      if (this.canEditConclusion) {
+        this.form.BS_KET_LUAN = docName;
+      }
+    },
+
     // Khởi tạo Flatpickr
     initDatePicker(el, fieldName) {
       if (typeof flatpickr === 'undefined') return;
@@ -525,6 +616,8 @@ function kskApp() {
             ma_cskcb: data.facility?.ma_cskcb || data.cskcb?.ma_cskcb || '52208',
             dia_danh: data.facility?.dia_danh || data.cskcb?.dia_danh || 'Gia Lai'
           };
+          // Tự động điều hướng trực tiếp đến tab/chuyên khoa được phân quyền của user
+          this.navigateToUserDefaultTab();
           if (this.isAdmin) {
             await this.loadAdminUsers();
             await this.loadAdminSettings();
@@ -557,6 +650,8 @@ function kskApp() {
           localStorage.setItem('ksk_token', this.token);
           this.currentUser = data.user;
           this.toast(`Chào mừng ${data.user.full_name}!`);
+          // Tự động điều hướng đến đúng chuyên khoa/tab được phân quyền (ưu tiên tab đầu tiên)
+          this.navigateToUserDefaultTab();
           await this.loadCatalogs();
           await this.loadRecordsList();
           if (this.isAdmin) {
@@ -725,18 +820,8 @@ function kskApp() {
     selectRecord(rec) {
       this.loadRecordIntoForm(rec);
       this.searchMaTn = rec.ma_tiep_nhan;
-      // Nếu đang là nhân viên chuyên khoa thì tự động chuyển tab phù hợp
-      if (this.isDoctorTheLuc && this.activeTab === 'reception') {
-        this.activeTab = 'physical';
-      } else if (this.isTiensuRole && this.activeTab === 'reception') {
-        this.activeTab = 'history';
-      } else if ((this.isDoctorNoi || this.isDoctorNgoai || this.isDoctorDaLieu || this.isDoctorSan || this.isDoctorMat || this.isDoctorTmh || this.isDoctorRhm) && this.activeTab === 'reception') {
-        this.activeTab = 'clinical';
-      } else if (this.isDoctorCls && this.activeTab === 'reception') {
-        this.activeTab = 'paraclinical';
-      } else if (this.isDoctorKetLuan && this.activeTab === 'reception') {
-        this.activeTab = 'conclusion';
-      }
+      // Chạy thẳng tới vị trí chuyên khoa được phân công để nhập liệu ngay
+      this.navigateToUserDefaultTab();
       this.toast(`Đã chọn bệnh nhân ${rec.ho_ten} (${rec.ma_tiep_nhan})`);
     },
 
@@ -760,6 +845,8 @@ function kskApp() {
         if (resDb.ok) {
           const record = await resDb.json();
           this.loadRecordIntoForm(record);
+          // Chuyển thẳng tới chuyên khoa của user
+          this.navigateToUserDefaultTab();
           this.toast(`Đã tải hồ sơ KSK [${maTn}] từ cơ sở dữ liệu.`);
           this.searchLoading = false;
           return;
@@ -795,6 +882,7 @@ function kskApp() {
               await this.loadWardsForProvince(this.form.MATINH_CU_TRU);
             }
             this.syncAllSelects();
+            this.navigateToUserDefaultTab();
 
             this.toast(`Đã lấy dữ liệu hành chính từ HIS cho bệnh nhân ${this.form.HO_TEN}! Vui lòng bấm "Lưu tiếp nhận".`);
           } else {
@@ -846,7 +934,8 @@ function kskApp() {
       this.updatedBy = '';
       this.updatedAt = '';
       this.searchMaTn = '';
-      this.activeTab = 'reception';
+      // Quay về tab chuyên khoa được phân công thay vì cố định về reception
+      this.navigateToUserDefaultTab();
 
       for (let k in this.form) {
         if (k.startsWith('TSBT_') || k.startsWith('TSGD_')) {
@@ -907,6 +996,9 @@ function kskApp() {
         this.toast('Vui lòng nhập Họ và tên bệnh nhân!', 'error');
         return;
       }
+
+      // Tự động điền tên bác sĩ chuyên khoa theo tài khoản đang thao tác
+      this.autoFillDoctorNames();
 
       this.saving = true;
       try {

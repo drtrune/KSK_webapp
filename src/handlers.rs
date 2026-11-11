@@ -778,7 +778,7 @@ pub async fn save_record_handler(
         &cfg.ma_gtin_cskcb,
     );
 
-    // Điền tên bác sĩ chuyên khoa nếu có quyền tương ứng
+    // Tự động điền tên bác sĩ chuyên khoa theo tài khoản người dùng đang thao tác
     let doctor_mappings = [
         ("bs_theluc", "BS_THE_LUC"),
         ("bs_noi", "BS_NOI"),
@@ -793,7 +793,11 @@ pub async fn save_record_handler(
     ];
 
     for (role_tag, field_name) in doctor_mappings {
-        if user.has_role(role_tag) {
+        // Nếu user trực tiếp có vai trò chuyên khoa đó thì luôn cập nhật theo tên user đang nhập
+        if user.role.split(',').any(|r| r.trim() == role_tag) {
+            merged.insert(field_name.to_string(), Value::String(user.full_name.clone()));
+        } else if user.has_role(role_tag) {
+            // Trường hợp quyền admin bao hàm: chỉ điền nếu trường đó đang rỗng
             let cur = merged.get(field_name).and_then(|v| v.as_str()).unwrap_or("").trim();
             if cur.is_empty() {
                 merged.insert(field_name.to_string(), Value::String(user.full_name.clone()));
