@@ -19,12 +19,9 @@ pub const VALID_ROLES: &[&str] = &[
     "bs_ketluan",
 ];
 
-/// Danh sách các cột chuẩn xuất CSV theo Quyết định 3176/QĐ-BYT & Thông tư 25/2026/TT-BYT (Mục 4)
+/// Danh sách 123 cột chuẩn xuất CSV theo Quyết định 3176/QĐ-BYT & Quyết định 1804/QĐ-BYT
 pub const CSV_EXPORT_COLUMNS: &[&str] = &[
-    // 1-15: Hành chính
-    "MA_CSKCB",
-    "MA_GTIN_CSKCB",
-    "NGAY_VAO",
+    // I. Thông tin hành chính (1-15)
     "HO_TEN",
     "GIOI_TINH",
     "NGAY_SINH",
@@ -32,21 +29,26 @@ pub const CSV_EXPORT_COLUMNS: &[&str] = &[
     "SO_CCCD",
     "NGAYCAP_CCCD",
     "NOICAP_CCCD",
+    "DIA_CHI",
     "MATINH_CU_TRU",
     "MAXA_CU_TRU",
-    "DIA_CHI",
     "MA_NGHE_NGHIEP",
-    "NHOM_MAU",
-    // 16-21: Thông tin KCB
-    "DOI_TUONG",
-    "NGUON_CHI_TRA",
     "NOI_LAM_VIEC_HOC_TAP",
     "DIEN_THOAI",
+    "NHOM_MAU",
     "LY_DO_VV",
+    // II. Thông tin chung về lần khám (16-22)
+    "MA_LK",
+    "MA_CSKCB",
+    "MA_GTIN_CSKCB",
+    "DOI_TUONG",
+    "NGUON_CHI_TRA",
     "MA_LOAI_KCB",
-    // 22-51: Tiền sử bệnh (0: Không, 1: Có)
+    "NGAY_VAO",
+    // III.A. Tiền sử gia đình (23-24)
     "TSGD_MAC_BENH",
     "TSGD_MA_BENH",
+    // III.B. Tiền sử bản thân (25-53)
     "TSBT_BENH_TRONG_5_NAM_QUA",
     "TSBT_BENH_THAN_KINH",
     "TSBT_BENH_MAT",
@@ -76,54 +78,87 @@ pub const CSV_EXPORT_COLUMNS: &[&str] = &[
     "TSBT_THAI_SAN",
     "TSBT_MA_BENH_THAI_SAN",
     "TSBT_TEN_THUOC_THAI_SAN",
-    // 52-89: Thể lực & Lâm sàng
+    // IV. Khám thể lực (54-59)
     "CHIEU_CAO",
     "CAN_NANG",
     "CHI_SO_BMI",
     "MACH",
     "HUYET_AP",
     "KHAM_THE_LUC_PL",
+    // V.A. Nội khoa (60-83)
     "NOI_KHOA_TUAN_HOAN",
     "NOI_KHOA_TUAN_HOAN_PL",
+    "CKDT_NOI_KHOA_TUAN_HOAN",
     "NOI_KHOA_HO_HAP",
     "NOI_KHOA_HO_HAP_PL",
+    "CKDT_NOI_KHOA_HO_HAP",
     "NOI_KHOA_TIEU_HOA",
     "NOI_KHOA_TIEU_HOA_PL",
+    "CKDT_NOI_KHOA_TIEU_HOA",
     "NOI_KHOA_THAN_TN_SD",
-    "NOI_KHOA_THAN_TIETNIEU_PL",
+    "NOI_KHOA_THAN_TN_SD_PL",
+    "CKDT_NOI_KHOA_THAN_TN_SD",
     "NOI_KHOA_NOI_TIET",
     "NOI_KHOA_NOI_TIET_PL",
+    "CKDT_NOI_KHOA_NOI_TIET",
     "NOI_KHOA_CO_XUONG_KHOP",
     "NOI_KHOA_CO_XUONG_KHOP_PL",
+    "CKDT_NOI_KHOA_CO_XUONG_KHOP",
     "NOI_KHOA_THAN_KINH",
     "NOI_KHOA_THAN_KINH_PL",
+    "CKDT_NOI_KHOA_THAN_KINH",
     "NOI_KHOA_TAM_THAN",
     "NOI_KHOA_TAM_THAN_PL",
+    "CKDT_NOI_KHOA_TAM_THAN",
+    // V.B. Ngoại khoa (84-86)
     "KET_QUA_KHAM_NGOAI_KHOA",
     "KHAM_NGOAI_KHOA_PL",
+    "CKDT_KHAM_NGOAI_KHOA",
+    // V.C. Da liễu (87-89)
     "KET_QUA_KHAM_DA_LIEU",
     "KHAM_DA_LIEU_PL",
+    "CKDT_KHAM_DA_LIEU",
+    // V.D. Sản phụ khoa (90-92)
     "KET_QUA_KHAM_SAN_PHU_KHOA",
     "KHAM_SAN_PHU_KHOA_PL",
+    "CKDT_KHAM_SAN_PHU_KHOA",
+    // V.E. Mắt (93-99)
     "KHONG_KINH_MAT_PHAI",
     "KHONG_KINH_MAT_TRAI",
     "CO_KINH_MAT_PHAI",
     "CO_KINH_MAT_TRAI",
     "BENH_KHAC_MAT",
     "KHAM_MAT_PL",
+    "CKDT_KHAM_MAT",
+    // V.F. Tai - Mũi - Họng (100-106)
     "TAI_TRAI_NOI_THUONG",
     "TAI_TRAI_NOI_THAM",
     "TAI_PHAI_NOI_THUONG",
     "TAI_PHAI_NOI_THAM",
     "BENH_KHAC_TAI_MUI_HONG",
     "KHAM_TAI_MUI_HONG_PL",
+    "CKDT_KHAM_TAI_MUI_HONG",
+    // V.G. Răng - Hàm - Mặt (107-111)
     "HAM_TREN",
     "HAM_DUOI",
     "BENH_KHAC_RANG_HAM_MAT",
     "KHAM_RANG_HAM_MAT_PL",
+    "CKDT_KHAM_RANG_HAM_MAT",
+    // VI. Khám cận lâm sàng (112-118)
+    "MA_DICH_VU",
+    "MA_CHI_SO",
+    "GIA_TRI",
+    "DON_VI_DO",
+    "MO_TA",
+    "KET_LUAN",
+    "CKDT_KET_QUA_CLS",
+    // VII. Kết luận (119-121)
     "PHAN_LOAI_SK",
     "KET_LUAN_BENH",
     "CAC_BENH_TAT_NEU_CO",
+    // VIII. Chữ ký số (122-123)
+    "CKS_NGUOI_KET_LUAN",
+    "CKS_BENH_VIEN",
 ];
 
 // Các nhóm trường theo từng Role chuyên khoa để kiểm soát quyền sửa (RBAC)
@@ -276,6 +311,7 @@ pub const FIELDS_BS_CLS: &[&str] = &[
     "CLS_KHAC_CO",
     "CLS_KHAC_MO_TA",
     "CLS_DINH_KY_KQ",
+    "CLS_DINH_KY_KET_QUA",
     "BS_CLS",
 ];
 
@@ -690,6 +726,21 @@ pub struct RecordFilterQuery {
     pub status: Option<i64>,
     pub from_date: Option<String>,
     pub to_date: Option<String>,
+    pub workplace: Option<String>,
+    pub classification: Option<String>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CsvExportFilterQuery {
+    pub from_date: Option<String>,
+    pub to_date: Option<String>,
+    pub status: Option<i64>,
+    pub q: Option<String>,
+    pub workplace: Option<String>,
+    pub classification: Option<String>,
+    pub selected_ids: Option<String>,
+    pub token: Option<String>,
 }
 
 // ============================================================================

@@ -713,6 +713,161 @@ pub async fn test_his_connection_handler(
 // 3. QUẢN LÝ HỒ SƠ KHÁM SỨC KHỎE
 // ============================================================================
 
+fn normalize_filter_date(d: &str) -> String {
+    let s = d.trim();
+    if s.is_ascii() && s.len() == 10 && &s[2..3] == "/" && &s[5..6] == "/" {
+        format!("{}-{}-{}", &s[6..10], &s[3..5], &s[0..2])
+    } else {
+        s.to_string()
+    }
+}
+
+fn json_val_to_string(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.trim().to_string(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => if *b { "1".to_string() } else { "0".to_string() },
+        _ => String::new(),
+    }
+}
+
+async fn query_filtered_records(
+    db: &SqlitePool,
+    from_date: Option<&str>,
+    to_date: Option<&str>,
+    status: Option<i64>,
+    q: Option<&str>,
+    workplace: Option<&str>,
+    classification: Option<&str>,
+    selected_ids: Option<&str>,
+    limit: Option<i64>,
+    order_asc: bool,
+) -> Vec<KskRecordRow> {
+    let q_str = q.unwrap_or_default().trim().to_string();
+    let from_str = normalize_filter_date(from_date.unwrap_or_default());
+    let to_str = normalize_filter_date(to_date.unwrap_or_default());
+    let workplace_str = workplace.unwrap_or_default().trim().to_lowercase();
+    let class_str = classification.unwrap_or_default().trim().to_string();
+
+    let mut parsed_ids: Option<Vec<i64>> = None;
+    if let Some(raw_ids) = selected_ids {
+        let trimmed = raw_ids.trim();
+        if !trimmed.is_empty() {
+            let ids: Vec<i64> = trimmed
+                .split(',')
+                .filter_map(|part| part.trim().parse::<i64>().ok())
+                .collect();
+            if ids.is_empty() {
+                return Vec::new();
+            }
+            parsed_ids = Some(ids);
+        }
+    }
+
+    let mut sql = String::from("SELECT * FROM ksk_records WHERE 1=1");
+    let mut conditions: Vec<String> = Vec::new();
+
+    if status.is_some() {
+        conditions.push("status = ?".to_string());
+    }
+
+    if !from_str.is_empty() {
+        conditions.push("(CASE WHEN length(ngay_vao) = 10 AND substr(ngay_vao, 3, 1) = '/' AND substr(ngay_vao, 6, 1) = '/' THEN (substr(ngay_vao, 7, 4) || '-' || substr(ngay_vao, 4, 2) || '-' || substr(ngay_vao, 1, 2)) ELSE substr(created_at, 1, 10) END) >= ?".to_string());
+    }
+
+    if !to_str.is_empty() {
+        conditions.push("(CASE WHEN length(ngay_vao) = 10 AND substr(ngay_vao, 3, 1) = '/' AND substr(ngay_vao, 6, 1) = '/' THEN (substr(ngay_vao, 7, 4) || '-' || substr(ngay_vao, 4, 2) || '-' || substr(ngay_vao, 1, 2)) ELSE substr(created_at, 1, 10) END) <= ?".to_string());
+    }
+
+    if !q_str.is_empty() {
+        conditions.push("(ma_tiep_nhan LIKE ? OR ho_ten LIKE ? OR so_cccd LIKE ? OR ma_y_te LIKE ?)".to_string());
+    }
+
+    if let Some(ref ids) = parsed_ids {
+        let placeholders = vec!["?"; ids.len()].join(", ");
+        conditions.push(format!("id IN ({})", placeholders));
+    }
+
+    for cond in conditions {
+        sql.push_str(" AND ");
+        sql.push_str(&cond);
+    }
+
+    if order_asc {
+        sql.push_str(" ORDER BY id ASC");
+    } else {
+        sql.push_str(" ORDER BY updated_at DESC, id DESC");
+    }
+
+    // Nếu không cần lọc JSON trên Rust và có limit thì đẩy LIMIT xuống SQL
+    let has_rust_filter = !workplace_str.is_empty() || !class_str.is_empty();
+    if !has_rust_filter {
+        if let Some(lim) = limit {
+            let safe_lim = lim.clamp(1, 5000);
+            sql.push_str(&format!(" LIMIT {}", safe_lim));
+        }
+    }
+
+    let mut query = sqlx::query_as::<_, KskRecordRow>(&sql);
+
+    if let Some(st) = status {
+        query = query.bind(st);
+    }
+    if !from_str.is_empty() {
+        query = query.bind(from_str);
+    }
+    if !to_str.is_empty() {
+        query = query.bind(to_str);
+    }
+    if !q_str.is_empty() {
+        let like_q = format!("%{}%", q_str);
+        query = query
+            .bind(like_q.clone())
+            .bind(like_q.clone())
+            .bind(like_q.clone())
+            .bind(like_q);
+    }
+    if let Some(ref ids) = parsed_ids {
+        for id_val in ids {
+            query = query.bind(*id_val);
+        }
+    }
+
+    let mut rows: Vec<KskRecordRow> = query.fetch_all(db).await.unwrap_or_default();
+
+    if has_rust_filter {
+        rows.retain(|r| {
+            let map: Map<String, Value> = serde_json::from_str(&r.payload_json).unwrap_or_default();
+            if !workplace_str.is_empty() {
+                let wp = map
+                    .get("NOI_LAM_VIEC_HOC_TAP")
+                    .map(json_val_to_string)
+                    .unwrap_or_default()
+                    .to_lowercase();
+                if !wp.contains(&workplace_str) {
+                    return false;
+                }
+            }
+            if !class_str.is_empty() {
+                let pl = map
+                    .get("PHAN_LOAI_SK")
+                    .map(json_val_to_string)
+                    .unwrap_or_default();
+                if pl != class_str {
+                    return false;
+                }
+            }
+            true
+        });
+        if let Some(lim) = limit {
+            let safe_lim = lim.clamp(1, 5000) as usize;
+            rows.truncate(safe_lim);
+        }
+    }
+
+    rows
+}
+
 pub async fn list_records_handler(
     State(state): State<SharedState>,
     headers: HeaderMap,
@@ -724,53 +879,19 @@ pub async fn list_records_handler(
         Err(resp) => return resp,
     };
 
-    let q = filter.q.unwrap_or_default().trim().to_string();
-    let from_date = filter.from_date.unwrap_or_default().trim().to_string();
-    let to_date = filter.to_date.unwrap_or_default().trim().to_string();
-
-    let mut sql = String::from("SELECT * FROM ksk_records WHERE 1=1");
-    let mut conditions = Vec::new();
-
-    if filter.status.is_some() {
-        conditions.push("status = ?");
-    }
-
-    if !from_date.is_empty() {
-        conditions.push("(CASE WHEN length(ngay_vao) = 10 AND substr(ngay_vao, 3, 1) = '/' AND substr(ngay_vao, 6, 1) = '/' THEN (substr(ngay_vao, 7, 4) || '-' || substr(ngay_vao, 4, 2) || '-' || substr(ngay_vao, 1, 2)) ELSE substr(created_at, 1, 10) END) >= ?");
-    }
-
-    if !to_date.is_empty() {
-        conditions.push("(CASE WHEN length(ngay_vao) = 10 AND substr(ngay_vao, 3, 1) = '/' AND substr(ngay_vao, 6, 1) = '/' THEN (substr(ngay_vao, 7, 4) || '-' || substr(ngay_vao, 4, 2) || '-' || substr(ngay_vao, 1, 2)) ELSE substr(created_at, 1, 10) END) <= ?");
-    }
-
-    if !q.is_empty() {
-        conditions.push("(ma_tiep_nhan LIKE ? OR ho_ten LIKE ? OR so_cccd LIKE ? OR ma_y_te LIKE ?)");
-    }
-
-    for cond in conditions {
-        sql.push_str(" AND ");
-        sql.push_str(cond);
-    }
-
-    sql.push_str(" ORDER BY updated_at DESC, id DESC LIMIT 200");
-
-    let mut query = sqlx::query_as::<_, KskRecordRow>(&sql);
-
-    if let Some(st) = filter.status {
-        query = query.bind(st);
-    }
-    if !from_date.is_empty() {
-        query = query.bind(from_date);
-    }
-    if !to_date.is_empty() {
-        query = query.bind(to_date);
-    }
-    if !q.is_empty() {
-        let like_q = format!("%{}%", q);
-        query = query.bind(like_q.clone()).bind(like_q.clone()).bind(like_q.clone()).bind(like_q);
-    }
-
-    let rows: Vec<KskRecordRow> = query.fetch_all(&*db).await.unwrap_or_default();
+    let rows = query_filtered_records(
+        &*db,
+        filter.from_date.as_deref(),
+        filter.to_date.as_deref(),
+        filter.status,
+        filter.q.as_deref(),
+        filter.workplace.as_deref(),
+        filter.classification.as_deref(),
+        None,
+        Some(filter.limit.unwrap_or(200)),
+        false,
+    )
+    .await;
 
     let dtos: Vec<KskRecordDto> = rows.into_iter().map(KskRecordDto::from).collect();
     Json(dtos).into_response()
@@ -1750,38 +1871,106 @@ fn replace_docx_paragraphs(
 }
 
 // ============================================================================
-// 5. TRÍCH XUẤT CSV CHUẨN QĐ 3176
+// 5. TRÍCH XUẤT CSV CHUẨN QĐ 3176 & QĐ 1804 (123 CHỈ TIÊU)
 // ============================================================================
 
-#[derive(Debug, Deserialize)]
-pub struct CsvExportQuery {
-    pub status: Option<i64>,
-    pub token: Option<String>,
+fn extract_map_str(map: &Map<String, Value>, key: &str) -> String {
+    map.get(key).map(json_val_to_string).unwrap_or_default()
+}
+
+fn build_cls_summary(map: &Map<String, Value>) -> (String, String, String, String, String, String) {
+    let cls_items: [(&str, &str, &str, &str); 10] = [
+        ("CLS_HH", "Huyết học", "CLS_HUYET_HOC", ""),
+        ("CLS_GLU", "Đường máu", "CLS_DUONG_MAU", "mmol/L"),
+        ("CLS_URE", "Urê máu", "CLS_URE", "mmol/L"),
+        ("CLS_CRE", "Creatinin", "CLS_CREATININ", "µmol/L"),
+        ("CLS_GOT", "ASAT (GOT)", "CLS_ASAT_GOT", "U/L"),
+        ("CLS_GPT", "ALAT (GPT)", "CLS_ALAT_GPT", "U/L"),
+        ("CLS_NT", "Nước tiểu", "CLS_NUOC_TIEU", ""),
+        ("CLS_XQ", "X-quang tim phổi", "CLS_XQ_TIM_PHOI", ""),
+        ("CLS_KHAC", "CLS khác", "CLS_KHAC_MO_TA", ""),
+        ("CLS_DK", "CLS định kỳ", "CLS_DINH_KY_KET_QUA", ""),
+    ];
+
+    let mut codes = Vec::new();
+    let mut names = Vec::new();
+    let mut vals = Vec::new();
+    let mut units = Vec::new();
+    let mut descs = Vec::new();
+    let mut abnormal = false;
+
+    for (code, label, field, unit) in cls_items {
+        let mut val = extract_map_str(map, field);
+        if val.is_empty() && field == "CLS_DINH_KY_KET_QUA" {
+            val = extract_map_str(map, "CLS_DINH_KY_KQ");
+        }
+        if !val.is_empty() {
+            codes.push(code);
+            names.push(label);
+            vals.push(val.clone());
+            if !unit.is_empty() {
+                units.push(unit);
+            }
+            descs.push(format!("{}: {}", label, val));
+            let lower = val.to_lowercase();
+            if lower.contains("bất thường") || lower.contains("tăng") || lower.contains("giảm") || lower.contains("viêm") || lower.contains("dương") {
+                abnormal = true;
+            }
+        }
+    }
+
+    if codes.is_empty() {
+        return (
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+        );
+    }
+
+    let conclusion = if abnormal {
+        "Bất thường".to_string()
+    } else {
+        "Bình thường".to_string()
+    };
+
+    (
+        codes.join("; "),
+        names.join("; "),
+        vals.join("; "),
+        units.join("; "),
+        descs.join("; "),
+        conclusion,
+    )
 }
 
 pub async fn export_csv_handler(
     State(state): State<SharedState>,
     headers: HeaderMap,
-    Query(query): Query<CsvExportQuery>,
+    Query(query): Query<CsvExportFilterQuery>,
 ) -> Response {
     let db = state.db.read().await;
     let _user = match authenticate(&*db, &headers, query.token.as_deref()).await {
         Ok(u) => u,
         Err(resp) => return resp,
     };
+    let cfg = state.config.read().await.clone();
 
-    let rows: Vec<KskRecordRow> = if let Some(st) = query.status {
-        sqlx::query_as("SELECT * FROM ksk_records WHERE status = ? ORDER BY id ASC")
-            .bind(st)
-            .fetch_all(&*db)
-            .await
-            .unwrap_or_default()
-    } else {
-        sqlx::query_as("SELECT * FROM ksk_records ORDER BY id ASC")
-            .fetch_all(&*db)
-            .await
-            .unwrap_or_default()
-    };
+    let rows = query_filtered_records(
+        &*db,
+        query.from_date.as_deref(),
+        query.to_date.as_deref(),
+        query.status,
+        query.q.as_deref(),
+        query.workplace.as_deref(),
+        query.classification.as_deref(),
+        query.selected_ids.as_deref(),
+        None,
+        true,
+    )
+    .await;
 
     let mut output: Vec<u8> = vec![0xEF, 0xBB, 0xBF];
     {
@@ -1799,17 +1988,149 @@ pub async fn export_csv_handler(
         for row in rows {
             let map: Map<String, Value> =
                 serde_json::from_str(&row.payload_json).unwrap_or_default();
+            let cls_summary = build_cls_summary(&map);
+
             let record_values: Vec<String> = CSV_EXPORT_COLUMNS
                 .iter()
-                .map(|&col| {
-                    map.get(col)
-                        .and_then(|v| match v {
-                            Value::String(s) => Some(s.clone()),
-                            Value::Number(n) => Some(n.to_string()),
-                            Value::Bool(b) => Some(if *b { "1".to_string() } else { "0".to_string() }),
-                            _ => None,
-                        })
-                        .unwrap_or_default()
+                .map(|&col| match col {
+                    "HO_TEN" => {
+                        let v = extract_map_str(&map, "HO_TEN");
+                        let raw = if v.is_empty() { row.ho_ten.clone() } else { v };
+                        raw.to_uppercase()
+                    }
+                    "GIOI_TINH" => {
+                        let v = extract_map_str(&map, "GIOI_TINH");
+                        let raw = if v.is_empty() { row.gioi_tinh.clone() } else { v };
+                        if raw.is_empty() { "1".to_string() } else { raw }
+                    }
+                    "NGAY_SINH" => {
+                        let v = extract_map_str(&map, "NGAY_SINH");
+                        if v.is_empty() { row.ngay_sinh.clone() } else { v }
+                    }
+                    "MA_DAN_TOC" => {
+                        let v = extract_map_str(&map, "MA_DAN_TOC");
+                        if v.is_empty() { "01".to_string() } else { v }
+                    }
+                    "SO_CCCD" => {
+                        let v = extract_map_str(&map, "SO_CCCD");
+                        if v.is_empty() { row.so_cccd.clone() } else { v }
+                    }
+                    "MA_NGHE_NGHIEP" => {
+                        let v = extract_map_str(&map, "MA_NGHE_NGHIEP");
+                        if v.is_empty() { "00".to_string() } else { v }
+                    }
+                    "LY_DO_VV" => {
+                        let v = extract_map_str(&map, "LY_DO_VV");
+                        if v.is_empty() { "Khám sức khỏe".to_string() } else { v }
+                    }
+                    "MA_LK" => {
+                        let v = extract_map_str(&map, "MA_LK");
+                        if v.is_empty() { row.ma_tiep_nhan.clone() } else { v }
+                    }
+                    "MA_CSKCB" => {
+                        let v = extract_map_str(&map, "MA_CSKCB");
+                        if v.is_empty() { cfg.ma_cskcb.clone() } else { v }
+                    }
+                    "MA_GTIN_CSKCB" => {
+                        let v = extract_map_str(&map, "MA_GTIN_CSKCB");
+                        if v.is_empty() { cfg.ma_gtin_cskcb.clone() } else { v }
+                    }
+                    "DOI_TUONG" => {
+                        let v = extract_map_str(&map, "DOI_TUONG");
+                        if v.is_empty() { "13".to_string() } else { v }
+                    }
+                    "NGUON_CHI_TRA" => {
+                        let v = extract_map_str(&map, "NGUON_CHI_TRA");
+                        if v.is_empty() { "9".to_string() } else { v }
+                    }
+                    "MA_LOAI_KCB" => {
+                        let v = extract_map_str(&map, "MA_LOAI_KCB");
+                        if v.is_empty() { "15".to_string() } else { v }
+                    }
+                    "NGAY_VAO" => {
+                        let v = extract_map_str(&map, "NGAY_VAO");
+                        if v.is_empty() { row.ngay_vao.clone() } else { v }
+                    }
+                    "NOI_KHOA_THAN_TN_SD_PL" => {
+                        let v = extract_map_str(&map, "NOI_KHOA_THAN_TN_SD_PL");
+                        if v.is_empty() {
+                            extract_map_str(&map, "NOI_KHOA_THAN_TIETNIEU_PL")
+                        } else {
+                            v
+                        }
+                    }
+                    "CKDT_NOI_KHOA_TUAN_HOAN"
+                    | "CKDT_NOI_KHOA_HO_HAP"
+                    | "CKDT_NOI_KHOA_TIEU_HOA"
+                    | "CKDT_NOI_KHOA_THAN_TN_SD"
+                    | "CKDT_NOI_KHOA_NOI_TIET"
+                    | "CKDT_NOI_KHOA_CO_XUONG_KHOP"
+                    | "CKDT_NOI_KHOA_THAN_KINH"
+                    | "CKDT_NOI_KHOA_TAM_THAN" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { extract_map_str(&map, "BS_NOI") } else { v }
+                    }
+                    "CKDT_KHAM_NGOAI_KHOA" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { extract_map_str(&map, "BS_NGOAI") } else { v }
+                    }
+                    "CKDT_KHAM_DA_LIEU" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { extract_map_str(&map, "BS_DA_LIEU") } else { v }
+                    }
+                    "CKDT_KHAM_SAN_PHU_KHOA" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { extract_map_str(&map, "BS_SAN") } else { v }
+                    }
+                    "CKDT_KHAM_MAT" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { extract_map_str(&map, "BS_MAT") } else { v }
+                    }
+                    "CKDT_KHAM_TAI_MUI_HONG" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { extract_map_str(&map, "BS_TMH") } else { v }
+                    }
+                    "CKDT_KHAM_RANG_HAM_MAT" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { extract_map_str(&map, "BS_RHM") } else { v }
+                    }
+                    "MA_DICH_VU" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { cls_summary.0.clone() } else { v }
+                    }
+                    "MA_CHI_SO" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { cls_summary.1.clone() } else { v }
+                    }
+                    "GIA_TRI" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { cls_summary.2.clone() } else { v }
+                    }
+                    "DON_VI_DO" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { cls_summary.3.clone() } else { v }
+                    }
+                    "MO_TA" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { cls_summary.4.clone() } else { v }
+                    }
+                    "KET_LUAN" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { cls_summary.5.clone() } else { v }
+                    }
+                    "CKDT_KET_QUA_CLS" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { extract_map_str(&map, "BS_CLS") } else { v }
+                    }
+                    "CKS_NGUOI_KET_LUAN" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { extract_map_str(&map, "BS_KET_LUAN") } else { v }
+                    }
+                    "CKS_BENH_VIEN" => {
+                        let v = extract_map_str(&map, col);
+                        if v.is_empty() { cfg.ten_cskcb.clone() } else { v }
+                    }
+                    _ => extract_map_str(&map, col),
                 })
                 .collect();
 

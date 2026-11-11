@@ -27,6 +27,7 @@ const INDEX_HTML: &str = concat!(
     include_str!("../ui/tabs/clinical.html"),
     include_str!("../ui/tabs/paraclinical.html"),
     include_str!("../ui/tabs/conclusion.html"),
+    include_str!("../ui/tabs/export_csv.html"),
     include_str!("../ui/tabs/admin.html"),
     include_str!("../ui/tabs/print.html"),
     include_str!("../ui/index_footer.html"),

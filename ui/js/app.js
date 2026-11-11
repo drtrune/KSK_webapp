@@ -75,6 +75,20 @@ function kskApp() {
     recordsDateTo: '',
     sidebarOpen: true,
 
+    // Mô-đun Xuất CSV chuẩn QĐ 3176 (123 chỉ tiêu)
+    exportFilters: {
+      fromDate: '',
+      toDate: '',
+      status: '',
+      q: '',
+      workplace: '',
+      classification: ''
+    },
+    exportList: [],
+    exportLoading: false,
+    exportSelectedIds: [],
+    exportDatePickers: {},
+
     // Tra cứu
     searchMaTn: '',
     searchLoading: false,
@@ -365,6 +379,9 @@ function kskApp() {
       const today = this.todayIso();
       this.recordsDateFrom = today;
       this.recordsDateTo = today;
+      const todayVn = this.todayFormatted();
+      this.exportFilters.fromDate = todayVn;
+      this.exportFilters.toDate = todayVn;
 
       if (this.token) {
         await this.loadMe();
@@ -372,9 +389,12 @@ function kskApp() {
         await this.loadRecordsList();
       }
 
-      this.$watch('activeTab', () => {
+      this.$watch('activeTab', (val) => {
         this.$nextTick(() => {
           this.syncAllSelects();
+          if (val === 'export') {
+            this.loadExportPreview();
+          }
         });
       });
 
@@ -1502,9 +1522,144 @@ function kskApp() {
       window.open(url, '_blank');
     },
 
-    // Xuất CSV 89 cột QĐ 3176
+    // Chuyển sang Phân hệ Xuất CSV (123 cột QĐ 3176)
+    openExportTab() {
+      this.activeTab = 'export';
+      this.loadExportPreview();
+    },
+
+    initExportDatePicker(el, field) {
+      if (typeof flatpickr === 'undefined' || !el) return;
+      const fp = flatpickr(el, {
+        dateFormat: 'd/m/Y',
+        allowInput: true,
+        defaultDate: this.exportFilters[field] || null,
+        locale: (window.flatpickr && flatpickr.l10ns && flatpickr.l10ns.vn) ? flatpickr.l10ns.vn : 'default',
+        onChange: (selectedDates, dateStr) => {
+          this.exportFilters[field] = dateStr;
+          this.loadExportPreview();
+        }
+      });
+      this.exportDatePickers[field] = fp;
+    },
+
+    syncExportDatePickers() {
+      ['fromDate', 'toDate'].forEach(f => {
+        if (this.exportDatePickers[f]) {
+          this.exportDatePickers[f].setDate(this.exportFilters[f] || '', false, 'd/m/Y');
+        }
+      });
+    },
+
+    setExportToday() {
+      const todayVn = this.todayFormatted();
+      this.exportFilters.fromDate = todayVn;
+      this.exportFilters.toDate = todayVn;
+      this.syncExportDatePickers();
+      this.loadExportPreview();
+    },
+
+    setExportThisMonth() {
+      const d = new Date();
+      const firstDay = `01/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      this.exportFilters.fromDate = firstDay;
+      this.exportFilters.toDate = this.todayFormatted();
+      this.syncExportDatePickers();
+      this.loadExportPreview();
+    },
+
+    resetExportFilters() {
+      this.exportFilters = {
+        fromDate: '',
+        toDate: '',
+        status: '',
+        q: '',
+        workplace: '',
+        classification: ''
+      };
+      this.exportSelectedIds = [];
+      this.syncExportDatePickers();
+      this.loadExportPreview();
+    },
+
+    buildExportQueryParams(selectedOnly = false) {
+      const params = new URLSearchParams();
+      if (selectedOnly && this.exportSelectedIds.length > 0) {
+        params.set('selected_ids', this.exportSelectedIds.join(','));
+      } else {
+        if (this.exportFilters.fromDate) params.set('from_date', this.exportFilters.fromDate.trim());
+        if (this.exportFilters.toDate) params.set('to_date', this.exportFilters.toDate.trim());
+        if (this.exportFilters.status !== '') params.set('status', this.exportFilters.status);
+        if (this.exportFilters.q && this.exportFilters.q.trim()) params.set('q', this.exportFilters.q.trim());
+        if (this.exportFilters.workplace && this.exportFilters.workplace.trim()) params.set('workplace', this.exportFilters.workplace.trim());
+        if (this.exportFilters.classification) params.set('classification', this.exportFilters.classification);
+      }
+      return params;
+    },
+
+    async loadExportPreview() {
+      if (!this.token) return;
+      this.exportLoading = true;
+      try {
+        const params = this.buildExportQueryParams(false);
+        params.set('limit', '1000');
+        const res = await fetch(`/api/records?${params.toString()}`, {
+          headers: { 'Authorization': `Bearer ${this.token}` }
+        });
+        if (res.ok) {
+          const rows = await res.json();
+          this.exportList = rows || [];
+          const validIds = new Set(this.exportList.map(r => r.id));
+          this.exportSelectedIds = this.exportSelectedIds.filter(id => validIds.has(id));
+        } else {
+          this.toast('Không thể tải danh sách xem trước xuất CSV', 'error');
+        }
+      } catch (e) {
+        console.error('Lỗi tải danh sách xuất CSV:', e);
+        this.toast('Lỗi kết nối khi tải danh sách xuất CSV', 'error');
+      } finally {
+        this.exportLoading = false;
+      }
+    },
+
+    toggleExportSelection(id) {
+      if (this.exportSelectedIds.includes(id)) {
+        this.exportSelectedIds = this.exportSelectedIds.filter(x => x !== id);
+      } else {
+        this.exportSelectedIds.push(id);
+      }
+    },
+
+    toggleSelectAllExport() {
+      if (this.exportList.length > 0 && this.exportSelectedIds.length === this.exportList.length) {
+        this.exportSelectedIds = [];
+      } else {
+        this.exportSelectedIds = this.exportList.map(r => r.id);
+      }
+    },
+
+    triggerExportCsv(selectedOnly = false) {
+      if (selectedOnly && this.exportSelectedIds.length === 0) {
+        this.toast('Vui lòng tích chọn ít nhất 1 hồ sơ để xuất!', 'error');
+        return;
+      }
+      if (!selectedOnly && this.exportList.length === 0) {
+        this.toast('Không có dữ liệu phù hợp bộ lọc để xuất CSV!', 'error');
+        return;
+      }
+      const params = this.buildExportQueryParams(selectedOnly);
+      if (this.token) {
+        params.set('token', this.token);
+      }
+      const url = `/api/export/csv?${params.toString()}`;
+      window.open(url, '_blank');
+      const count = selectedOnly ? this.exportSelectedIds.length : this.exportList.length;
+      this.toast(`Đang tải xuống file CSV chuẩn 123 chỉ tiêu (${count} hồ sơ)...`);
+    },
+
+    // Xuất CSV (Chuyển sang tab Xuất CSV)
     downloadCsv() {
-      window.open('/api/export/csv', '_blank');
+      this.openExportTab();
     },
 
     // =========================================================================
