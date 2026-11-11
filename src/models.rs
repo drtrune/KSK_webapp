@@ -286,6 +286,114 @@ pub const FIELDS_BS_KETLUAN: &[&str] = &[
     "BS_KET_LUAN",
 ];
 
+pub const FIELDS_CLINICAL_ALL: &[&str] = &[
+    // NOI
+    "NOI_KHOA_TUAN_HOAN", "NOI_KHOA_TUAN_HOAN_PL", "NOI_KHOA_HO_HAP", "NOI_KHOA_HO_HAP_PL",
+    "NOI_KHOA_TIEU_HOA", "NOI_KHOA_TIEU_HOA_PL", "NOI_KHOA_THAN_TN_SD", "NOI_KHOA_THAN_TIETNIEU_PL",
+    "NOI_KHOA_NOI_TIET", "NOI_KHOA_NOI_TIET_PL", "NOI_KHOA_CO_XUONG_KHOP", "NOI_KHOA_CO_XUONG_KHOP_PL",
+    "NOI_KHOA_THAN_KINH", "NOI_KHOA_THAN_KINH_PL", "NOI_KHOA_TAM_THAN", "NOI_KHOA_TAM_THAN_PL", "BS_NOI",
+    // NGOAI
+    "KET_QUA_KHAM_NGOAI_KHOA", "KHAM_NGOAI_KHOA_PL", "BS_NGOAI",
+    // DA LIEU
+    "KET_QUA_KHAM_DA_LIEU", "KHAM_DA_LIEU_PL", "BS_DA_LIEU",
+    // SAN
+    "KET_QUA_KHAM_SAN_PHU_KHOA", "KHAM_SAN_PHU_KHOA_PL", "BS_SAN",
+    // MAT
+    "KHONG_KINH_MAT_PHAI", "KHONG_KINH_MAT_TRAI", "CO_KINH_MAT_PHAI", "CO_KINH_MAT_TRAI",
+    "BENH_KHAC_MAT", "KHAM_MAT_PL", "BS_MAT",
+    // TMH
+    "TAI_TRAI_NOI_THUONG", "TAI_TRAI_NOI_THAM", "TAI_PHAI_NOI_THUONG", "TAI_PHAI_NOI_THAM",
+    "BENH_KHAC_TAI_MUI_HONG", "KHAM_TAI_MUI_HONG_PL", "BS_TMH",
+    // RHM
+    "HAM_TREN", "HAM_DUOI", "BENH_KHAC_RANG_HAM_MAT", "KHAM_RANG_HAM_MAT_PL", "BS_RHM",
+];
+
+pub fn get_section_label(sec: &str) -> &'static str {
+    match sec {
+        "reception" => "1. Thông tin Hành chính & Tiếp nhận",
+        "history" => "2. Tiền sử bệnh",
+        "physical" => "3. Thể lực & Sinh tồn",
+        "clinical_noi" => "4.1 Khám Nội khoa",
+        "clinical_ngoai" => "4.2 Khám Ngoại khoa",
+        "clinical_dalieu" => "4.3 Khám Da liễu",
+        "clinical_san" => "4.4 Khám Sản phụ khoa",
+        "clinical_mat" => "4.5 Khám Mắt",
+        "clinical_tmh" => "4.6 Khám Tai Mũi Họng",
+        "clinical_rhm" => "4.7 Khám Răng Hàm Mặt",
+        "clinical_all" => "4. Khám lâm sàng chuyên khoa",
+        "paraclinical" => "5. Cận lâm sàng",
+        "conclusion" => "6. Kết luận",
+        _ => "Chuyên khoa",
+    }
+}
+
+pub fn get_section_required_role(sec: &str) -> Option<&'static str> {
+    match sec {
+        "reception" => Some("reception"),
+        "history" => Some("tiensu"),
+        "physical" => Some("bs_theluc"),
+        "clinical_noi" => Some("bs_noi"),
+        "clinical_ngoai" => Some("bs_ngoai"),
+        "clinical_dalieu" => Some("bs_dalieu"),
+        "clinical_san" => Some("bs_san"),
+        "clinical_mat" => Some("bs_mat"),
+        "clinical_tmh" => Some("bs_tmh"),
+        "clinical_rhm" => Some("bs_rhm"),
+        "paraclinical" => Some("bs_cls"),
+        "conclusion" => Some("bs_ketluan"),
+        _ => None,
+    }
+}
+
+pub fn get_section_fields(sec: &str) -> &'static [&'static str] {
+    match sec {
+        "reception" => FIELDS_RECEPTION,
+        "history" => FIELDS_TIENSU,
+        "physical" => FIELDS_BS_THELUC,
+        "clinical_noi" => FIELDS_BS_NOI,
+        "clinical_ngoai" => FIELDS_BS_NGOAI,
+        "clinical_dalieu" => FIELDS_BS_DALIEU,
+        "clinical_san" => FIELDS_BS_SAN,
+        "clinical_mat" => FIELDS_BS_MAT,
+        "clinical_tmh" => FIELDS_BS_TMH,
+        "clinical_rhm" => FIELDS_BS_RHM,
+        "clinical_all" => FIELDS_CLINICAL_ALL,
+        "paraclinical" => FIELDS_BS_CLS,
+        "conclusion" => FIELDS_BS_KETLUAN,
+        _ => &[],
+    }
+}
+
+pub fn field_section_name(field: &str) -> &'static str {
+    if FIELDS_RECEPTION.contains(&field) {
+        "Hành chính & Tiếp nhận"
+    } else if FIELDS_TIENSU.contains(&field) {
+        "Tiền sử bệnh"
+    } else if FIELDS_BS_THELUC.contains(&field) {
+        "Thể lực & Sinh tồn"
+    } else if FIELDS_BS_NOI.contains(&field) {
+        "Khám Nội khoa"
+    } else if FIELDS_BS_NGOAI.contains(&field) {
+        "Khám Ngoại khoa"
+    } else if FIELDS_BS_DALIEU.contains(&field) {
+        "Khám Da liễu"
+    } else if FIELDS_BS_SAN.contains(&field) {
+        "Khám Sản phụ khoa"
+    } else if FIELDS_BS_MAT.contains(&field) {
+        "Khám Mắt"
+    } else if FIELDS_BS_TMH.contains(&field) {
+        "Khám Tai Mũi Họng"
+    } else if FIELDS_BS_RHM.contains(&field) {
+        "Khám Răng Hàm Mặt"
+    } else if FIELDS_BS_CLS.contains(&field) {
+        "Cận lâm sàng"
+    } else if FIELDS_BS_KETLUAN.contains(&field) {
+        "Kết luận"
+    } else {
+        "Thông tin chung"
+    }
+}
+
 /// Kiểm tra một trường dữ liệu có được phép sửa bởi danh sách các Role (phân tách bởi dấu phẩy) hay không
 pub fn can_user_roles_edit_field(user_roles_str: &str, field: &str) -> bool {
     let roles: Vec<&str> = user_roles_str.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
@@ -315,19 +423,20 @@ pub fn can_user_roles_edit_field(user_roles_str: &str, field: &str) -> bool {
     false
 }
 
-/// Trộn (merge) dữ liệu gửi lên vào payload hiện tại theo đúng danh sách quyền (Multi-Role)
+/// Trộn (merge) dữ liệu gửi lên vào payload hiện tại theo đúng danh sách quyền (Multi-Role) và Section
 pub fn merge_payload_by_roles(
     existing_json: Option<&str>,
     incoming: &Map<String, Value>,
     user_roles_str: &str,
     default_ma_cskcb: &str,
     default_ma_gtin: &str,
+    section: Option<&str>,
 ) -> Map<String, Value> {
     let mut base: Map<String, Value> = existing_json
         .and_then(|s| serde_json::from_str::<Map<String, Value>>(s).ok())
         .unwrap_or_default();
 
-    // Khởi tạo giá trị mặc định cho hồ sơ mới nếu chưa có
+    // Khởi tạo giá trị cơ sở KCB cho hồ sơ mới nếu chưa có
     if !base.contains_key("MA_CSKCB") || base.get("MA_CSKCB").and_then(|v| v.as_str()).unwrap_or("").is_empty() {
         base.insert("MA_CSKCB".to_string(), Value::String(default_ma_cskcb.to_string()));
     }
@@ -335,40 +444,18 @@ pub fn merge_payload_by_roles(
         base.insert("MA_GTIN_CSKCB".to_string(), Value::String(default_ma_gtin.to_string()));
     }
 
-    // Các trường Tiền sử bệnh (22-51) mặc định "0" (Không) nếu chưa có
-    let ts_binary_fields = [
-        "TSGD_MAC_BENH",
-        "TSBT_BENH_TRONG_5_NAM_QUA",
-        "TSBT_BENH_THAN_KINH",
-        "TSBT_BENH_MAT",
-        "TSBT_BENH_TAI",
-        "TSBT_BENH_TIM",
-        "TSBT_PHAU_THUAT_TIM",
-        "TSBT_TANG_HUYET_AP",
-        "TSBT_KHO_THO",
-        "TSBT_BENH_PHOI",
-        "TSBT_BENH_THAN",
-        "TSBT_NGHIEN_RUOU",
-        "TSBT_DAI_THAO_DUONG",
-        "TSBT_BENH_TAM_THAN",
-        "TSBT_MAT_Y_THUC",
-        "TSBT_NGAT",
-        "TSBT_BENH_TIEU_HOA",
-        "TSBT_ROI_LOAN_GIAC_NGU",
-        "TSBT_TAI_BIEN",
-        "TSBT_BENH_COT_SONG",
-        "TSBT_RUOU_THUONG_XUYEN",
-        "TSBT_MA_TUY",
-        "TSBT_BENH_KHAC",
-        "TSBT_DANG_DIEU_TRI_BENH",
-        "TSBT_THAI_SAN",
-    ];
-    for f in ts_binary_fields {
-        base.entry(f.to_string()).or_insert_with(|| Value::String("0".to_string()));
-    }
+    let filter_fields = section.and_then(|sec| {
+        let f = get_section_fields(sec);
+        if f.is_empty() { None } else { Some(f) }
+    });
 
-    // Chỉ cập nhật các trường thuộc quyền hạn của người dùng (Multi-role)
+    // Chỉ cập nhật các trường thuộc quyền hạn của người dùng (Multi-role), KHÔNG tự tạo dữ liệu giả ở backend
     for (k, v) in incoming {
+        if let Some(allowed_fields) = filter_fields {
+            if !allowed_fields.contains(&k.as_str()) {
+                continue;
+            }
+        }
         if can_user_roles_edit_field(user_roles_str, k) {
             let val_str = match v {
                 Value::String(s) => s.trim().to_string(),
@@ -594,12 +681,15 @@ pub struct SaveRecordRequest {
     pub id: Option<i64>,
     pub ma_tiep_nhan: Option<String>,
     pub payload: Map<String, Value>,
+    pub section: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct RecordFilterQuery {
     pub q: Option<String>,
     pub status: Option<i64>,
+    pub from_date: Option<String>,
+    pub to_date: Option<String>,
 }
 
 // ============================================================================

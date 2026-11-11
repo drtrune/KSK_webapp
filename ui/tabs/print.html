@@ -127,7 +127,7 @@
     .print-table th,
     .print-table td {
       border: 1px solid #000;
-      padding: 2px 4px;
+      padding: 8px 4px;
       vertical-align: top;
     }
 
@@ -169,7 +169,7 @@
     /* Dòng chấm trọn bề ngang */
     .dot-line {
       width: 100%;
-      height: 14px;
+      height: 16px;
     }
 
     /* Ô chứa dữ liệu: chữ nằm trên nền chấm */
@@ -280,7 +280,7 @@
             <div style="text-transform: uppercase;">BỘ Y TẾ</div>
             <div style="font-weight: bold; text-transform: uppercase;"
               x-text="facility.ten_cskcb || 'BỆNH VIỆN BÌNH ĐỊNH'"></div>
-            <div class="d" style="display:block; width:25mm; margin:3px auto 2px;"></div>
+            <div>—————————</div>
             <div class="so">Số: <span class="v" style="min-width:12mm; text-align:center;"
                 x-text="form.SO_PHIEU"></span>/GKSK-<span x-text="facility.ma_cskcb || '52208'"></span>/<span
                 x-text="(form.NGAY_VAO || '').slice(-2) || '26'"></span></div>
@@ -288,7 +288,7 @@
           <td style="width: 56%; text-align: center; vertical-align: top; border: none; padding: 0; line-height: 1.2;">
             <div style="font-weight: bold; text-transform: uppercase;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
             <div style="font-weight: bold;">Độc lập - Tự do - Hạnh phúc</div>
-            <div class="d" style="display:block; width:40mm; margin:3px auto 0;"></div>
+            <div>—————————</div>
           </td>
         </tr>
       </table>
@@ -343,7 +343,8 @@
       </div>
 
       <!-- ===== TIỀN SỬ BỆNH ===== -->
-      <div style="font-weight: bold; text-transform: uppercase; margin-top: 12px; margin-bottom: 3px; font-size: 13pt;">
+      <div
+        style="font-weight: bold; text-transform: uppercase; margin-top: 12px; margin-bottom: 3px; font-size: 13pt; text-align: center;">
         TIỀN SỬ BỆNH CỦA ĐỐI TƯỢNG KHÁM SỨC KHỎE</div>
 
       <div style="line-height: 1.35; font-size: 13pt;">
@@ -424,7 +425,8 @@
         <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN"></strong></div>
       </div>
 
-      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 3px;">2. TIỀN SỬ BẢN THÂN (TIẾP THEO):
+      <div style="font-weight: bold; margin-bottom: 3px;">2. Tiền sử bản thân <i>(tiếp
+          theo)</i>:
       </div>
       <table class="print-table ts-table">
         <thead>
@@ -606,7 +608,7 @@
           <td style="width: 45%; text-align: center; border: none; padding: 0;">
             <div style="font-weight: bold;">Người đo thể lực</div>
             <div style="font-style: italic; font-size: 11pt;">(Ký, ghi rõ họ tên)</div>
-            <div style="height: 35px;"></div>
+            <div style="height: 70px;"></div>
           </td>
         </tr>
       </table>
@@ -621,76 +623,76 @@
           </tr>
         </thead>
         <tbody>
-          <tr style="font-weight: bold;">
+          <tr style="font-weight: bold; padding: none; line-height: 10%;">
             <td>1. Nội khoa</td>
             <td rowspan="9"></td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>a) Tuần hoàn:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>Phân loại:</span><i class="d w3"></i></div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>b) Hô hấp:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>Phân loại:</span><i class="d w3"></i></div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>c) Tiêu hóa:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>Phân loại:</span><i class="d w3"></i></div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>d) Thận - Tiết niệu - Sinh dục:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>Phân loại:</span><i class="d w3"></i></div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>đ) Nội tiết:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>Phân loại:</span><i class="d w3"></i></div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>e) Cơ – xương – khớp:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>Phân loại:</span><i class="d w3"></i></div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>g) Thần kinh:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>Phân loại:</span><i class="d w3"></i></div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>h) Tâm thần:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>Phân loại:</span><i class="d w3"></i></div>
             </td>
           </tr>
           <tr>
-            <td><strong>2. Ngoại khoa:</strong>
-              <div class="dot-line" style="height: 15px;"></div>
-              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><i class="d w3"></i></div>
-            </td>
-            <td></td>
-          </tr>
-          <tr>
-            <td><strong>3. Da liễu:</strong>
-              <div class="dot-line" style="height: 15px;"></div>
-              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><i class="d w3"></i></div>
+            <td style="padding-top: 1px; padding-bottom: 1px;"><strong>2. Ngoại khoa:</strong>
+              <div class="dot-line" style="height: 18px;"></div>
+              <div class="fl" style="margin-top: 0;"><span>Phân loại:</span><i class="d w3"></i></div>
             </td>
             <td></td>
           </tr>
           <tr>
-            <td><strong>4. Sản phụ khoa (đối với nữ):</strong>
-              <div class="dot-line" style="height: 15px;"></div>
-              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><i class="d w3"></i></div>
+            <td style="padding-top: 1px; padding-bottom: 1px;"><strong>3. Da liễu:</strong>
+              <div class="dot-line" style="height: 18px;"></div>
+              <div class="fl" style="margin-top: 0;"><span>Phân loại:</span><i class="d w3"></i></div>
+            </td>
+            <td></td>
+          </tr>
+          <tr>
+            <td style="padding-top: 1px; padding-bottom: 1px;"><strong>4. Sản phụ khoa (đối với nữ):</strong>
+              <div class="dot-line" style="height: 18px;"></div>
+              <div class="fl" style="margin-top: 0;"><span>Phân loại:</span><i class="d w3"></i></div>
             </td>
             <td></td>
           </tr>
@@ -803,6 +805,8 @@
           <tr>
             <td><strong>d) Kết quả khám Cận lâm sàng khác:</strong><br />
               ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; ☐ Có (Nếu có, hãy liệt kê chi tiết):
+              <div class="dot-line" style="height: 15px; margin-top: 2px;"></div>
+              <div class="dot-line" style="height: 15px; margin-top: 2px;"></div>
               <div class="dot-line" style="height: 15px; margin-top: 2px;"></div>
               <div class="dot-line" style="height: 15px; margin-top: 2px;"></div>
             </td>

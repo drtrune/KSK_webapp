@@ -429,6 +429,20 @@ pub async fn update_my_profile_handler(
         Err(resp) => return resp,
     };
 
+    // Chỉ có tài khoản có quyền admin mới được phép tự đổi họ tên/chức danh
+    let is_admin = user
+        .role
+        .split(',')
+        .map(|r| r.trim())
+        .any(|r| r.eq_ignore_ascii_case("admin"));
+
+    if !is_admin {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            "Chỉ Quản trị viên (Admin) mới có quyền thay đổi họ và tên / chức danh người dùng.",
+        );
+    }
+
     let full_name = req.full_name.trim();
     if full_name.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, "Họ tên / Chức danh không được để trống");
@@ -711,56 +725,52 @@ pub async fn list_records_handler(
     };
 
     let q = filter.q.unwrap_or_default().trim().to_string();
-    let rows: Vec<KskRecordRow> = if q.is_empty() {
-        if let Some(st) = filter.status {
-            sqlx::query_as(
-                "SELECT * FROM ksk_records WHERE status = ? ORDER BY updated_at DESC, id DESC LIMIT 200",
-            )
-            .bind(st)
-            .fetch_all(&*db)
-            .await
-            .unwrap_or_default()
-        } else {
-            sqlx::query_as("SELECT * FROM ksk_records ORDER BY updated_at DESC, id DESC LIMIT 200")
-                .fetch_all(&*db)
-                .await
-                .unwrap_or_default()
-        }
-    } else {
+    let from_date = filter.from_date.unwrap_or_default().trim().to_string();
+    let to_date = filter.to_date.unwrap_or_default().trim().to_string();
+
+    let mut sql = String::from("SELECT * FROM ksk_records WHERE 1=1");
+    let mut conditions = Vec::new();
+
+    if filter.status.is_some() {
+        conditions.push("status = ?");
+    }
+
+    if !from_date.is_empty() {
+        conditions.push("(CASE WHEN length(ngay_vao) = 10 AND substr(ngay_vao, 3, 1) = '/' AND substr(ngay_vao, 6, 1) = '/' THEN (substr(ngay_vao, 7, 4) || '-' || substr(ngay_vao, 4, 2) || '-' || substr(ngay_vao, 1, 2)) ELSE substr(created_at, 1, 10) END) >= ?");
+    }
+
+    if !to_date.is_empty() {
+        conditions.push("(CASE WHEN length(ngay_vao) = 10 AND substr(ngay_vao, 3, 1) = '/' AND substr(ngay_vao, 6, 1) = '/' THEN (substr(ngay_vao, 7, 4) || '-' || substr(ngay_vao, 4, 2) || '-' || substr(ngay_vao, 1, 2)) ELSE substr(created_at, 1, 10) END) <= ?");
+    }
+
+    if !q.is_empty() {
+        conditions.push("(ma_tiep_nhan LIKE ? OR ho_ten LIKE ? OR so_cccd LIKE ? OR ma_y_te LIKE ?)");
+    }
+
+    for cond in conditions {
+        sql.push_str(" AND ");
+        sql.push_str(cond);
+    }
+
+    sql.push_str(" ORDER BY updated_at DESC, id DESC LIMIT 200");
+
+    let mut query = sqlx::query_as::<_, KskRecordRow>(&sql);
+
+    if let Some(st) = filter.status {
+        query = query.bind(st);
+    }
+    if !from_date.is_empty() {
+        query = query.bind(from_date);
+    }
+    if !to_date.is_empty() {
+        query = query.bind(to_date);
+    }
+    if !q.is_empty() {
         let like_q = format!("%{}%", q);
-        if let Some(st) = filter.status {
-            sqlx::query_as(
-                r#"
-                SELECT * FROM ksk_records
-                WHERE status = ? AND (ma_tiep_nhan LIKE ? OR ho_ten LIKE ? OR so_cccd LIKE ? OR ma_y_te LIKE ?)
-                ORDER BY updated_at DESC, id DESC LIMIT 200
-                "#,
-            )
-            .bind(st)
-            .bind(&like_q)
-            .bind(&like_q)
-            .bind(&like_q)
-            .bind(&like_q)
-            .fetch_all(&*db)
-            .await
-            .unwrap_or_default()
-        } else {
-            sqlx::query_as(
-                r#"
-                SELECT * FROM ksk_records
-                WHERE ma_tiep_nhan LIKE ? OR ho_ten LIKE ? OR so_cccd LIKE ? OR ma_y_te LIKE ?
-                ORDER BY updated_at DESC, id DESC LIMIT 200
-                "#,
-            )
-            .bind(&like_q)
-            .bind(&like_q)
-            .bind(&like_q)
-            .bind(&like_q)
-            .fetch_all(&*db)
-            .await
-            .unwrap_or_default()
-        }
-    };
+        query = query.bind(like_q.clone()).bind(like_q.clone()).bind(like_q.clone()).bind(like_q);
+    }
+
+    let rows: Vec<KskRecordRow> = query.fetch_all(&*db).await.unwrap_or_default();
 
     let dtos: Vec<KskRecordDto> = rows.into_iter().map(KskRecordDto::from).collect();
     Json(dtos).into_response()
@@ -852,6 +862,86 @@ pub async fn save_record_handler(
                 "Hồ sơ này đã được Ký / Khóa (status = 1). Chỉ Admin mới có quyền Mở khóa để chỉnh sửa.",
             );
         }
+
+        // 1. Phân quyền theo Section nếu client chỉ định
+        if let Some(sec) = req.section.as_deref() {
+            if sec == "clinical_all" {
+                let has_clinical = user.has_role("admin")
+                    || user.has_role("bs_noi")
+                    || user.has_role("bs_ngoai")
+                    || user.has_role("bs_dalieu")
+                    || user.has_role("bs_san")
+                    || user.has_role("bs_mat")
+                    || user.has_role("bs_tmh")
+                    || user.has_role("bs_rhm");
+                if !has_clinical {
+                    return api_error(
+                        StatusCode::FORBIDDEN,
+                        "Tài khoản của bạn không có quyền phụ trách bất kỳ chuyên khoa lâm sàng nào.",
+                    );
+                }
+            } else if let Some(req_role) = get_section_required_role(sec) {
+                if !user.has_role(req_role) {
+                    return api_error(
+                        StatusCode::FORBIDDEN,
+                        format!(
+                            "Bạn không có quyền chỉnh sửa mục [{}]. Vui lòng liên hệ đúng bác sĩ/nhân viên phụ trách.",
+                            get_section_label(sec)
+                        ),
+                    );
+                }
+            }
+        }
+
+        // 2. Kiểm tra sâu diff từng trường dữ liệu: Tuyệt đối không cho phép sửa đổi trường ngoài quyền hạn
+        let existing_map: Map<String, Value> = serde_json::from_str(&rec.payload_json).unwrap_or_default();
+        let target_section_fields = req.section.as_deref().map(get_section_fields);
+
+        for (k, v) in &req.payload {
+            // Bỏ qua các trường hệ thống không thuộc bệnh án
+            if k == "id" || k == "MA_CSKCB" || k == "MA_GTIN_CSKCB" || k == "status" || k == "created_at" || k == "updated_at" || k == "updated_by" {
+                continue;
+            }
+            if k == "MA_TIEP_NHAN" {
+                let new_tn = v.as_str().unwrap_or("").trim();
+                if new_tn == rec.ma_tiep_nhan {
+                    continue;
+                }
+            }
+
+            // Nếu người dùng gửi theo section cụ thể, các trường ngoài section đó không áp dụng
+            if let Some(sec_fields) = target_section_fields {
+                if !sec_fields.is_empty() && !sec_fields.contains(&k.as_str()) {
+                    continue;
+                }
+            }
+
+            let old_val = existing_map.get(k).and_then(|x| x.as_str()).unwrap_or("").trim();
+            let new_val_str = match v {
+                Value::String(s) => s.trim().to_string(),
+                Value::Number(n) => n.to_string(),
+                Value::Bool(b) => if *b { "1".to_string() } else { "0".to_string() },
+                _ => String::new(),
+            };
+            let new_val = new_val_str.trim();
+
+            // Giá trị không thay đổi thì bỏ qua
+            if old_val == new_val {
+                continue;
+            }
+
+            // Giá trị có thay đổi: Bắt buộc user phải có quyền sửa trường này
+            if !can_user_roles_edit_field(&user.role, k) {
+                let sec_name = field_section_name(k);
+                return api_error(
+                    StatusCode::FORBIDDEN,
+                    format!(
+                        "Từ chối quyền chỉnh sửa: Tài khoản của bạn không có quyền sửa trường '{}' thuộc mục [{}].",
+                        k, sec_name
+                    ),
+                );
+            }
+        }
     } else if !user.has_role("admin") && !user.has_role("reception") {
         return api_error(
             StatusCode::FORBIDDEN,
@@ -865,31 +955,35 @@ pub async fn save_record_handler(
         &user.role,
         &cfg.ma_cskcb,
         &cfg.ma_gtin_cskcb,
+        req.section.as_deref(),
     );
 
-    // Tự động điền tên bác sĩ chuyên khoa theo tài khoản người dùng đang thao tác
+    // Tự động điền tên bác sĩ chuyên khoa: Chỉ gán khi chuyên khoa đó có dữ liệu được nhập/chỉnh sửa
     let doctor_mappings = [
-        ("bs_theluc", "BS_THE_LUC"),
-        ("bs_noi", "BS_NOI"),
-        ("bs_ngoai", "BS_NGOAI"),
-        ("bs_dalieu", "BS_DA_LIEU"),
-        ("bs_san", "BS_SAN"),
-        ("bs_mat", "BS_MAT"),
-        ("bs_tmh", "BS_TMH"),
-        ("bs_rhm", "BS_RHM"),
-        ("bs_cls", "BS_CLS"),
-        ("bs_ketluan", "BS_KET_LUAN"),
+        ("bs_theluc", "BS_THE_LUC", "CHIEU_CAO"),
+        ("bs_noi", "BS_NOI", "NOI_KHOA_TUAN_HOAN"),
+        ("bs_ngoai", "BS_NGOAI", "KET_QUA_KHAM_NGOAI_KHOA"),
+        ("bs_dalieu", "BS_DA_LIEU", "KET_QUA_KHAM_DA_LIEU"),
+        ("bs_san", "BS_SAN", "KET_QUA_KHAM_SAN_PHU_KHOA"),
+        ("bs_mat", "BS_MAT", "KHONG_KINH_MAT_PHAI"),
+        ("bs_tmh", "BS_TMH", "TAI_TRAI_NOI_THUONG"),
+        ("bs_rhm", "BS_RHM", "HAM_TREN"),
+        ("bs_cls", "BS_CLS", "CLS_HUYET_HOC"),
+        ("bs_ketluan", "BS_KET_LUAN", "KET_LUAN_BENH"),
     ];
 
-    for (role_tag, field_name) in doctor_mappings {
-        // Nếu user trực tiếp có vai trò chuyên khoa đó thì luôn cập nhật theo tên user đang nhập
-        if user.role.split(',').any(|r| r.trim() == role_tag) {
-            merged.insert(field_name.to_string(), Value::String(user.full_name.clone()));
-        } else if user.has_role(role_tag) {
-            // Trường hợp quyền admin bao hàm: chỉ điền nếu trường đó đang rỗng
-            let cur = merged.get(field_name).and_then(|v| v.as_str()).unwrap_or("").trim();
-            if cur.is_empty() {
+    for (role_tag, field_name, sample_field) in doctor_mappings {
+        // Chỉ tự động điền tên Bác sĩ khi chuyên khoa đó thực sự có dữ liệu
+        let has_content = merged.get(sample_field).and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false)
+            || (role_tag == "bs_ketluan" && merged.get("PHAN_LOAI_SK").and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false));
+        if has_content {
+            if user.role.split(',').any(|r| r.trim() == role_tag) {
                 merged.insert(field_name.to_string(), Value::String(user.full_name.clone()));
+            } else if user.has_role(role_tag) {
+                let cur = merged.get(field_name).and_then(|v| v.as_str()).unwrap_or("").trim();
+                if cur.is_empty() {
+                    merged.insert(field_name.to_string(), Value::String(user.full_name.clone()));
+                }
             }
         }
     }

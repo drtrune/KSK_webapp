@@ -531,6 +531,9 @@ body.dark .border-\[\#E2E8F0\] {
     size: A4 portrait;
     margin: 0;
   }
+  body {
+    font-size: 12pt;
+  }
   .no-print,
   header,
   aside,

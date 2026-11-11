@@ -16,8 +16,10 @@
         <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
         <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800">5. Kết quả Xét nghiệm & Cận lâm sàng</h3>
       </div>
-      <div class="text-xs text-slate-500">
-        <span x-show="!canEditParaclinical" class="text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Chỉ xem (Cần quyền Cận lâm sàng hoặc Admin)</span>
+      <div class="text-xs text-slate-500 flex items-center gap-2">
+        <span x-show="isSaved && !isSectionEditing('paraclinical')" class="text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200">Chế độ xem (Bấm Sửa để thay đổi)</span>
+        <span x-show="isSaved && isSectionEditing('paraclinical')" class="text-purple-800 bg-purple-50 px-2.5 py-0.5 rounded border border-purple-200 font-medium">Đang chỉnh sửa</span>
+        <span x-show="!canUnlockSection('paraclinical')" class="text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Chỉ xem (Cần quyền Cận lâm sàng hoặc Admin)</span>
       </div>
     </div>
 
@@ -100,12 +102,45 @@
     </div>
   </fieldset>
 
-  <!-- Nút Lưu CLS -->
+  <!-- Nút Hành động CLS (Sửa / Lưu) -->
   <div class="flex items-center justify-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-    <button type="button" @click="handleSave()" :disabled="!canEditParaclinical || saving" class="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-sm transition-colors">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
-      <span x-text="saving ? 'Đang lưu...' : 'Lưu kết quả Cận lâm sàng'"></span>
-    </button>
+    <!-- Nút SỬA: Hiển thị khi hồ sơ đã lưu và chưa bấm sửa -->
+    <template x-if="isSaved && !isSectionEditing('paraclinical')">
+      <button
+        type="button"
+        @click="startEditSection('paraclinical')"
+        :disabled="!canUnlockSection('paraclinical')"
+        class="px-5 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
+        title="Bấm để mở quyền chỉnh sửa kết quả cận lâm sàng"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        <span>Sửa kết quả Cận lâm sàng</span>
+      </button>
+    </template>
+
+    <!-- Nút LƯU: Hiển thị khi đang ở chế độ sửa (hoặc hồ sơ mới chưa lưu) -->
+    <template x-if="!isSaved || isSectionEditing('paraclinical')">
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          @click="handleSave('paraclinical')"
+          :disabled="!canEditParaclinical || saving"
+          class="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+          <span x-text="saving ? 'Đang lưu...' : 'Lưu kết quả Cận lâm sàng'"></span>
+        </button>
+        <button
+          x-show="isSaved"
+          type="button"
+          @click="cancelEditSection('paraclinical')"
+          class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+          title="Hủy bỏ chế độ sửa"
+        >
+          Hủy
+        </button>
+      </div>
+    </template>
   </div>
 </div>
 

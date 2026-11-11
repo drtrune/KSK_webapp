@@ -6,8 +6,10 @@
         <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
         <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-800">2. Tiền sử Bệnh lý (Gia đình & Bản thân)</h2>
       </div>
-      <div class="text-xs text-slate-500 flex items-center gap-3">
-        <span x-show="!canEditHistory" class="text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Chỉ xem (Cần quyền Tiền sử bệnh hoặc Admin)</span>
+      <div class="text-xs text-slate-500 flex items-center gap-2">
+        <span x-show="isSaved && !isSectionEditing('history')" class="text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200">Chế độ xem (Bấm Sửa để thay đổi)</span>
+        <span x-show="isSaved && isSectionEditing('history')" class="text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200 font-medium">Đang chỉnh sửa</span>
+        <span x-show="!canUnlockSection('history')" class="text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Chỉ xem (Cần quyền Tiền sử bệnh hoặc Admin)</span>
       </div>
     </div>
 
@@ -138,12 +140,45 @@
     </div>
   </fieldset>
 
-  <!-- Nút Lưu Tiền sử -->
+  <!-- Nút Hành động Tiền sử (Sửa / Lưu) -->
   <div class="flex items-center justify-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-    <button type="button" @click="handleSave()" :disabled="!canEditHistory || saving" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-sm transition-colors">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
-      <span x-text="saving ? 'Đang lưu...' : 'Lưu tiền sử bệnh lý'"></span>
-    </button>
+    <!-- Nút SỬA: Hiển thị khi hồ sơ đã lưu và chưa bấm sửa -->
+    <template x-if="isSaved && !isSectionEditing('history')">
+      <button
+        type="button"
+        @click="startEditSection('history')"
+        :disabled="!canUnlockSection('history')"
+        class="px-5 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
+        title="Bấm để mở quyền chỉnh sửa tiền sử bệnh lý"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        <span>Sửa tiền sử bệnh lý</span>
+      </button>
+    </template>
+
+    <!-- Nút LƯU: Hiển thị khi đang ở chế độ sửa (hoặc hồ sơ mới chưa lưu) -->
+    <template x-if="!isSaved || isSectionEditing('history')">
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          @click="handleSave('history')"
+          :disabled="!canEditHistory || saving"
+          class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+          <span x-text="saving ? 'Đang lưu...' : 'Lưu tiền sử bệnh lý'"></span>
+        </button>
+        <button
+          x-show="isSaved"
+          type="button"
+          @click="cancelEditSection('history')"
+          class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+          title="Hủy bỏ chế độ sửa"
+        >
+          Hủy
+        </button>
+      </div>
+    </template>
   </div>
 </div>
 
