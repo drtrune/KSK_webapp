@@ -213,16 +213,16 @@
         <button type="button" @click="showUserSettingsModal = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-full">✕</button>
       </div>
 
-      <!-- THANH CHỌN TABS CÀI ĐẶT: TÙY CHỌN / BẢO MẬT / THÔNG TIN -->
-      <div class="flex items-center gap-1.5 border-b border-slate-200 pb-2 text-xs">
-        <button type="button" @click="userSettingsTab = 'preferences'" :class="userSettingsTab === 'preferences' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors">
+      <!-- THANH CHỌN TABS CÀI ĐẶT: TÙY CHỌN / BẢO MẬT / THÔNG TIN CÁ NHÂN -->
+      <div class="flex items-center gap-1.5 border-b border-slate-200 pb-2 text-xs overflow-x-auto">
+        <button type="button" @click="userSettingsTab = 'preferences'" :class="userSettingsTab === 'preferences' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
           ⚙ Tùy chọn làm việc
         </button>
-        <button type="button" @click="userSettingsTab = 'password'" :class="userSettingsTab === 'password' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors">
-          🔒 Đổi mật khẩu
+        <button type="button" @click="userSettingsTab = 'profile'" :class="userSettingsTab === 'profile' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+          👤 Chức danh & Bác sĩ ký
         </button>
-        <button type="button" @click="userSettingsTab = 'info'" :class="userSettingsTab === 'info' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors">
-          👤 Tài khoản & Quyền
+        <button type="button" @click="userSettingsTab = 'password'" :class="userSettingsTab === 'password' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+          🔒 Đổi mật khẩu
         </button>
       </div>
 
@@ -259,10 +259,11 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
           <div>
-            <label class="label-title text-slate-800 font-semibold mb-1">Chế độ giao diện:</label>
+            <label class="label-title text-slate-800 font-semibold mb-1">Chế độ giao diện (Theme):</label>
             <select x-model="userSettings.theme" @change="saveUserPreferences()" class="input-box bg-white text-xs">
               <option value="light">☀️ Giao diện Sáng (Chuẩn)</option>
               <option value="dark">🌙 Chế độ Tối (Dark mode)</option>
+              <option value="system">💻 Theo hệ điều hành (System)</option>
             </select>
           </div>
 
@@ -270,24 +271,63 @@
             <label class="label-title text-slate-800 font-semibold mb-1">Cỡ chữ hiển thị:</label>
             <select x-model="userSettings.fontSize" @change="saveUserPreferences()" class="input-box bg-white text-xs">
               <option value="normal">Chuẩn (13.5px)</option>
-              <option value="large">Lớn (15px - Dễ nhìn cho bác sĩ)</option>
+              <option value="large">Lớn (15px - Dễ đọc cho Bác sĩ)</option>
+              <option value="xlarge">Rất lớn (16.5px)</option>
             </select>
           </div>
         </div>
 
         <div class="pt-2 border-t border-slate-100 space-y-2">
           <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" x-model="userSettings.autoNavigateTab" @change="saveUserPreferences()" class="rounded text-sky-600 focus:ring-sky-500" />
-            <span class="text-slate-800 font-medium">Tự động nhảy đến tab/chuyên khoa được phân quyền</span>
-          </label>
-          <label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" x-model="userSettings.soundOnSave" @change="saveUserPreferences()" class="rounded text-sky-600 focus:ring-sky-500" />
-            <span class="text-slate-800 font-medium">Phát âm báo nhẹ khi lưu hồ sơ thành công</span>
+            <span class="text-slate-800 font-medium">Phát âm báo nhẹ (Beep) khi lưu hồ sơ thành công</span>
           </label>
+        </div>
+
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-[11.5px] text-slate-600">
+          <div class="font-semibold text-slate-700 flex items-center gap-1.5">
+            <span>⌨ Phím tắt thao tác nhanh:</span>
+          </div>
+          <div class="grid grid-cols-2 gap-1 pt-1">
+            <div><kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">Ctrl + S</kbd>: Lưu hồ sơ khám</div>
+            <div><kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">Alt + 1 / 2 / 3</kbd>: Đổi chế độ khám</div>
+            <div><kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">Alt + P</kbd>: In phiếu A4</div>
+            <div><kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">Esc</kbd>: Đóng modal / popup</div>
+          </div>
         </div>
       </div>
 
-      <!-- TAB 2: ĐỔI MẬT KHẨU (CHANGE PASSWORD) -->
+      <!-- TAB 2: CHỨC DANH & BÁC SĨ KÝ (PROFILE) -->
+      <div x-show="userSettingsTab === 'profile'" class="space-y-3 text-xs">
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+          <div class="flex justify-between"><span class="text-slate-500">Tên đăng nhập:</span> <strong class="text-slate-800 font-mono" x-text="currentUser?.username"></strong></div>
+          <div class="flex justify-between"><span class="text-slate-500">Mã cơ sở KCB:</span> <span class="text-slate-800 font-mono" x-text="facility?.ma_cskcb || '52208'"></span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Cơ sở KCB:</span> <span class="text-slate-800 font-medium" x-text="facility?.ten_cskcb || 'BỆNH VIỆN BÌNH ĐỊNH'"></span></div>
+        </div>
+
+        <div>
+          <label class="label-title text-slate-800 font-semibold">Họ tên & Chức danh Bác sĩ khi ký phiếu <span class="text-red-500">*</span>:</label>
+          <input type="text" x-model="profileForm.full_name" placeholder="Ví dụ: BSCKI. Nguyễn Văn A..." class="input-box font-medium text-slate-800" />
+          <p class="text-[11px] text-slate-500 mt-1">Tên này sẽ tự động điền vào trường Bác sĩ khám ở các chuyên khoa bạn phụ trách khi tạo hoặc sửa kết quả.</p>
+        </div>
+
+        <div>
+          <label class="label-title font-semibold mb-1">Các vai trò / chuyên khoa được phân quyền:</label>
+          <div class="flex flex-wrap gap-1 mt-1">
+            <template x-for="r in (currentUser?.role || '').split(',')" :key="r">
+              <span class="px-2 py-0.5 rounded bg-sky-50 text-sky-800 font-mono text-[11px] font-bold border border-sky-200" x-text="r.trim()"></span>
+            </template>
+          </div>
+        </div>
+
+        <div class="pt-2">
+          <button type="button" @click="handleUpdateProfile()" :disabled="profileLoading" class="w-full py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-2">
+            <span x-text="profileLoading ? 'Đang lưu...' : 'Lưu thông tin & Chức danh ký'"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB 3: ĐỔI MẬT KHẨU (CHANGE PASSWORD) -->
       <div x-show="userSettingsTab === 'password'" class="space-y-3 text-xs">
         <div>
           <label class="label-title">Mật khẩu hiện tại <span class="text-red-500">*</span>:</label>
@@ -308,25 +348,6 @@
           <button type="button" @click="handleChangePassword()" :disabled="pwLoading" class="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-2">
             <span x-text="pwLoading ? 'Đang cập nhật...' : 'Cập nhật mật khẩu mới'"></span>
           </button>
-        </div>
-      </div>
-
-      <!-- TAB 3: THÔNG TIN TÀI KHOẢN & VAI TRÒ -->
-      <div x-show="userSettingsTab === 'info'" class="space-y-3 text-xs">
-        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
-          <div class="flex justify-between"><span class="text-slate-500">Tên đăng nhập:</span> <strong class="text-slate-800 font-mono" x-text="currentUser?.username"></strong></div>
-          <div class="flex justify-between"><span class="text-slate-500">Họ và tên:</span> <strong class="text-slate-800" x-text="currentUser?.full_name"></strong></div>
-          <div class="flex justify-between"><span class="text-slate-500">Mã cơ sở KCB:</span> <span class="text-slate-800 font-mono" x-text="facility?.ma_cskcb || '52208'"></span></div>
-          <div class="flex justify-between"><span class="text-slate-500">Đơn vị:</span> <span class="text-slate-800 font-medium" x-text="facility?.ten_cskcb || 'BỆNH VIỆN BÌNH ĐỊNH'"></span></div>
-        </div>
-
-        <div>
-          <label class="label-title font-semibold mb-1">Các vai trò / chuyên khoa được phân quyền:</label>
-          <div class="flex flex-wrap gap-1 mt-1">
-            <template x-for="r in (currentUser?.role || '').split(',')" :key="r">
-              <span class="px-2 py-1 rounded bg-sky-50 text-sky-800 font-mono text-[11px] font-bold border border-sky-200" x-text="r.trim()"></span>
-            </template>
-          </div>
         </div>
       </div>
 

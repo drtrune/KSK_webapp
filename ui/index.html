@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
   <title>Hệ thống Khám Sức Khỏe</title>
 
   <!-- TAILWINDCSS & ALPINE.JS -->
@@ -21,18 +22,13 @@
   <!-- JSBARCODE (BARCODE CODE128 OFFLINE) -->
   <script src="/static/js/JsBarcode.all.min.js"></script>
 
+  <!-- DANH MỤC PHÂN LOẠI SỨC KHỎE (TỰ ĐỘNG XUẤT TỪ ASSET/PHAN_LOAI.XLSX) -->
+  <script src="/static/js/phan_loai_config.js"></script>
+
   <!-- CUSTOM STYLESHEET (DESIGN SYSTEM SPEC - design.md) -->
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body
-  class="bg-[#F4F6F8] text-[#2C3E50] min-h-screen text-[13.5px] transition-colors"
-  :class="{
-    'dark': userSettings.theme === 'dark',
-    'text-[15px]': userSettings.fontSize === 'large'
-  }"
-  x-data="kskApp()"
-  x-init="initApp()"
->
+<body class="bg-[#F4F6F8] text-[#2C3E50] min-h-screen text-[13.5px]" :class="getBodyClasses()" x-data="kskApp()" x-init="initApp()">
 
   <!-- ===================================================================== -->
   <!-- THÔNG BÁO TOAST - VỊ TRÍ GÓC DƯỚI CÙNG BÊN PHẢI THEO DESIGN.MD       -->
@@ -155,28 +151,35 @@
 
           <div class="h-6 w-px bg-[#E2E8F0] mx-0.5"></div>
 
-          <!-- User Avatar & Cài đặt cá nhân & Đăng xuất -->
-          <div class="flex items-center gap-2">
-            <!-- Nút mở Cài đặt cá nhân (Avatar + Tên) -->
+          <!-- User Avatar, Cài đặt cá nhân & Đăng xuất -->
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <!-- Nút bấm vào Avatar/Tên mở Cài đặt cá nhân -->
             <button
               type="button"
               @click="openUserSettingsModal()"
-              class="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-full hover:bg-[#F4F6F8] transition-colors border border-transparent hover:border-[#E2E8F0] cursor-pointer text-left"
-              title="Cài đặt cá nhân, đổi mật khẩu, chế độ nhập..."
+              class="flex items-center gap-2 p-1 pl-1.5 pr-2 rounded-xl hover:bg-[#F4F6F8] border border-transparent hover:border-[#E2E8F0] transition-colors text-left"
+              title="Cài đặt cá nhân & tài khoản (Đổi mật khẩu, Giao diện, Chế độ khám...)"
             >
-              <div class="w-8 h-8 rounded-full bg-[#3498DB]/15 text-[#3498DB] font-bold text-xs flex items-center justify-center border border-[#3498DB]/30 shrink-0">
+              <div class="w-8 h-8 rounded-full bg-[#3498DB]/15 text-[#3498DB] font-bold text-xs flex items-center justify-center border border-[#3498DB]/30 shadow-2xs">
                 <span x-text="(currentUser?.full_name || 'U').charAt(0)"></span>
               </div>
-              <div class="hidden sm:block">
-                <div class="font-semibold text-[#2C3E50] text-xs truncate max-w-[120px] flex items-center gap-1">
-                  <span x-text="currentUser?.full_name"></span>
-                  <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                </div>
-                <div class="text-[10px] text-[#7F8C8D] font-mono truncate max-w-[120px]" x-text="currentUser?.role"></div>
+              <div class="text-left hidden sm:block">
+                <div class="font-semibold text-[#2C3E50] text-xs truncate max-w-[110px]" x-text="currentUser?.full_name"></div>
+                <div class="text-[10px] text-[#7F8C8D] font-mono truncate max-w-[110px]" x-text="currentUser?.role"></div>
               </div>
+              <svg class="w-3.5 h-3.5 text-[#7F8C8D] hidden sm:inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
             </button>
 
-            <!-- Nút Đăng xuất -->
+            <!-- Nút icon Cài đặt nhanh -->
+            <button
+              type="button"
+              @click="openUserSettingsModal()"
+              class="p-1.5 text-[#7F8C8D] hover:text-[#3498DB] rounded-lg hover:bg-[#F4F6F8] transition-colors"
+              title="Cài đặt cá nhân"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </button>
+
             <button type="button" @click="logout()" class="p-1.5 text-[#7F8C8D] hover:text-[#E74C3C] rounded-lg hover:bg-[#F4F6F8] transition-colors" title="Đăng xuất">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
             </button>
@@ -335,7 +338,6 @@
 
       <!-- KHU VỰC NHẬP LIỆU CHÍNH (MAIN CONTENT AREA TRÀN 2 BÊN) -->
       <main class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 h-[calc(100vh-112px)] w-full">
-
 <!-- TAB 1: TIẾP NHẬN HÀNH CHÍNH -->
 <div x-show="activeTab === 'reception'" class="space-y-4 no-print">
   <fieldset :disabled="!canEditReception" class="card-panel p-5 space-y-4">
@@ -830,15 +832,64 @@
       </button>
     </div>
 
-    <!-- Cụm chọn Chế độ nhập liệu bên phải -->
-    <div class="flex items-center gap-1.5 shrink-0 ml-auto border-l border-slate-200 pl-3">
-      <span class="text-[11px] text-slate-500 hidden md:inline">Chế độ:</span>
-      <select x-model="clinicalInputMode" @change="saveUserPreferences()" class="px-2 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border-none cursor-pointer focus:ring-1 focus:ring-sky-500">
-        <option value="focus">⚡ Khám nhanh (Focus)</option>
-        <option value="minimal">📋 Tối thiểu (Phiếu giấy)</option>
-        <option value="full">📑 Chi tiết (Danh mục)</option>
-      </select>
+    <!-- Cụm chọn Chế độ nhập liệu bên phải (Segmented Control 3 nút) -->
+    <div class="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0 ml-auto">
+      <button
+        type="button"
+        @click="setClinicalInputMode('focus')"
+        class="px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 cursor-pointer"
+        :class="clinicalInputMode === 'focus' ? 'bg-white text-sky-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'"
+        title="Khám nhanh (Focus Mode - Tự động đo & ghi nhận nhanh bất thường)"
+      >
+        <span>⚡ Khám nhanh</span>
+      </button>
+      <button
+        type="button"
+        @click="setClinicalInputMode('minimal')"
+        class="px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 cursor-pointer"
+        :class="clinicalInputMode === 'minimal' ? 'bg-white text-sky-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'"
+        title="Tối thiểu (Minimal Mode - Phiếu giấy truyền thống QĐ 1613/BYT)"
+      >
+        <span>📋 Phiếu giấy</span>
+      </button>
+      <button
+        type="button"
+        @click="setClinicalInputMode('full')"
+        class="px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 cursor-pointer"
+        :class="clinicalInputMode === 'full' ? 'bg-white text-sky-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'"
+        title="Chi tiết (Full Mode - Toàn bộ cây danh mục chuyên khoa & bệnh tật)"
+      >
+        <span>📑 Chi tiết</span>
+      </button>
     </div>
+  </div>
+
+  <!-- THANH PHÂN KHOA CON NỘI KHOA (SUB-TABS KHI KHÁM NỘI KHOA Ở CHẾ ĐỘ FOCUS HOẶC FULL) -->
+  <div x-show="(clinicalInputMode === 'focus' || clinicalInputMode === 'full') && clinicalSubTab === 'noi'" class="bg-white/80 border border-slate-200 shadow-2xs rounded-xl p-1.5 flex items-center gap-1 overflow-x-auto no-print" x-cloak>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_TIM_MACH'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_TIM_MACH' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Tim mạch <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_TUAN_HOAN_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_HO_HAP'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_HO_HAP' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Hô hấp <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_HO_HAP_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_TIEU_HOA'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_TIEU_HOA' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Tiêu hóa <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_TIEU_HOA_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_TIET_NIEU_SD'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_TIET_NIEU_SD' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Tiết niệu - Sinh dục <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_THAN_TIETNIEU_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_NOITIET'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_NOITIET' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Nội tiết <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_NOI_TIET_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_CO_XUONG_KHOP'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_CO_XUONG_KHOP' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Cơ xương khớp <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_CO_XUONG_KHOP_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_THAN_KINH'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_THAN_KINH' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Thần kinh <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_THAN_KINH_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_TAM_THAN'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_TAM_THAN' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Tâm thần <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_TAM_THAN_PL || '1') + ')'"></span>
+    </button>
   </div>
 
 
@@ -1208,13 +1259,13 @@
     <div x-show="clinicalInputMode === 'focus'" class="space-y-4" x-cloak>
       
       <!-- BẢNG ĐO THỊ LỰC TỰ ĐỘNG (CHỈ HIỂN THỊ Ở CHUYÊN KHOA MẮT HOẶC XEM TẤT CẢ) -->
-      <div x-show="clinicalSubTab === 'mat' || clinicalSubTab === 'all'" class="bg-blue-50/70 rounded-xl shadow-xs border border-blue-200 p-4 space-y-3">
+      <div x-show="clinicalSubTab === 'mat' || clinicalSubTab === 'all' || getCurrentRenderSpecId() === 'CK_MAT'" class="bg-blue-50/70 rounded-xl shadow-xs border border-blue-200 p-4 space-y-3">
         <div class="flex items-center justify-between border-b border-blue-200/80 pb-2.5">
           <h3 class="text-xs font-bold uppercase tracking-wider text-blue-900 flex items-center gap-2">
             <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
             <span>Bảng đo Thị lực & Phân loại tự động</span>
           </h3>
-          <span class="text-[11px] font-bold px-2 py-0.5 rounded-full" :class="focusVision.score === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'" x-text="'Loại ' + focusVision.score"></span>
+          <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-md shadow-xs" :class="'score-' + visionState.baseVisionScore" x-text="'Loại ' + visionState.baseVisionScore"></span>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
           <!-- Mắt phải -->
@@ -1223,11 +1274,11 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="text-[11px] text-slate-500">Không kính (/10):</label>
-                <input type="number" min="0" max="10" step="1" x-model="form.KHONG_KINH_MAT_PHAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
+                <input type="number" min="0" max="10" step="1" x-model="visionState.rightAcuity" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
               </div>
               <div>
                 <label class="text-[11px] text-slate-500">Có kính (/10):</label>
-                <input type="number" min="0" max="10" step="1" x-model="form.CO_KINH_MAT_PHAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center" placeholder="Trống nếu không đeo" />
+                <input type="number" min="0" max="10" step="1" x-model="visionState.rightGlass" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center" placeholder="Đeo kính" />
               </div>
             </div>
           </div>
@@ -1237,11 +1288,11 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="text-[11px] text-slate-500">Không kính (/10):</label>
-                <input type="number" min="0" max="10" step="1" x-model="form.KHONG_KINH_MAT_TRAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
+                <input type="number" min="0" max="10" step="1" x-model="visionState.leftAcuity" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
               </div>
               <div>
                 <label class="text-[11px] text-slate-500">Có kính (/10):</label>
-                <input type="number" min="0" max="10" step="1" x-model="form.CO_KINH_MAT_TRAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center" placeholder="Trống nếu không đeo" />
+                <input type="number" min="0" max="10" step="1" x-model="visionState.leftGlass" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center" placeholder="Đeo kính" />
               </div>
             </div>
           </div>
@@ -1249,13 +1300,13 @@
       </div>
 
       <!-- BẢNG ĐO SỨC NGHE TỰ ĐỘNG (CHỈ HIỂN THỊ Ở TMH HOẶC XEM TẤT CẢ) -->
-      <div x-show="clinicalSubTab === 'tmh' || clinicalSubTab === 'all'" class="bg-violet-50/70 rounded-xl shadow-xs border border-violet-200 p-4 space-y-3">
+      <div x-show="clinicalSubTab === 'tmh' || clinicalSubTab === 'all' || getCurrentRenderSpecId() === 'CK_TMH'" class="bg-violet-50/70 rounded-xl shadow-xs border border-violet-200 p-4 space-y-3">
         <div class="flex items-center justify-between border-b border-violet-200/80 pb-2.5">
           <h3 class="text-xs font-bold uppercase tracking-wider text-violet-900 flex items-center gap-2">
             <svg class="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
             <span>Bảng đo Thính lực & Phân loại tự động</span>
           </h3>
-          <span class="text-[11px] font-bold px-2 py-0.5 rounded-full" :class="focusHearing.score === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'" x-text="'Loại ' + focusHearing.score"></span>
+          <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-md shadow-xs" :class="'score-' + hearingState.voice" x-text="'Loại ' + hearingState.voice"></span>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
           <!-- Tai trái -->
@@ -1264,11 +1315,11 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="text-[11px] text-slate-500">Nói thường (m):</label>
-                <input type="number" min="0" max="10" step="0.5" x-model="form.TAI_TRAI_NOI_THUONG" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
+                <input type="number" min="0" max="10" step="0.5" x-model="hearingState.leftNormal" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
               </div>
               <div>
                 <label class="text-[11px] text-slate-500">Nói thầm (m):</label>
-                <input type="number" min="0" max="5" step="0.5" x-model="form.TAI_TRAI_NOI_THAM" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
+                <input type="number" min="0" max="5" step="0.5" x-model="hearingState.leftWhisper" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
               </div>
             </div>
           </div>
@@ -1278,11 +1329,11 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="text-[11px] text-slate-500">Nói thường (m):</label>
-                <input type="number" min="0" max="10" step="0.5" x-model="form.TAI_PHAI_NOI_THUONG" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
+                <input type="number" min="0" max="10" step="0.5" x-model="hearingState.rightNormal" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
               </div>
               <div>
                 <label class="text-[11px] text-slate-500">Nói thầm (m):</label>
-                <input type="number" min="0" max="5" step="0.5" x-model="form.TAI_PHAI_NOI_THAM" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
+                <input type="number" min="0" max="5" step="0.5" x-model="hearingState.rightWhisper" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
               </div>
             </div>
           </div>
@@ -1295,7 +1346,7 @@
           <div>
             <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800 flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-              <span>Ghi nhận bệnh tật & Bất thường (Khám nhanh)</span>
+              <span>Ghi nhận bệnh tật & Bất thường — <span class="text-sky-700" x-text="clinicalSubTab === 'noi' ? ('Nội khoa › ' + (getCurrentRenderSpec()?.name || 'Tim mạch')) : (clinicalSubTab === 'all' ? 'Tất cả chuyên khoa' : (getCurrentRenderSpec()?.name || getClinicalSubTabTitle(clinicalSubTab)))"></span></span>
             </h3>
             <p class="text-xs text-slate-500 mt-0.5">Tìm nhanh tiêu chuẩn hoặc bệnh tật Loại 2 - Loại 5 để ghi nhận cho chuyên khoa hiện tại.</p>
           </div>
@@ -1431,7 +1482,7 @@
           </div>
           <button
             type="button"
-            @click="syncFocusToFormFields()"
+            @click="syncClinicalToForm(); handleSave();"
             class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white shadow-xs border border-slate-300 hover:bg-slate-50 text-slate-800 transition-colors"
           >
             Đồng bộ vào Form & Lưu
@@ -1449,25 +1500,27 @@
     <!-- ============================================================== -->
     <div x-show="clinicalInputMode === 'full'" class="space-y-4" x-cloak>
       <div class="bg-white rounded-xl shadow-xs border border-slate-200 p-5 space-y-4">
+        
+        <!-- HEADER CHUYÊN KHOA & NÚT MỞ/THU GỌN -->
         <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
           <div>
             <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800 flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
-              <span>Cây danh mục Bệnh tật & Tiêu chuẩn phân loại chi tiết</span>
+              <span>Chuyên khoa: <span class="text-sky-700" x-text="clinicalSubTab === 'noi' ? ('Nội khoa › ' + (getCurrentRenderSpec()?.name || 'Tim mạch')) : (clinicalSubTab === 'all' ? 'Tất cả chuyên khoa' : (getCurrentRenderSpec()?.name || getClinicalSubTabTitle(clinicalSubTab)))"></span></span>
             </h3>
-            <p class="text-xs text-slate-500 mt-0.5">Duyệt và chọn tiêu chuẩn phân loại chi tiết theo từng chuyên khoa và mục bệnh tật.</p>
+            <p class="text-xs text-slate-500 mt-0.5">Kết luận tự động tổng hợp từ các tiêu chuẩn đã chọn. Khi tất cả Loại 1 → <b>Bình thường</b>.</p>
           </div>
           <div class="flex items-center gap-2">
             <button
               type="button"
-              @click="expandAllFullTree = true"
+              @click="expandAllDiseases()"
               class="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors"
             >
               Mở tất cả
             </button>
             <button
               type="button"
-              @click="expandAllFullTree = false"
+              @click="collapseAllDiseases()"
               class="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors"
             >
               Thu gọn tất cả
@@ -1475,67 +1528,259 @@
           </div>
         </div>
 
-        <!-- DANH SÁCH BỆNH TẬT CỦA CHUYÊN KHOA ĐANG CHỌN -->
+        <!-- BẢNG ĐO THỊ LỰC (KHI Ở MẮT HOẶC CÓ BT_MAT_THI_LUC) -->
+        <div x-show="clinicalSubTab === 'mat' || clinicalSubTab === 'all' || getCurrentRenderSpecId() === 'CK_MAT'" class="bg-blue-50/70 rounded-xl shadow-xs border border-blue-200 p-4 space-y-3">
+          <div class="flex items-center justify-between border-b border-blue-200/80 pb-2.5">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-blue-900 flex items-center gap-2">
+              <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              <span>Bảng đo Thị lực & Phân loại tự động</span>
+            </h3>
+            <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-md shadow-xs score-1" :class="'score-' + visionState.baseVisionScore" x-text="'Loại ' + visionState.baseVisionScore"></span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div class="bg-white p-3 rounded-lg border border-blue-100 space-y-2">
+              <div class="font-semibold text-slate-700">Mắt phải (MP)</div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[11px] text-slate-500">Không kính (/10):</label>
+                  <input type="number" min="0" max="10" step="1" x-model="visionState.rightAcuity" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
+                </div>
+                <div>
+                  <label class="text-[11px] text-slate-500">Có kính (/10):</label>
+                  <input type="number" min="0" max="10" step="1" x-model="visionState.rightGlass" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center" placeholder="Đeo kính" />
+                </div>
+              </div>
+            </div>
+            <div class="bg-white p-3 rounded-lg border border-blue-100 space-y-2">
+              <div class="font-semibold text-slate-700">Mắt trái (MT)</div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[11px] text-slate-500">Không kính (/10):</label>
+                  <input type="number" min="0" max="10" step="1" x-model="visionState.leftAcuity" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
+                </div>
+                <div>
+                  <label class="text-[11px] text-slate-500">Có kính (/10):</label>
+                  <input type="number" min="0" max="10" step="1" x-model="visionState.leftGlass" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center" placeholder="Đeo kính" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BẢNG ĐO THÍNH LỰC (KHI Ở TMH HOẶC CÓ BT_TMH_TAI_TRONG) -->
+        <div x-show="clinicalSubTab === 'tmh' || clinicalSubTab === 'all' || getCurrentRenderSpecId() === 'CK_TMH'" class="bg-violet-50/70 rounded-xl shadow-xs border border-violet-200 p-4 space-y-3">
+          <div class="flex items-center justify-between border-b border-violet-200/80 pb-2.5">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-violet-900 flex items-center gap-2">
+              <svg class="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
+              <span>Bảng đo Sức nghe & Phân loại tự động</span>
+            </h3>
+            <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-md shadow-xs score-1" :class="'score-' + hearingState.voice" x-text="'Loại ' + hearingState.voice"></span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div class="bg-white p-3 rounded-lg border border-violet-100 space-y-2">
+              <div class="font-semibold text-slate-700">Tai trái (m)</div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[11px] text-slate-500">Nói thường (m):</label>
+                  <input type="number" min="0" max="10" step="0.5" x-model="hearingState.leftNormal" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
+                </div>
+                <div>
+                  <label class="text-[11px] text-slate-500">Nói thầm (m):</label>
+                  <input type="number" min="0" max="5" step="0.5" x-model="hearingState.leftWhisper" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
+                </div>
+              </div>
+            </div>
+            <div class="bg-white p-3 rounded-lg border border-violet-100 space-y-2">
+              <div class="font-semibold text-slate-700">Tai phải (m)</div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[11px] text-slate-500">Nói thường (m):</label>
+                  <input type="number" min="0" max="10" step="0.5" x-model="hearingState.rightNormal" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
+                </div>
+                <div>
+                  <label class="text-[11px] text-slate-500">Nói thầm (m):</label>
+                  <input type="number" min="0" max="5" step="0.5" x-model="hearingState.rightWhisper" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DANH SÁCH BỆNH TẬT CỦA PHÂN KHOA ĐANG CHỌN -->
         <div class="space-y-3">
           <template x-for="disease in getDiseasesForCurrentTab()" :key="disease.id">
-            <div class="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden" x-data="{ expanded: false }">
-              <button
-                type="button"
-                @click="expanded = !expanded"
-                class="w-full flex items-center justify-between px-4 py-3 bg-slate-50/80 hover:bg-sky-50/60 transition-colors text-left"
-              >
-                <div class="flex-1 min-w-0 pr-3">
-                  <div class="text-xs font-bold text-slate-800" x-text="disease.name"></div>
-                  <div class="text-[11px] text-slate-500 truncate" x-text="getSelectedStandardName(disease.id) || 'Mặc định: Bình thường (Loại 1)'"></div>
-                </div>
-                <div class="flex items-center gap-2 shrink-0">
-                  <span
-                    class="text-[10px] font-bold px-2 py-0.5 rounded-full shadow-2xs"
-                    :class="getDiseaseScore(disease.id) === 1 ? 'bg-emerald-100 text-emerald-800' : (getDiseaseScore(disease.id) === 2 ? 'bg-blue-100 text-blue-800' : (getDiseaseScore(disease.id) === 3 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'))"
-                    x-text="'Loại ' + getDiseaseScore(disease.id)"
-                  ></span>
-                  <svg
-                    class="w-4 h-4 text-slate-400 transition-transform duration-200"
-                    :class="expanded || expandAllFullTree ? 'rotate-180' : ''"
-                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                  </svg>
-                </div>
-              </button>
-
-              <div x-show="expanded || expandAllFullTree" class="p-3 border-t border-slate-100 space-y-1 bg-white">
-                <template x-for="st in getStandardsForDisease(disease.id)" :key="st.id">
-                  <label
-                    class="flex items-start gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-slate-50 text-xs border transition-colors"
-                    :class="isStandardSelected(disease.id, st.id) ? 'bg-sky-50/70 border-sky-200' : 'border-transparent'"
-                  >
-                    <input
-                      type="radio"
-                      :name="'disease_' + disease.id"
-                      :value="st.id"
-                      :checked="isStandardSelected(disease.id, st.id)"
-                      @change="selectStandard(disease.id, st)"
-                      class="mt-0.5 text-sky-600 focus:ring-sky-500"
-                    />
-                    <div class="flex-1 min-w-0">
-                      <span class="font-medium text-slate-800" x-text="st.name"></span>
+            <div>
+              <!-- TRƯỜNG HỢP: BỆNH TỰ ĐỘNG THỊ LỰC -->
+              <div x-show="disease.id === 'BT_MAT_THI_LUC'" class="bg-white rounded-lg shadow-sm border border-slate-200 mb-3 overflow-hidden">
+                <div class="px-4 py-3 bg-gradient-to-r from-blue-50 to-white border-l-4 border-blue-500 flex items-center justify-between">
+                  <div>
+                    <h4 class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                      <span x-text="disease.name"></span>
+                      <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700 font-semibold uppercase">Tự động</span>
+                    </h4>
+                    <div class="text-[11.5px] text-slate-600 mt-1">
+                      Thị lực: MP <b x-text="(visionState.rightAcuity || '10') + '/10'"></b> — MT <b x-text="(visionState.leftAcuity || '10') + '/10'"></b>
                     </div>
+                  </div>
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-md shadow-xs" :class="'score-' + visionState.baseVisionScore" x-text="'Loại ' + visionState.baseVisionScore"></span>
+                </div>
+              </div>
+
+              <!-- TRƯỜNG HỢP: BỆNH TỰ ĐỘNG THÍNH LỰC -->
+              <div x-show="disease.id === 'BT_TMH_TAI_TRONG'" class="bg-white rounded-lg shadow-sm border border-slate-200 mb-3 overflow-hidden">
+                <div class="px-4 py-3 bg-gradient-to-r from-violet-50 to-white border-l-4 border-violet-500 flex items-center justify-between">
+                  <div>
+                    <h4 class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span class="w-2 h-2 rounded-full bg-violet-600"></span>
+                      <span x-text="disease.name"></span>
+                      <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-violet-100 text-violet-700 font-semibold uppercase">Tự động</span>
+                    </h4>
+                    <div class="text-[11.5px] text-slate-600 mt-1">
+                      Sức nghe hiện tại: <b x-text="'Loại ' + hearingState.voice"></b>
+                    </div>
+                  </div>
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-md shadow-xs" :class="'score-' + hearingState.voice" x-text="'Loại ' + hearingState.voice"></span>
+                </div>
+              </div>
+
+              <!-- TRƯỜNG HỢP: BỆNH THÔNG THƯỜNG (ACCORDION CARD) -->
+              <div x-show="disease.id !== 'BT_MAT_THI_LUC' && disease.id !== 'BT_TMH_TAI_TRONG'" class="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+                <button
+                  type="button"
+                  @click="toggleDisease(disease.id)"
+                  class="w-full flex items-center justify-between px-4 py-3 bg-slate-50/80 hover:bg-sky-50/60 transition-colors text-left"
+                >
+                  <div class="flex-1 min-w-0 pr-3">
+                    <div class="text-xs font-bold text-slate-800" x-text="disease.name"></div>
+                    <div class="text-[11px] text-slate-500 truncate" x-text="getSelectedStandardName(disease.id) || 'Mặc định: Bình thường (Loại 1)'"></div>
+                  </div>
+                  <div class="flex items-center gap-2 shrink-0">
                     <span
-                      class="text-[10px] font-bold px-2 py-0.5 rounded shrink-0"
-                      :class="st.score === 1 ? 'bg-emerald-100 text-emerald-800' : (st.score === 2 ? 'bg-blue-100 text-blue-800' : (st.score === 3 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'))"
-                      x-text="'Loại ' + st.score"
+                      class="text-[10px] font-bold px-2.5 py-0.5 rounded-md shadow-xs"
+                      :class="'score-' + getDiseaseScore(disease.id)"
+                      x-text="'Loại ' + getDiseaseScore(disease.id)"
                     ></span>
-                  </label>
-                </template>
+                    <svg
+                      class="w-4 h-4 text-slate-400 group-chevron"
+                      :class="(expandedDiseases[disease.id] || expandAllFullTree) ? 'rotated' : ''"
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </div>
+                </button>
+
+                <!-- NỘI DUNG TIÊU CHUẨN KHI MỞ RỘNG -->
+                <div x-show="expandedDiseases[disease.id] || expandAllFullTree" class="p-3 border-t border-slate-100 space-y-1 bg-white">
+                  <template x-for="c in getClassifications(disease.id)" :key="c.id">
+                    <label
+                      class="flex items-start gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-slate-50 text-xs border transition-colors"
+                      :class="selectedClassifications[disease.id] === c.id ? 'bg-sky-50/70 border-sky-300' : 'border-transparent'"
+                    >
+                      <input
+                        type="radio"
+                        :name="'disease_' + disease.id"
+                        :value="c.id"
+                        :checked="selectedClassifications[disease.id] === c.id"
+                        @change="updateSelection(disease.id, c.id)"
+                        class="mt-0.5 text-sky-600 focus:ring-sky-500"
+                      />
+                      <div class="flex-1 min-w-0">
+                        <span class="font-medium text-slate-800" x-text="c.name"></span>
+                        <div x-show="c.refRule" class="text-[10.5px] text-amber-700 italic mt-0.5" x-text="'↳ ' + c.refRule"></div>
+                      </div>
+                      <span
+                        class="text-[10px] font-bold px-2 py-0.5 rounded shrink-0 shadow-2xs"
+                        :class="'score-' + calcClassificationScore(c)"
+                        x-text="'Loại ' + calcClassificationScore(c) + (c.refDiseaseId ? ' *' : '')"
+                      ></span>
+                    </label>
+                  </template>
+                </div>
               </div>
             </div>
           </template>
 
           <div x-show="getDiseasesForCurrentTab().length === 0" class="p-8 text-center text-xs text-slate-400 italic">
-            Chuyên khoa này chưa có danh mục bệnh tật chi tiết.
+            Chuyên khoa này chưa có mục bệnh tật chi tiết trong danh mục.
           </div>
         </div>
+
+        <!-- KHỐI KẾT LUẬN TỰ ĐỘNG CHUYÊN KHOA CHI TIẾT -->
+        <div class="mt-5 pt-4 border-t border-slate-200">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800">
+              Kết luận chuyên khoa: <span class="text-sky-700" x-text="clinicalSubTab === 'noi' ? ('Nội khoa › ' + (getCurrentRenderSpec()?.name || 'Tim mạch')) : (clinicalSubTab === 'all' ? 'Tất cả chuyên khoa' : (getCurrentRenderSpec()?.name || getClinicalSubTabTitle(clinicalSubTab)))"></span>
+            </h4>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold px-3 py-1 rounded-md shadow-xs" :class="'score-' + getMaxScoreForSpecialty(getCurrentRenderSpecId())" x-text="'Loại ' + getMaxScoreForSpecialty(getCurrentRenderSpecId())"></span>
+              <button
+                type="button"
+                @click="openCustomDiseaseModal()"
+                class="px-2.5 py-1 text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg flex items-center gap-1 transition-colors"
+              >
+                + Thêm bệnh khác...
+              </button>
+            </div>
+          </div>
+
+          <!-- KHI TẤT CẢ BÌNH THƯỜNG -->
+          <div x-show="getDiseasesWithScoreAbove(getCurrentRenderSpecId(), 1).length === 0 && (getConclusionExtra(getCurrentRenderSpecId()).manualRows || []).length === 0" class="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-900">
+            <div class="flex items-center gap-2.5">
+              <span class="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0">✓</span>
+              <div>
+                <div class="font-bold">Tất cả các chỉ tiêu đều bình thường</div>
+                <div class="text-[11px] text-emerald-700">Chuyên khoa này đạt tiêu chuẩn: <b>Bình thường (Loại 1)</b></div>
+              </div>
+            </div>
+            <span class="font-bold px-2.5 py-1 rounded bg-emerald-200 text-emerald-900">Loại 1</span>
+          </div>
+
+          <!-- KHI CÓ BỆNH LOẠI > 1 HOẶC NHẬP TAY -->
+          <div x-show="getDiseasesWithScoreAbove(getCurrentRenderSpecId(), 1).length > 0 || (getConclusionExtra(getCurrentRenderSpecId()).manualRows || []).length > 0" class="overflow-hidden border border-slate-200 rounded-xl">
+            <table class="w-full text-left text-xs divide-y divide-slate-200">
+              <thead class="bg-slate-50 text-slate-700 font-semibold">
+                <tr>
+                  <th class="p-2.5">Bệnh tật / Tiêu chuẩn phát hiện</th>
+                  <th class="p-2.5 text-center w-24">Phân loại</th>
+                  <th class="p-2.5 text-right w-24">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white">
+                <template x-for="row in getDiseasesWithScoreAbove(getCurrentRenderSpecId(), 1)" :key="row.disease.id">
+                  <tr class="hover:bg-slate-50">
+                    <td class="p-2.5">
+                      <div class="font-semibold text-slate-800" x-text="row.classification ? row.classification.name : row.disease.name"></div>
+                      <div class="text-[11px] text-slate-500" x-text="row.disease.name"></div>
+                    </td>
+                    <td class="p-2.5 text-center">
+                      <span class="inline-block px-2 py-0.5 rounded text-[11px] font-bold shadow-2xs" :class="'score-' + row.score" x-text="'Loại ' + row.score"></span>
+                    </td>
+                    <td class="p-2.5 text-right text-slate-400 text-[11px]">
+                      Tự động
+                    </td>
+                  </tr>
+                </template>
+                <template x-for="m in (getConclusionExtra(getCurrentRenderSpecId()).manualRows || [])" :key="m.id">
+                  <tr class="hover:bg-amber-50/50 bg-amber-50/20">
+                    <td class="p-2.5">
+                      <div class="font-semibold text-slate-800" x-text="m.name"></div>
+                      <div class="text-[11px] text-amber-700 italic">Nhập ngoài danh mục</div>
+                    </td>
+                    <td class="p-2.5 text-center">
+                      <span class="inline-block px-2 py-0.5 rounded text-[11px] font-bold shadow-2xs" :class="'score-' + m.score" x-text="'Loại ' + m.score"></span>
+                    </td>
+                    <td class="p-2.5 text-right">
+                      <button type="button" @click="removeManualDisease(getCurrentRenderSpecId(), m.id)" class="text-red-500 hover:text-red-700 text-xs font-medium">Xóa</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -1565,7 +1810,6 @@
 
 
 </div>
-
 <!-- TAB 5: CẬN LÂM SÀNG (BS_CLS) -->
 <div x-show="activeTab === 'paraclinical'" class="space-y-4 no-print">
 
@@ -2215,7 +2459,6 @@
   </div>
 
 </div>
-
 <!-- ===================================================================== -->
 <!-- PHÔI IN GIẤY KHÁM SỨC KHỎE A4 CHUẨN BỘ Y TẾ – 5 TRANG ĐỘC LẬP         -->
 <!-- - Cắt trang chính xác:                                                -->
@@ -2238,7 +2481,8 @@
       margin: 8mm 10mm 8mm 12mm;
     }
 
-    html, body {
+    html,
+    body {
       height: auto !important;
       min-height: 0 !important;
       overflow: visible !important;
@@ -2246,7 +2490,7 @@
       padding: 0 !important;
       background: #fff !important;
       font-family: 'Times New Roman', Times, serif !important;
-      font-size: 11.5pt !important;
+      font-size: 12.5pt !important;
       color: #000 !important;
     }
 
@@ -2341,7 +2585,8 @@
       font-size: 11pt;
     }
 
-    .print-table th, .print-table td {
+    .print-table th,
+    .print-table td {
       border: 1px solid #000;
       padding: 2.5px 4px;
       vertical-align: top;
@@ -2351,12 +2596,16 @@
       line-height: 1.2;
       font-size: 10.5pt;
     }
-    .ts-table th, .ts-table td {
+
+    .ts-table th,
+    .ts-table td {
       padding: 2px 3px;
     }
 
     /* Chấm mảnh placeholder */
-    .d, .v, .dot-line {
+    .d,
+    .v,
+    .dot-line {
       background-image: radial-gradient(circle, #000 0.5px, transparent 0.75px);
       background-size: 3px 3px;
       background-repeat: repeat-x;
@@ -2392,18 +2641,37 @@
       white-space: nowrap;
     }
 
-    .fl > span { flex: none; }
-    .fl > span.g { margin-left: 8px; }
-    .fl > .d {
+    .fl>span {
+      flex: none;
+    }
+
+    .fl>span.g {
+      margin-left: 8px;
+    }
+
+    .fl>.d {
       flex: 1 1 auto;
       width: auto;
       min-width: 6mm;
       margin-bottom: 2px;
     }
-    .fl > .d.w1 { flex: none; width: 14mm; }
-    .fl > .d.w2 { flex: none; width: 22mm; }
-    .fl > .d.w3 { flex: none; width: 32mm; }
-    .fl > .v {
+
+    .fl>.d.w1 {
+      flex: none;
+      width: 14mm;
+    }
+
+    .fl>.d.w2 {
+      flex: none;
+      width: 22mm;
+    }
+
+    .fl>.d.w3 {
+      flex: none;
+      width: 32mm;
+    }
+
+    .fl>.v {
       flex: 1 1 auto;
       margin-left: 3px;
       min-width: 8mm;
@@ -2414,7 +2682,8 @@
       font-size: 11.5pt;
       line-height: 1.35;
     }
-    .p1 .adm > div {
+
+    .p1 .adm>div {
       margin-top: 3px;
     }
   }
@@ -2438,12 +2707,15 @@
         <tr>
           <td style="width: 44%; vertical-align: top; border: none; padding: 0; text-align: center; line-height: 1.2;">
             <div style="text-transform: uppercase; font-size: 11pt;">BỘ Y TẾ</div>
-            <div style="font-weight: bold; text-transform: uppercase; font-size: 11pt;" x-text="facility.ten_cskcb || 'BỆNH VIỆN BÌNH ĐỊNH'"></div>
+            <div style="font-weight: bold; text-transform: uppercase; font-size: 11pt;"
+              x-text="facility.ten_cskcb || 'BỆNH VIỆN BÌNH ĐỊNH'"></div>
             <div class="d" style="display:block; width:25mm; margin:2px auto 2px;"></div>
-            <div style="font-size: 10.5pt;">Số: <span class="v" style="min-width:12mm; text-align:center;" x-text="form.SO_PHIEU || '........'"></span>/GKSK</div>
+            <div style="font-size: 10.5pt;">Số: <span class="v" style="min-width:12mm; text-align:center;"
+                x-text="form.SO_PHIEU || '........'"></span>/GKSK</div>
           </td>
           <td style="width: 56%; vertical-align: top; border: none; padding: 0; text-align: center; line-height: 1.2;">
-            <div style="font-weight: bold; text-transform: uppercase; font-size: 11pt;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
+            <div style="font-weight: bold; text-transform: uppercase; font-size: 11pt;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT
+              NAM</div>
             <div style="font-weight: bold; font-size: 11pt;">Độc lập - Tự do - Hạnh phúc</div>
             <div class="d" style="display:block; width:35mm; margin:2px auto 2px;"></div>
           </td>
@@ -2459,21 +2731,24 @@
       <table style="width: 100%; border: none; margin-bottom: 2px;">
         <tr>
           <td style="width: 25mm; vertical-align: top; border: none; padding: 0 4mm 0 0;">
-            <div style="width: 24mm; height: 32mm; border: 1px solid #000; text-align: center; font-size: 9pt; padding-top: 12mm; box-sizing: border-box;">
-              Ảnh<br/>(4 x 6 cm)
+            <div
+              style="width: 24mm; height: 32mm; border: 1px solid #000; text-align: center; font-size: 9pt; padding-top: 12mm; box-sizing: border-box;">
+              Ảnh<br />(4 x 6 cm)
             </div>
           </td>
           <td style="vertical-align: top; border: none; padding: 0;">
             <div class="adm">
               <div class="fl">
                 <span><strong>1. Họ và tên</strong> <i>(chữ in hoa):</i></span>
-                <span class="v" style="font-weight: bold; text-transform: uppercase; font-size: 12pt;" x-text="form.HO_TEN"></span>
+                <span class="v" style="font-weight: bold; text-transform: uppercase; font-size: 12pt;"
+                  x-text="form.HO_TEN"></span>
               </div>
               <div class="fl">
                 <span><strong>2. Ngày tháng năm sinh:</strong></span>
                 <span class="v" style="width: 28mm;" x-text="form.NGAY_SINH"></span>
                 <span class="g"><strong>3. Giới tính:</strong></span>
-                <span class="v" style="width: 15mm;" x-text="form.GIOI_TINH === '1' ? 'Nam' : (form.GIOI_TINH === '2' ? 'Nữ' : '')"></span>
+                <span class="v" style="width: 15mm;"
+                  x-text="form.GIOI_TINH === '1' ? 'Nam' : (form.GIOI_TINH === '2' ? 'Nữ' : '')"></span>
               </div>
               <div class="fl">
                 <span><strong>4. Số CCCD/ĐDCN:</strong></span>
@@ -2494,13 +2769,15 @@
       <div class="adm" style="margin-bottom: 4px;">
         <div class="fl">
           <span><strong>5. Dân tộc:</strong></span>
-          <span class="v" style="width: 25mm;" x-text="getCatalogName(catalogs.dan_toc, form.MA_DAN_TOC, 'MA_DAN_TOC')"></span>
+          <span class="v" style="width: 25mm;"
+            x-text="getCatalogName(catalogs.dan_toc, form.MA_DAN_TOC, 'MA_DAN_TOC')"></span>
           <span class="g"><strong>6. Đối tượng:</strong></span>
           <span class="v" x-text="getCatalogName(catalogs.doi_tuong, form.DOI_TUONG, 'DOI_TUONG')"></span>
         </div>
         <div class="fl">
           <span><strong>7. Nguồn chi trả:</strong></span>
-          <span class="v" style="width: 35mm;" x-text="getCatalogName(catalogs.nguon_chi_tra, form.NGUON_CHI_TRA, 'NGUON_CHI_TRA')"></span>
+          <span class="v" style="width: 35mm;"
+            x-text="getCatalogName(catalogs.nguon_chi_tra, form.NGUON_CHI_TRA, 'NGUON_CHI_TRA')"></span>
           <span class="g"><strong>8. Nhóm máu:</strong></span>
           <span class="v" style="width: 15mm;" x-text="form.NHOM_MAU"></span>
           <span class="g"><strong>9. ĐT:</strong></span>
@@ -2531,13 +2808,17 @@
       </div>
 
       <!-- TIỀN SỬ BỆNH -->
-      <div style="font-weight: bold; text-transform: uppercase; margin: 4px 0 2px 0;">TIỀN SỬ BỆNH CỦA ĐỐI TƯỢNG KHÁM SỨC KHỎE</div>
+      <div style="font-weight: bold; text-transform: uppercase; margin: 4px 0 2px 0;">TIỀN SỬ BỆNH CỦA ĐỐI TƯỢNG KHÁM
+        SỨC KHỎE</div>
       <div style="margin-bottom: 3px;">
-        <strong>1. Tiền sử gia đình:</strong> Có ai trong gia đình mắc một trong các bệnh: truyền nhiễm, tim mạch, đái tháo đường, lao, hen phế quản, ung thư, động kinh, rối loạn tâm thần, liệt...:<br/>
-        <span>a) ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; b) ☐ Có; Nếu "có", đề nghị ghi cụ thể tên bệnh:</span><i class="d"></i>
+        <strong>1. Tiền sử gia đình:</strong> Có ai trong gia đình mắc một trong các bệnh: truyền nhiễm, tim mạch, đái
+        tháo đường, lao, hen phế quản, ung thư, động kinh, rối loạn tâm thần, liệt...:<br />
+        <span>a) ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; b) ☐ Có; Nếu "có", đề nghị ghi cụ thể tên bệnh:</span><i
+          class="d"></i>
       </div>
 
-      <div style="font-weight: bold; margin-bottom: 2px;">2. Tiền sử bản thân: Ông (bà) đã/đang mắc bệnh, tình trạng bệnh nào sau đây không:</div>
+      <div style="font-weight: bold; margin-bottom: 2px;">2. Tiền sử bản thân: Ông (bà) đã/đang mắc bệnh, tình trạng
+        bệnh nào sau đây không:</div>
 
       <!-- BẢNG TIỀN SỬ BẢN THÂN TRANG 1: DÒNG 1 ĐẾN 6 VÀ 12 ĐẾN 17 -->
       <table class="print-table ts-table" style="margin-top: 1px;">
@@ -2557,50 +2838,62 @@
           <tr>
             <td align="center">1</td>
             <td>Có bệnh hay bị thương trong 5 năm qua</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
             <td align="center">12</td>
             <td>Đái tháo đường hoặc kiểm soát tăng đường huyết</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">2</td>
             <td>Có bệnh thần kinh hay bị thương ở đầu</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
             <td align="center">13</td>
             <td>Bệnh tâm thần</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">3</td>
             <td>Bệnh mắt hoặc giảm thị lực (trừ đeo kính)</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
             <td align="center">14</td>
             <td>Mất ý thức, rối loạn ý thức</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">4</td>
             <td>Bệnh ở tai, giảm sức nghe hoặc thăng bằng</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
             <td align="center">15</td>
             <td>Ngất, chóng mặt</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">5</td>
             <td>Bệnh ở tim hoặc nhồi máu cơ tim</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
             <td align="center">16</td>
             <td>Bệnh tiêu hóa</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">6</td>
             <td>Phẫu thuật can thiệp tim - mạch (thay van, tạo hình mạch, máy tạo nhịp, đặt stent mạch, ghép tim)</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
             <td align="center">17</td>
             <td>Rối loạn giấc ngủ, ngáy to</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
           </tr>
         </tbody>
       </table>
@@ -2621,7 +2914,8 @@
         <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN || '..........'"></strong></div>
       </div>
 
-      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 2px;">2. TIỀN SỬ BẢN THÂN (TIẾP THEO):</div>
+      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 2px;">2. TIỀN SỬ BẢN THÂN (TIẾP THEO):
+      </div>
       <!-- BẢNG TIỀN SỬ BẢN THÂN TRANG 2: DÒNG 7 ĐẾN 11 VÀ 18 ĐẾN 22 -->
       <table class="print-table ts-table" style="margin-bottom: 6px;">
         <thead>
@@ -2640,42 +2934,53 @@
           <tr>
             <td align="center">7</td>
             <td>Tăng huyết áp</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
             <td align="center">18</td>
             <td>Tai biến mạch máu não hoặc liệt</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">8</td>
             <td>Khó thở</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
             <td align="center">19</td>
             <td>Bệnh hoặc tổn thương cột sống</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">9</td>
             <td>Bệnh phổi, hen, viêm phế quản mạn</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
             <td align="center">20</td>
             <td>Sử dụng rượu thường xuyên, liên tục</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">10</td>
             <td>Bệnh thận, lọc máu</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
             <td align="center">21</td>
             <td>Sử dụng ma túy và chất gây nghiện</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">11</td>
             <td>Nghiện rượu, bia</td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
             <td align="center">22</td>
-            <td>Bệnh khác (nếu có):<div class="dot-line" style="height:12px; margin-top:2px;"></div></td>
-            <td align="center">☐</td><td align="center">☐</td>
+            <td>Bệnh khác (nếu có):<div class="dot-line" style="height:12px; margin-top:2px;"></div>
+            </td>
+            <td align="center">☐</td>
+            <td align="center">☐</td>
           </tr>
         </tbody>
       </table>
@@ -2683,11 +2988,13 @@
       <!-- 3. CÂU HỎI KHÁC -->
       <div style="font-weight: bold; margin-bottom: 3px;">3. Câu hỏi khác (nếu có):</div>
       <div style="margin-left: 2px; line-height: 1.45;">
-        <div>a) Ông (bà) có đang điều trị bệnh gì không? ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; ☐ Có (nếu có, xin hãy liệt kê tên bệnh, các thuốc đang dùng và liều lượng):</div>
+        <div>a) Ông (bà) có đang điều trị bệnh gì không? ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; ☐ Có (nếu có, xin hãy liệt kê
+          tên bệnh, các thuốc đang dùng và liều lượng):</div>
         <div class="dot-line" style="margin-top: 3px;"></div>
         <div class="dot-line" style="margin-top: 3px;"></div>
 
-        <div style="margin-top: 6px;">b) Tiền sử thai sản (đối với phụ nữ): ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; ☐ Có (nếu có, xin hãy liệt kê tên bệnh, các thuốc đang dùng và liều lượng):</div>
+        <div style="margin-top: 6px;">b) Tiền sử thai sản (đối với phụ nữ): ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; ☐ Có (nếu
+          có, xin hãy liệt kê tên bệnh, các thuốc đang dùng và liều lượng):</div>
         <div class="dot-line" style="margin-top: 3px;"></div>
         <div class="dot-line" style="margin-top: 3px;"></div>
       </div>
@@ -2703,9 +3010,11 @@
             <td style="width: 45%; border: none;"></td>
             <td style="width: 55%; text-align: center; border: none; padding: 0;">
               <div style="font-style: italic;">
-                <span x-text="facility.dia_danh || 'Gia Lai'"></span>, ngày <span class="d" style="width:10mm;"></span> tháng <span class="d" style="width:10mm;"></span> năm 20<span class="d" style="width:8mm;"></span>
+                <span x-text="facility.dia_danh || 'Gia Lai'"></span>, ngày <span class="d" style="width:10mm;"></span>
+                tháng <span class="d" style="width:10mm;"></span> năm 20<span class="d" style="width:8mm;"></span>
               </div>
-              <div style="font-weight: bold; text-transform: uppercase; margin-top: 3px;">NGƯỜI ĐỀ NGHỊ KHÁM SỨC KHỎE</div>
+              <div style="font-weight: bold; text-transform: uppercase; margin-top: 3px;">NGƯỜI ĐỀ NGHỊ KHÁM SỨC KHỎE
+              </div>
               <div style="font-style: italic; font-size: 10.5pt;">(Ký và ghi rõ họ, tên)</div>
               <div style="height: 65px;"></div>
               <div style="font-weight: bold; text-transform: uppercase;" x-text="form.HO_TEN"></div>
@@ -2734,16 +3043,22 @@
       <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 2px;">I. KHÁM THỂ LỰC</div>
       <div style="line-height: 1.5; font-size: 11pt;">
         <div class="fl">
-          <span>• Chiều cao:</span><span class="v" style="width: 16mm; text-align: center;" x-text="form.CHIEU_CAO"></span><span>cm;</span>
-          <span class="g">• Cân nặng:</span><span class="v" style="width: 16mm; text-align: center;" x-text="form.CAN_NANG"></span><span>kg;</span>
-          <span class="g">• Chỉ số BMI:</span><span class="v" style="width: 16mm; text-align: center;" x-text="form.BMI"></span>
+          <span>• Chiều cao:</span><span class="v" style="width: 16mm; text-align: center;"
+            x-text="form.CHIEU_CAO"></span><span>cm;</span>
+          <span class="g">• Cân nặng:</span><span class="v" style="width: 16mm; text-align: center;"
+            x-text="form.CAN_NANG"></span><span>kg;</span>
+          <span class="g">• Chỉ số BMI:</span><span class="v" style="width: 16mm; text-align: center;"
+            x-text="form.BMI"></span>
         </div>
         <div class="fl">
-          <span>• Mạch:</span><span class="v" style="width: 16mm; text-align: center;" x-text="form.MACH"></span><span>lần/phút;</span>
-          <span class="g">• Huyết áp:</span><span class="v" style="width: 28mm; text-align: center;" x-text="form.HUYET_AP"></span><span>mmHg</span>
+          <span>• Mạch:</span><span class="v" style="width: 16mm; text-align: center;"
+            x-text="form.MACH"></span><span>lần/phút;</span>
+          <span class="g">• Huyết áp:</span><span class="v" style="width: 28mm; text-align: center;"
+            x-text="form.HUYET_AP"></span><span>mmHg</span>
         </div>
         <div class="fl">
-          <span>• Phân loại thể lực:</span><span class="v" x-text="form.KHAM_THE_LUC_PL ? ('Loại ' + form.KHAM_THE_LUC_PL) : ''"></span>
+          <span>• Phân loại thể lực:</span><span class="v"
+            x-text="form.KHAM_THE_LUC_PL ? ('Loại ' + form.KHAM_THE_LUC_PL) : ''"></span>
         </div>
       </div>
 
@@ -2780,49 +3095,61 @@
           <tr>
             <td>
               <div class="fl"><span>a) Tuần hoàn:</span><span class="v" x-text="form.NOI_KHOA_TUAN_HOAN"></span></div>
-              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_TUAN_HOAN_PL ? ('Loại ' + form.NOI_KHOA_TUAN_HOAN_PL) : ''"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v"
+                  x-text="form.NOI_KHOA_TUAN_HOAN_PL ? ('Loại ' + form.NOI_KHOA_TUAN_HOAN_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>b) Hô hấp:</span><span class="v" x-text="form.NOI_KHOA_HO_HAP"></span></div>
-              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_HO_HAP_PL ? ('Loại ' + form.NOI_KHOA_HO_HAP_PL) : ''"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v"
+                  x-text="form.NOI_KHOA_HO_HAP_PL ? ('Loại ' + form.NOI_KHOA_HO_HAP_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>c) Tiêu hóa:</span><span class="v" x-text="form.NOI_KHOA_TIEU_HOA"></span></div>
-              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_TIEU_HOA_PL ? ('Loại ' + form.NOI_KHOA_TIEU_HOA_PL) : ''"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v"
+                  x-text="form.NOI_KHOA_TIEU_HOA_PL ? ('Loại ' + form.NOI_KHOA_TIEU_HOA_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
             <td>
-              <div class="fl"><span>d) Thận - Tiết niệu - Sinh dục:</span><span class="v" x-text="form.NOI_KHOA_THAN_TN_SD"></span></div>
-              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_THAN_TIETNIEU_PL ? ('Loại ' + form.NOI_KHOA_THAN_TIETNIEU_PL) : ''"></span></div>
+              <div class="fl"><span>d) Thận - Tiết niệu - Sinh dục:</span><span class="v"
+                  x-text="form.NOI_KHOA_THAN_TN_SD"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v"
+                  x-text="form.NOI_KHOA_THAN_TIETNIEU_PL ? ('Loại ' + form.NOI_KHOA_THAN_TIETNIEU_PL) : ''"></span>
+              </div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>đ) Nội tiết:</span><span class="v" x-text="form.NOI_KHOA_NOI_TIET"></span></div>
-              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_NOI_TIET_PL ? ('Loại ' + form.NOI_KHOA_NOI_TIET_PL) : ''"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v"
+                  x-text="form.NOI_KHOA_NOI_TIET_PL ? ('Loại ' + form.NOI_KHOA_NOI_TIET_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
             <td>
-              <div class="fl"><span>e) Cơ – xương – khớp:</span><span class="v" x-text="form.NOI_KHOA_CO_XUONG_KHOP"></span></div>
-              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_CO_XUONG_KHOP_PL ? ('Loại ' + form.NOI_KHOA_CO_XUONG_KHOP_PL) : ''"></span></div>
+              <div class="fl"><span>e) Cơ – xương – khớp:</span><span class="v"
+                  x-text="form.NOI_KHOA_CO_XUONG_KHOP"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v"
+                  x-text="form.NOI_KHOA_CO_XUONG_KHOP_PL ? ('Loại ' + form.NOI_KHOA_CO_XUONG_KHOP_PL) : ''"></span>
+              </div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>g) Thần kinh:</span><span class="v" x-text="form.NOI_KHOA_THAN_KINH"></span></div>
-              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_THAN_KINH_PL ? ('Loại ' + form.NOI_KHOA_THAN_KINH_PL) : ''"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v"
+                  x-text="form.NOI_KHOA_THAN_KINH_PL ? ('Loại ' + form.NOI_KHOA_THAN_KINH_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
             <td>
               <div class="fl"><span>h) Tâm thần:</span><span class="v" x-text="form.NOI_KHOA_TAM_THAN"></span></div>
-              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_TAM_THAN_PL ? ('Loại ' + form.NOI_KHOA_TAM_THAN_PL) : ''"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v"
+                  x-text="form.NOI_KHOA_TAM_THAN_PL ? ('Loại ' + form.NOI_KHOA_TAM_THAN_PL) : ''"></span></div>
             </td>
           </tr>
 
@@ -2831,7 +3158,8 @@
             <td>
               <strong>2. Ngoại khoa:</strong>
               <div class="v" style="display:block; min-height:14px;" x-text="form.KET_QUA_KHAM_NGOAI_KHOA"></div>
-              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><span class="v" x-text="form.NGOAI_KHOA_PL ? ('Loại ' + form.NGOAI_KHOA_PL) : ''"></span></div>
+              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><span class="v"
+                  x-text="form.NGOAI_KHOA_PL ? ('Loại ' + form.NGOAI_KHOA_PL) : ''"></span></div>
             </td>
             <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
               <div style="font-weight: 500;" x-text="form.BS_NGOAI || ''"></div>
@@ -2843,7 +3171,8 @@
             <td>
               <strong>3. Sản phụ khoa</strong> <i>(đối với nữ):</i>
               <div class="v" style="display:block; min-height:14px;" x-text="form.KET_QUA_KHAM_SAN_PHU_KHOA"></div>
-              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><span class="v" x-text="form.SAN_PHU_KHOA_PL ? ('Loại ' + form.SAN_PHU_KHOA_PL) : ''"></span></div>
+              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><span class="v"
+                  x-text="form.SAN_PHU_KHOA_PL ? ('Loại ' + form.SAN_PHU_KHOA_PL) : ''"></span></div>
             </td>
             <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
               <div style="font-weight: 500;" x-text="form.BS_SAN || ''"></div>
@@ -2881,11 +3210,16 @@
           <!-- 4. MẮT -->
           <tr>
             <td>
-              <strong>4. Mắt:</strong><br/>
-              - Thị lực không kính: Mắt phải: <span class="v" style="width:12mm; text-align:center;" x-text="form.KHONG_KINH_MAT_PHAI"></span>/10; Mắt trái: <span class="v" style="width:12mm; text-align:center;" x-text="form.KHONG_KINH_MAT_TRAI"></span>/10<br/>
-              - Thị lực có kính: Mắt phải: <span class="v" style="width:12mm; text-align:center;" x-text="form.CO_KINH_MAT_PHAI"></span>/10; Mắt trái: <span class="v" style="width:12mm; text-align:center;" x-text="form.CO_KINH_MAT_TRAI"></span>/10<br/>
-              - Các bệnh về mắt (nếu có): <span class="v" x-text="form.CAC_BENH_VE_MAT"></span><br/>
-              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.MAT_PL ? ('Loại ' + form.MAT_PL) : ''"></span></div>
+              <strong>4. Mắt:</strong><br />
+              - Thị lực không kính: Mắt phải: <span class="v" style="width:12mm; text-align:center;"
+                x-text="form.KHONG_KINH_MAT_PHAI"></span>/10; Mắt trái: <span class="v"
+                style="width:12mm; text-align:center;" x-text="form.KHONG_KINH_MAT_TRAI"></span>/10<br />
+              - Thị lực có kính: Mắt phải: <span class="v" style="width:12mm; text-align:center;"
+                x-text="form.CO_KINH_MAT_PHAI"></span>/10; Mắt trái: <span class="v"
+                style="width:12mm; text-align:center;" x-text="form.CO_KINH_MAT_TRAI"></span>/10<br />
+              - Các bệnh về mắt (nếu có): <span class="v" x-text="form.CAC_BENH_VE_MAT"></span><br />
+              <div class="fl"><span>Phân loại:</span><span class="v"
+                  x-text="form.MAT_PL ? ('Loại ' + form.MAT_PL) : ''"></span></div>
             </td>
             <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
               <div style="font-weight: 500;" x-text="form.BS_MAT || ''"></div>
@@ -2895,11 +3229,17 @@
           <!-- 5. TAI - MŨI - HỌNG -->
           <tr>
             <td>
-              <strong>5. Tai - Mũi - Họng:</strong><br/>
-              - Tai trái: Nói thường: <span class="v" style="width:12mm; text-align:center;" x-text="form.TAI_TRAI_NOI_THUONG"></span>m; Nói thầm: <span class="v" style="width:12mm; text-align:center;" x-text="form.TAI_TRAI_NOI_THAM"></span>m<br/>
-              - Tai phải: Nói thường: <span class="v" style="width:12mm; text-align:center;" x-text="form.TAI_PHAI_NOI_THUONG"></span>m; Nói thầm: <span class="v" style="width:12mm; text-align:center;" x-text="form.TAI_PHAI_NOI_THAM"></span>m<br/>
-              - Các bệnh về tai, mũi, họng (nếu có): <span class="v" x-text="form.CAC_BENH_VE_TAI_MUI_HONG"></span><br/>
-              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.TMH_PL ? ('Loại ' + form.TMH_PL) : ''"></span></div>
+              <strong>5. Tai - Mũi - Họng:</strong><br />
+              - Tai trái: Nói thường: <span class="v" style="width:12mm; text-align:center;"
+                x-text="form.TAI_TRAI_NOI_THUONG"></span>m; Nói thầm: <span class="v"
+                style="width:12mm; text-align:center;" x-text="form.TAI_TRAI_NOI_THAM"></span>m<br />
+              - Tai phải: Nói thường: <span class="v" style="width:12mm; text-align:center;"
+                x-text="form.TAI_PHAI_NOI_THUONG"></span>m; Nói thầm: <span class="v"
+                style="width:12mm; text-align:center;" x-text="form.TAI_PHAI_NOI_THAM"></span>m<br />
+              - Các bệnh về tai, mũi, họng (nếu có): <span class="v"
+                x-text="form.CAC_BENH_VE_TAI_MUI_HONG"></span><br />
+              <div class="fl"><span>Phân loại:</span><span class="v"
+                  x-text="form.TMH_PL ? ('Loại ' + form.TMH_PL) : ''"></span></div>
             </td>
             <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
               <div style="font-weight: 500;" x-text="form.BS_TMH || ''"></div>
@@ -2909,10 +3249,12 @@
           <!-- 6. RĂNG - HÀM - MẶT -->
           <tr>
             <td>
-              <strong>6. Răng - Hàm - Mặt:</strong><br/>
-              - Hàm trên: <span class="v" x-text="form.HAM_TREN"></span>; Hàm dưới: <span class="v" x-text="form.HAM_DUOI"></span><br/>
-              - Các bệnh về răng, hàm, mặt (nếu có): <span class="v" x-text="form.CAC_BENH_VE_RHM"></span><br/>
-              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.RHM_PL ? ('Loại ' + form.RHM_PL) : ''"></span></div>
+              <strong>6. Răng - Hàm - Mặt:</strong><br />
+              - Hàm trên: <span class="v" x-text="form.HAM_TREN"></span>; Hàm dưới: <span class="v"
+                x-text="form.HAM_DUOI"></span><br />
+              - Các bệnh về răng, hàm, mặt (nếu có): <span class="v" x-text="form.CAC_BENH_VE_RHM"></span><br />
+              <div class="fl"><span>Phân loại:</span><span class="v"
+                  x-text="form.RHM_PL ? ('Loại ' + form.RHM_PL) : ''"></span></div>
             </td>
             <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
               <div style="font-weight: 500;" x-text="form.BS_RHM || ''"></div>
@@ -2924,7 +3266,8 @@
             <td>
               <strong>7. Da liễu:</strong>
               <div class="v" style="display:block; min-height:14px;" x-text="form.KET_QUA_KHAM_DA_LIEU"></div>
-              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><span class="v" x-text="form.DA_LIEU_PL ? ('Loại ' + form.DA_LIEU_PL) : ''"></span></div>
+              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><span class="v"
+                  x-text="form.DA_LIEU_PL ? ('Loại ' + form.DA_LIEU_PL) : ''"></span></div>
             </td>
             <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
               <div style="font-weight: 500;" x-text="form.BS_DALIEU || ''"></div>
@@ -2935,7 +3278,8 @@
 
       <!-- III. KHÁM CẬN LÂM SÀNG: HỌC/LÀM ĐẾN HẾT MỤC d) CẬN LÂM SÀNG KHÁC -->
       <div style="font-weight: bold; text-transform: uppercase; margin: 4px 0 1px 0;">III. KHÁM CẬN LÂM SÀNG</div>
-      <div style="font-style: italic; margin-bottom: 2px; font-size: 10.5pt;">Khám phân loại sức khỏe để đi học, đi làm thực hiện khám cận lâm sàng sau:</div>
+      <div style="font-style: italic; margin-bottom: 2px; font-size: 10.5pt;">Khám phân loại sức khỏe để đi học, đi làm
+        thực hiện khám cận lâm sàng sau:</div>
       <table class="print-table" style="line-height: 1.2;">
         <thead>
           <tr style="font-weight: bold;">
@@ -2947,15 +3291,21 @@
           <tr>
             <td>
               <strong>a) Xét nghiệm máu:</strong>
-              <div class="fl"><span>• Huyết học: Tổng phân tích tế bào máu ngoại vi:</span><span class="v" x-text="form.XN_MAU_HUYET_HOC"></span></div>
+              <div class="fl"><span>• Huyết học: Tổng phân tích tế bào máu ngoại vi:</span><span class="v"
+                  x-text="form.XN_MAU_HUYET_HOC"></span></div>
               <div class="fl">
-                <span>• Sinh hóa: Đường máu:</span><span class="v" style="width:12mm; text-align:center;" x-text="form.XN_MAU_DUONG_HUYET"></span>
-                <span>; Urê:</span><span class="v" style="width:12mm; text-align:center;" x-text="form.XN_MAU_URE"></span>
-                <span>; Creatinin:</span><span class="v" style="width:12mm; text-align:center;" x-text="form.XN_MAU_CREATININ"></span>
+                <span>• Sinh hóa: Đường máu:</span><span class="v" style="width:12mm; text-align:center;"
+                  x-text="form.XN_MAU_DUONG_HUYET"></span>
+                <span>; Urê:</span><span class="v" style="width:12mm; text-align:center;"
+                  x-text="form.XN_MAU_URE"></span>
+                <span>; Creatinin:</span><span class="v" style="width:12mm; text-align:center;"
+                  x-text="form.XN_MAU_CREATININ"></span>
               </div>
               <div class="fl">
-                <span>&nbsp;&nbsp;ASAT (GOT):</span><span class="v" style="width:12mm; text-align:center;" x-text="form.XN_MAU_ASAT"></span>
-                <span>; ALAT (GPT):</span><span class="v" style="width:12mm; text-align:center;" x-text="form.XN_MAU_ALAT"></span>
+                <span>&nbsp;&nbsp;ASAT (GOT):</span><span class="v" style="width:12mm; text-align:center;"
+                  x-text="form.XN_MAU_ASAT"></span>
+                <span>; ALAT (GPT):</span><span class="v" style="width:12mm; text-align:center;"
+                  x-text="form.XN_MAU_ALAT"></span>
               </div>
             </td>
             <td rowspan="4" style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
@@ -2965,7 +3315,8 @@
           <tr>
             <td>
               <strong>b) Xét nghiệm nước tiểu:</strong>
-              <div class="fl"><span>• Tổng phân tích nước tiểu:</span><span class="v" x-text="form.XN_NUOC_TIEU"></span></div>
+              <div class="fl"><span>• Tổng phân tích nước tiểu:</span><span class="v" x-text="form.XN_NUOC_TIEU"></span>
+              </div>
               <div class="fl"><span>• Khác (nếu có):</span><span class="v" x-text="form.XN_NUOC_TIEU_KHAC"></span></div>
             </td>
           </tr>
@@ -3001,8 +3352,10 @@
       </div>
 
       <!-- III. KHÁM CẬN LÂM SÀNG (TIẾP THEO) - ĐỊNH KỲ THEO CHỈ ĐỊNH -->
-      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 1px;">III. KHÁM CẬN LÂM SÀNG (TIẾP THEO)</div>
-      <div style="font-style: italic; margin-bottom: 3px; font-size: 10.5pt;">Khám sức khỏe định kỳ (cận lâm sàng thực hiện theo chỉ định của bác sỹ)</div>
+      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 1px;">III. KHÁM CẬN LÂM SÀNG (TIẾP THEO)
+      </div>
+      <div style="font-style: italic; margin-bottom: 3px; font-size: 10.5pt;">Khám sức khỏe định kỳ (cận lâm sàng thực
+        hiện theo chỉ định của bác sỹ)</div>
       <table class="print-table" style="margin-bottom: 10px;">
         <thead>
           <tr style="font-weight: bold;">
@@ -3028,7 +3381,8 @@
       </table>
 
       <!-- IV. KẾT LUẬN -->
-      <div style="font-weight: bold; text-transform: uppercase; font-size: 13pt; margin: 8px 0 4px 0;">IV. KẾT LUẬN</div>
+      <div style="font-weight: bold; text-transform: uppercase; font-size: 13pt; margin: 8px 0 4px 0;">IV. KẾT LUẬN
+      </div>
       <div style="line-height: 1.5; font-size: 11.5pt;">
         <div><strong>1. Tình trạng sức khỏe; mắc các bệnh, tật (nếu có):</strong></div>
         <div style="margin-left: 8px; margin-top: 2px;">
@@ -3039,12 +3393,14 @@
 
         <div style="margin-top: 8px;">
           <strong>2. Phân loại sức khỏe (theo quy định của Bộ Y tế):</strong>
-          <span class="v" style="font-weight: bold; font-size: 12pt; margin-left: 4px;" x-text="form.KET_LUAN_PHAN_LOAI ? ('Loại ' + form.KET_LUAN_PHAN_LOAI) : '...................................................'"></span>
+          <span class="v" style="font-weight: bold; font-size: 12pt; margin-left: 4px;"
+            x-text="form.KET_LUAN_PHAN_LOAI ? ('Loại ' + form.KET_LUAN_PHAN_LOAI) : '...................................................'"></span>
         </div>
 
         <div style="margin-top: 8px;">
           <strong>3. Các bệnh, tật chuyên khoa (nếu có):</strong>
-          <div class="v" style="display:block; min-height:16px; margin-left: 8px;" x-text="form.CAC_BENH_TAT_CHUYEN_KHOA"></div>
+          <div class="v" style="display:block; min-height:16px; margin-left: 8px;"
+            x-text="form.CAC_BENH_TAT_CHUYEN_KHOA"></div>
           <div class="dot-line" style="margin-top: 3px; margin-left: 8px;"></div>
         </div>
 
@@ -3061,12 +3417,18 @@
           <td style="width: 45%; border: none;"></td>
           <td style="width: 55%; text-align: center; border: none; padding: 0;">
             <div style="font-style: italic;">
-              <span x-text="facility.dia_danh || 'Gia Lai'"></span>, ngày <span class="d" style="width:10mm;" x-text="form.NGAY_KET_LUAN ? form.NGAY_KET_LUAN.split('/')[0] : ''"></span> tháng <span class="d" style="width:10mm;" x-text="form.NGAY_KET_LUAN ? form.NGAY_KET_LUAN.split('/')[1] : ''"></span> năm 20<span class="d" style="width:8mm;" x-text="form.NGAY_KET_LUAN ? form.NGAY_KET_LUAN.split('/')[2].slice(-2) : ''"></span>
+              <span x-text="facility.dia_danh || 'Gia Lai'"></span>, ngày <span class="d" style="width:10mm;"
+                x-text="form.NGAY_KET_LUAN ? form.NGAY_KET_LUAN.split('/')[0] : ''"></span> tháng <span class="d"
+                style="width:10mm;" x-text="form.NGAY_KET_LUAN ? form.NGAY_KET_LUAN.split('/')[1] : ''"></span> năm
+              20<span class="d" style="width:8mm;"
+                x-text="form.NGAY_KET_LUAN ? form.NGAY_KET_LUAN.split('/')[2].slice(-2) : ''"></span>
             </div>
-            <div style="font-weight: bold; text-transform: uppercase; margin-top: 3px; font-size: 12pt;">NGƯỜI KẾT LUẬN</div>
+            <div style="font-weight: bold; text-transform: uppercase; margin-top: 3px; font-size: 12pt;">NGƯỜI KẾT LUẬN
+            </div>
             <div style="font-style: italic; font-size: 10.5pt;">(Ký, ghi rõ họ tên và đóng dấu)</div>
             <div style="height: 70px;"></div>
-            <div style="font-weight: bold; text-transform: uppercase; font-size: 12pt;" x-text="form.NGUOI_KET_LUAN || ''"></div>
+            <div style="font-weight: bold; text-transform: uppercase; font-size: 12pt;"
+              x-text="form.NGUOI_KET_LUAN || ''"></div>
           </td>
         </tr>
       </table>
@@ -3142,9 +3504,7 @@
       await this.printBlank(app);
     }
   };
-</script>
-
-</main>
+</script>      </main>
     </div>
 
     <!-- ===================================================================== -->
@@ -3359,16 +3719,16 @@
         <button type="button" @click="showUserSettingsModal = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-full">✕</button>
       </div>
 
-      <!-- THANH CHỌN TABS CÀI ĐẶT: TÙY CHỌN / BẢO MẬT / THÔNG TIN -->
-      <div class="flex items-center gap-1.5 border-b border-slate-200 pb-2 text-xs">
-        <button type="button" @click="userSettingsTab = 'preferences'" :class="userSettingsTab === 'preferences' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors">
+      <!-- THANH CHỌN TABS CÀI ĐẶT: TÙY CHỌN / BẢO MẬT / THÔNG TIN CÁ NHÂN -->
+      <div class="flex items-center gap-1.5 border-b border-slate-200 pb-2 text-xs overflow-x-auto">
+        <button type="button" @click="userSettingsTab = 'preferences'" :class="userSettingsTab === 'preferences' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
           ⚙ Tùy chọn làm việc
         </button>
-        <button type="button" @click="userSettingsTab = 'password'" :class="userSettingsTab === 'password' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors">
-          🔒 Đổi mật khẩu
+        <button type="button" @click="userSettingsTab = 'profile'" :class="userSettingsTab === 'profile' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+          👤 Chức danh & Bác sĩ ký
         </button>
-        <button type="button" @click="userSettingsTab = 'info'" :class="userSettingsTab === 'info' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors">
-          👤 Tài khoản & Quyền
+        <button type="button" @click="userSettingsTab = 'password'" :class="userSettingsTab === 'password' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+          🔒 Đổi mật khẩu
         </button>
       </div>
 
@@ -3405,10 +3765,11 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
           <div>
-            <label class="label-title text-slate-800 font-semibold mb-1">Chế độ giao diện:</label>
+            <label class="label-title text-slate-800 font-semibold mb-1">Chế độ giao diện (Theme):</label>
             <select x-model="userSettings.theme" @change="saveUserPreferences()" class="input-box bg-white text-xs">
               <option value="light">☀️ Giao diện Sáng (Chuẩn)</option>
               <option value="dark">🌙 Chế độ Tối (Dark mode)</option>
+              <option value="system">💻 Theo hệ điều hành (System)</option>
             </select>
           </div>
 
@@ -3416,24 +3777,63 @@
             <label class="label-title text-slate-800 font-semibold mb-1">Cỡ chữ hiển thị:</label>
             <select x-model="userSettings.fontSize" @change="saveUserPreferences()" class="input-box bg-white text-xs">
               <option value="normal">Chuẩn (13.5px)</option>
-              <option value="large">Lớn (15px - Dễ nhìn cho bác sĩ)</option>
+              <option value="large">Lớn (15px - Dễ đọc cho Bác sĩ)</option>
+              <option value="xlarge">Rất lớn (16.5px)</option>
             </select>
           </div>
         </div>
 
         <div class="pt-2 border-t border-slate-100 space-y-2">
           <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" x-model="userSettings.autoNavigateTab" @change="saveUserPreferences()" class="rounded text-sky-600 focus:ring-sky-500" />
-            <span class="text-slate-800 font-medium">Tự động nhảy đến tab/chuyên khoa được phân quyền</span>
-          </label>
-          <label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" x-model="userSettings.soundOnSave" @change="saveUserPreferences()" class="rounded text-sky-600 focus:ring-sky-500" />
-            <span class="text-slate-800 font-medium">Phát âm báo nhẹ khi lưu hồ sơ thành công</span>
+            <span class="text-slate-800 font-medium">Phát âm báo nhẹ (Beep) khi lưu hồ sơ thành công</span>
           </label>
+        </div>
+
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-[11.5px] text-slate-600">
+          <div class="font-semibold text-slate-700 flex items-center gap-1.5">
+            <span>⌨ Phím tắt thao tác nhanh:</span>
+          </div>
+          <div class="grid grid-cols-2 gap-1 pt-1">
+            <div><kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">Ctrl + S</kbd>: Lưu hồ sơ khám</div>
+            <div><kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">Alt + 1 / 2 / 3</kbd>: Đổi chế độ khám</div>
+            <div><kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">Alt + P</kbd>: In phiếu A4</div>
+            <div><kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">Esc</kbd>: Đóng modal / popup</div>
+          </div>
         </div>
       </div>
 
-      <!-- TAB 2: ĐỔI MẬT KHẨU (CHANGE PASSWORD) -->
+      <!-- TAB 2: CHỨC DANH & BÁC SĨ KÝ (PROFILE) -->
+      <div x-show="userSettingsTab === 'profile'" class="space-y-3 text-xs">
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+          <div class="flex justify-between"><span class="text-slate-500">Tên đăng nhập:</span> <strong class="text-slate-800 font-mono" x-text="currentUser?.username"></strong></div>
+          <div class="flex justify-between"><span class="text-slate-500">Mã cơ sở KCB:</span> <span class="text-slate-800 font-mono" x-text="facility?.ma_cskcb || '52208'"></span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Cơ sở KCB:</span> <span class="text-slate-800 font-medium" x-text="facility?.ten_cskcb || 'BỆNH VIỆN BÌNH ĐỊNH'"></span></div>
+        </div>
+
+        <div>
+          <label class="label-title text-slate-800 font-semibold">Họ tên & Chức danh Bác sĩ khi ký phiếu <span class="text-red-500">*</span>:</label>
+          <input type="text" x-model="profileForm.full_name" placeholder="Ví dụ: BSCKI. Nguyễn Văn A..." class="input-box font-medium text-slate-800" />
+          <p class="text-[11px] text-slate-500 mt-1">Tên này sẽ tự động điền vào trường Bác sĩ khám ở các chuyên khoa bạn phụ trách khi tạo hoặc sửa kết quả.</p>
+        </div>
+
+        <div>
+          <label class="label-title font-semibold mb-1">Các vai trò / chuyên khoa được phân quyền:</label>
+          <div class="flex flex-wrap gap-1 mt-1">
+            <template x-for="r in (currentUser?.role || '').split(',')" :key="r">
+              <span class="px-2 py-0.5 rounded bg-sky-50 text-sky-800 font-mono text-[11px] font-bold border border-sky-200" x-text="r.trim()"></span>
+            </template>
+          </div>
+        </div>
+
+        <div class="pt-2">
+          <button type="button" @click="handleUpdateProfile()" :disabled="profileLoading" class="w-full py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-2">
+            <span x-text="profileLoading ? 'Đang lưu...' : 'Lưu thông tin & Chức danh ký'"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB 3: ĐỔI MẬT KHẨU (CHANGE PASSWORD) -->
       <div x-show="userSettingsTab === 'password'" class="space-y-3 text-xs">
         <div>
           <label class="label-title">Mật khẩu hiện tại <span class="text-red-500">*</span>:</label>
@@ -3454,25 +3854,6 @@
           <button type="button" @click="handleChangePassword()" :disabled="pwLoading" class="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-2">
             <span x-text="pwLoading ? 'Đang cập nhật...' : 'Cập nhật mật khẩu mới'"></span>
           </button>
-        </div>
-      </div>
-
-      <!-- TAB 3: THÔNG TIN TÀI KHOẢN & VAI TRÒ -->
-      <div x-show="userSettingsTab === 'info'" class="space-y-3 text-xs">
-        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
-          <div class="flex justify-between"><span class="text-slate-500">Tên đăng nhập:</span> <strong class="text-slate-800 font-mono" x-text="currentUser?.username"></strong></div>
-          <div class="flex justify-between"><span class="text-slate-500">Họ và tên:</span> <strong class="text-slate-800" x-text="currentUser?.full_name"></strong></div>
-          <div class="flex justify-between"><span class="text-slate-500">Mã cơ sở KCB:</span> <span class="text-slate-800 font-mono" x-text="facility?.ma_cskcb || '52208'"></span></div>
-          <div class="flex justify-between"><span class="text-slate-500">Đơn vị:</span> <span class="text-slate-800 font-medium" x-text="facility?.ten_cskcb || 'BỆNH VIỆN BÌNH ĐỊNH'"></span></div>
-        </div>
-
-        <div>
-          <label class="label-title font-semibold mb-1">Các vai trò / chuyên khoa được phân quyền:</label>
-          <div class="flex flex-wrap gap-1 mt-1">
-            <template x-for="r in (currentUser?.role || '').split(',')" :key="r">
-              <span class="px-2 py-1 rounded bg-sky-50 text-sky-800 font-mono text-[11px] font-bold border border-sky-200" x-text="r.trim()"></span>
-            </template>
-          </div>
         </div>
       </div>
 
@@ -3535,3 +3916,4 @@
   <script src="/static/js/app.js"></script>
 </body>
 </html>
+

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
   <title>Hệ thống Khám Sức Khỏe</title>
 
   <!-- TAILWINDCSS & ALPINE.JS -->
@@ -21,10 +22,13 @@
   <!-- JSBARCODE (BARCODE CODE128 OFFLINE) -->
   <script src="/static/js/JsBarcode.all.min.js"></script>
 
+  <!-- DANH MỤC PHÂN LOẠI SỨC KHỎE (TỰ ĐỘNG XUẤT TỪ ASSET/PHAN_LOAI.XLSX) -->
+  <script src="/static/js/phan_loai_config.js"></script>
+
   <!-- CUSTOM STYLESHEET (DESIGN SYSTEM SPEC - design.md) -->
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body class="bg-[#F4F6F8] text-[#2C3E50] min-h-screen text-[13.5px]" x-data="kskApp()" x-init="initApp()">
+<body class="bg-[#F4F6F8] text-[#2C3E50] min-h-screen text-[13.5px]" :class="getBodyClasses()" x-data="kskApp()" x-init="initApp()">
 
   <!-- ===================================================================== -->
   <!-- THÔNG BÁO TOAST - VỊ TRÍ GÓC DƯỚI CÙNG BÊN PHẢI THEO DESIGN.MD       -->
@@ -147,15 +151,35 @@
 
           <div class="h-6 w-px bg-[#E2E8F0] mx-0.5"></div>
 
-          <!-- User Avatar & Đăng xuất -->
-          <div class="flex items-center gap-2">
-            <div class="w-8 h-8 rounded-full bg-[#3498DB]/15 text-[#3498DB] font-bold text-xs flex items-center justify-center border border-[#3498DB]/30" :title="currentUser?.full_name">
-              <span x-text="(currentUser?.full_name || 'U').charAt(0)"></span>
-            </div>
-            <div class="text-right hidden sm:block">
-              <div class="font-semibold text-[#2C3E50] text-xs truncate max-w-[110px]" x-text="currentUser?.full_name"></div>
-              <div class="text-[10px] text-[#7F8C8D] font-mono truncate max-w-[110px]" x-text="currentUser?.role"></div>
-            </div>
+          <!-- User Avatar, Cài đặt cá nhân & Đăng xuất -->
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <!-- Nút bấm vào Avatar/Tên mở Cài đặt cá nhân -->
+            <button
+              type="button"
+              @click="openUserSettingsModal()"
+              class="flex items-center gap-2 p-1 pl-1.5 pr-2 rounded-xl hover:bg-[#F4F6F8] border border-transparent hover:border-[#E2E8F0] transition-colors text-left"
+              title="Cài đặt cá nhân & tài khoản (Đổi mật khẩu, Giao diện, Chế độ khám...)"
+            >
+              <div class="w-8 h-8 rounded-full bg-[#3498DB]/15 text-[#3498DB] font-bold text-xs flex items-center justify-center border border-[#3498DB]/30 shadow-2xs">
+                <span x-text="(currentUser?.full_name || 'U').charAt(0)"></span>
+              </div>
+              <div class="text-left hidden sm:block">
+                <div class="font-semibold text-[#2C3E50] text-xs truncate max-w-[110px]" x-text="currentUser?.full_name"></div>
+                <div class="text-[10px] text-[#7F8C8D] font-mono truncate max-w-[110px]" x-text="currentUser?.role"></div>
+              </div>
+              <svg class="w-3.5 h-3.5 text-[#7F8C8D] hidden sm:inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+
+            <!-- Nút icon Cài đặt nhanh -->
+            <button
+              type="button"
+              @click="openUserSettingsModal()"
+              class="p-1.5 text-[#7F8C8D] hover:text-[#3498DB] rounded-lg hover:bg-[#F4F6F8] transition-colors"
+              title="Cài đặt cá nhân"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </button>
+
             <button type="button" @click="logout()" class="p-1.5 text-[#7F8C8D] hover:text-[#E74C3C] rounded-lg hover:bg-[#F4F6F8] transition-colors" title="Đăng xuất">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
             </button>

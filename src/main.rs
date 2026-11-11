@@ -113,6 +113,8 @@ async fn main() {
         // Auth & Quản lý tài khoản (Multi-Role)
         .route("/api/login", post(login_handler))
         .route("/api/me", get(me_handler))
+        .route("/api/me/change-password", post(change_my_password_handler))
+        .route("/api/me/profile", put(update_my_profile_handler))
         .route("/api/users", get(list_users_handler).post(create_user_handler))
         .route("/api/users/:id", put(update_user_handler))
         .route("/api/users/:id/toggle-lock", post(toggle_lock_user_handler))

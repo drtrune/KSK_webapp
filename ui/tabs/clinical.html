@@ -107,15 +107,64 @@
       </button>
     </div>
 
-    <!-- Cụm chọn Chế độ nhập liệu bên phải -->
-    <div class="flex items-center gap-1.5 shrink-0 ml-auto border-l border-slate-200 pl-3">
-      <span class="text-[11px] text-slate-500 hidden md:inline">Chế độ:</span>
-      <select x-model="clinicalInputMode" @change="saveUserPreferences()" class="px-2 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border-none cursor-pointer focus:ring-1 focus:ring-sky-500">
-        <option value="focus">⚡ Khám nhanh (Focus)</option>
-        <option value="minimal">📋 Tối thiểu (Phiếu giấy)</option>
-        <option value="full">📑 Chi tiết (Danh mục)</option>
-      </select>
+    <!-- Cụm chọn Chế độ nhập liệu bên phải (Segmented Control 3 nút) -->
+    <div class="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0 ml-auto">
+      <button
+        type="button"
+        @click="setClinicalInputMode('focus')"
+        class="px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 cursor-pointer"
+        :class="clinicalInputMode === 'focus' ? 'bg-white text-sky-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'"
+        title="Khám nhanh (Focus Mode - Tự động đo & ghi nhận nhanh bất thường)"
+      >
+        <span>⚡ Khám nhanh</span>
+      </button>
+      <button
+        type="button"
+        @click="setClinicalInputMode('minimal')"
+        class="px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 cursor-pointer"
+        :class="clinicalInputMode === 'minimal' ? 'bg-white text-sky-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'"
+        title="Tối thiểu (Minimal Mode - Phiếu giấy truyền thống QĐ 1613/BYT)"
+      >
+        <span>📋 Phiếu giấy</span>
+      </button>
+      <button
+        type="button"
+        @click="setClinicalInputMode('full')"
+        class="px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 cursor-pointer"
+        :class="clinicalInputMode === 'full' ? 'bg-white text-sky-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'"
+        title="Chi tiết (Full Mode - Toàn bộ cây danh mục chuyên khoa & bệnh tật)"
+      >
+        <span>📑 Chi tiết</span>
+      </button>
     </div>
+  </div>
+
+  <!-- THANH PHÂN KHOA CON NỘI KHOA (SUB-TABS KHI KHÁM NỘI KHOA Ở CHẾ ĐỘ FOCUS HOẶC FULL) -->
+  <div x-show="(clinicalInputMode === 'focus' || clinicalInputMode === 'full') && clinicalSubTab === 'noi'" class="bg-white/80 border border-slate-200 shadow-2xs rounded-xl p-1.5 flex items-center gap-1 overflow-x-auto no-print" x-cloak>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_TIM_MACH'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_TIM_MACH' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Tim mạch <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_TUAN_HOAN_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_HO_HAP'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_HO_HAP' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Hô hấp <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_HO_HAP_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_TIEU_HOA'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_TIEU_HOA' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Tiêu hóa <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_TIEU_HOA_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_TIET_NIEU_SD'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_TIET_NIEU_SD' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Tiết niệu - Sinh dục <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_THAN_TIETNIEU_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_NOITIET'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_NOITIET' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Nội tiết <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_NOI_TIET_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_CO_XUONG_KHOP'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_CO_XUONG_KHOP' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Cơ xương khớp <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_CO_XUONG_KHOP_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_THAN_KINH'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_THAN_KINH' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Thần kinh <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_THAN_KINH_PL || '1') + ')'"></span>
+    </button>
+    <button type="button" @click="activeInternalSubTab = 'CK_NOI_TAM_THAN'; syncClinicalToForm()" :class="activeInternalSubTab === 'CK_NOI_TAM_THAN' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-2.5 py-1 rounded-lg text-xs transition-colors shrink-0">
+      Tâm thần <span class="text-[10px] ml-0.5 opacity-80" x-text="'(L' + (form.NOI_KHOA_TAM_THAN_PL || '1') + ')'"></span>
+    </button>
   </div>
 
 
@@ -485,13 +534,13 @@
     <div x-show="clinicalInputMode === 'focus'" class="space-y-4" x-cloak>
       
       <!-- BẢNG ĐO THỊ LỰC TỰ ĐỘNG (CHỈ HIỂN THỊ Ở CHUYÊN KHOA MẮT HOẶC XEM TẤT CẢ) -->
-      <div x-show="clinicalSubTab === 'mat' || clinicalSubTab === 'all'" class="bg-blue-50/70 rounded-xl shadow-xs border border-blue-200 p-4 space-y-3">
+      <div x-show="clinicalSubTab === 'mat' || clinicalSubTab === 'all' || getCurrentRenderSpecId() === 'CK_MAT'" class="bg-blue-50/70 rounded-xl shadow-xs border border-blue-200 p-4 space-y-3">
         <div class="flex items-center justify-between border-b border-blue-200/80 pb-2.5">
           <h3 class="text-xs font-bold uppercase tracking-wider text-blue-900 flex items-center gap-2">
             <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
             <span>Bảng đo Thị lực & Phân loại tự động</span>
           </h3>
-          <span class="text-[11px] font-bold px-2 py-0.5 rounded-full" :class="focusVision.score === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'" x-text="'Loại ' + focusVision.score"></span>
+          <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-md shadow-xs" :class="'score-' + visionState.baseVisionScore" x-text="'Loại ' + visionState.baseVisionScore"></span>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
           <!-- Mắt phải -->
@@ -500,11 +549,11 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="text-[11px] text-slate-500">Không kính (/10):</label>
-                <input type="number" min="0" max="10" step="1" x-model="form.KHONG_KINH_MAT_PHAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
+                <input type="number" min="0" max="10" step="1" x-model="visionState.rightAcuity" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
               </div>
               <div>
                 <label class="text-[11px] text-slate-500">Có kính (/10):</label>
-                <input type="number" min="0" max="10" step="1" x-model="form.CO_KINH_MAT_PHAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center" placeholder="Trống nếu không đeo" />
+                <input type="number" min="0" max="10" step="1" x-model="visionState.rightGlass" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center" placeholder="Đeo kính" />
               </div>
             </div>
           </div>
@@ -514,11 +563,11 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="text-[11px] text-slate-500">Không kính (/10):</label>
-                <input type="number" min="0" max="10" step="1" x-model="form.KHONG_KINH_MAT_TRAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
+                <input type="number" min="0" max="10" step="1" x-model="visionState.leftAcuity" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
               </div>
               <div>
                 <label class="text-[11px] text-slate-500">Có kính (/10):</label>
-                <input type="number" min="0" max="10" step="1" x-model="form.CO_KINH_MAT_TRAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center" placeholder="Trống nếu không đeo" />
+                <input type="number" min="0" max="10" step="1" x-model="visionState.leftGlass" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center" placeholder="Đeo kính" />
               </div>
             </div>
           </div>
@@ -526,13 +575,13 @@
       </div>
 
       <!-- BẢNG ĐO SỨC NGHE TỰ ĐỘNG (CHỈ HIỂN THỊ Ở TMH HOẶC XEM TẤT CẢ) -->
-      <div x-show="clinicalSubTab === 'tmh' || clinicalSubTab === 'all'" class="bg-violet-50/70 rounded-xl shadow-xs border border-violet-200 p-4 space-y-3">
+      <div x-show="clinicalSubTab === 'tmh' || clinicalSubTab === 'all' || getCurrentRenderSpecId() === 'CK_TMH'" class="bg-violet-50/70 rounded-xl shadow-xs border border-violet-200 p-4 space-y-3">
         <div class="flex items-center justify-between border-b border-violet-200/80 pb-2.5">
           <h3 class="text-xs font-bold uppercase tracking-wider text-violet-900 flex items-center gap-2">
             <svg class="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
             <span>Bảng đo Thính lực & Phân loại tự động</span>
           </h3>
-          <span class="text-[11px] font-bold px-2 py-0.5 rounded-full" :class="focusHearing.score === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'" x-text="'Loại ' + focusHearing.score"></span>
+          <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-md shadow-xs" :class="'score-' + hearingState.voice" x-text="'Loại ' + hearingState.voice"></span>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
           <!-- Tai trái -->
@@ -541,11 +590,11 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="text-[11px] text-slate-500">Nói thường (m):</label>
-                <input type="number" min="0" max="10" step="0.5" x-model="form.TAI_TRAI_NOI_THUONG" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
+                <input type="number" min="0" max="10" step="0.5" x-model="hearingState.leftNormal" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
               </div>
               <div>
                 <label class="text-[11px] text-slate-500">Nói thầm (m):</label>
-                <input type="number" min="0" max="5" step="0.5" x-model="form.TAI_TRAI_NOI_THAM" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
+                <input type="number" min="0" max="5" step="0.5" x-model="hearingState.leftWhisper" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
               </div>
             </div>
           </div>
@@ -555,11 +604,11 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="text-[11px] text-slate-500">Nói thường (m):</label>
-                <input type="number" min="0" max="10" step="0.5" x-model="form.TAI_PHAI_NOI_THUONG" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
+                <input type="number" min="0" max="10" step="0.5" x-model="hearingState.rightNormal" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
               </div>
               <div>
                 <label class="text-[11px] text-slate-500">Nói thầm (m):</label>
-                <input type="number" min="0" max="5" step="0.5" x-model="form.TAI_PHAI_NOI_THAM" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
+                <input type="number" min="0" max="5" step="0.5" x-model="hearingState.rightWhisper" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
               </div>
             </div>
           </div>
@@ -572,7 +621,7 @@
           <div>
             <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800 flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-              <span>Ghi nhận bệnh tật & Bất thường (Khám nhanh)</span>
+              <span>Ghi nhận bệnh tật & Bất thường — <span class="text-sky-700" x-text="clinicalSubTab === 'noi' ? ('Nội khoa › ' + (getCurrentRenderSpec()?.name || 'Tim mạch')) : (clinicalSubTab === 'all' ? 'Tất cả chuyên khoa' : (getCurrentRenderSpec()?.name || getClinicalSubTabTitle(clinicalSubTab)))"></span></span>
             </h3>
             <p class="text-xs text-slate-500 mt-0.5">Tìm nhanh tiêu chuẩn hoặc bệnh tật Loại 2 - Loại 5 để ghi nhận cho chuyên khoa hiện tại.</p>
           </div>
@@ -708,7 +757,7 @@
           </div>
           <button
             type="button"
-            @click="syncFocusToFormFields()"
+            @click="syncClinicalToForm(); handleSave();"
             class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white shadow-xs border border-slate-300 hover:bg-slate-50 text-slate-800 transition-colors"
           >
             Đồng bộ vào Form & Lưu
@@ -726,25 +775,27 @@
     <!-- ============================================================== -->
     <div x-show="clinicalInputMode === 'full'" class="space-y-4" x-cloak>
       <div class="bg-white rounded-xl shadow-xs border border-slate-200 p-5 space-y-4">
+        
+        <!-- HEADER CHUYÊN KHOA & NÚT MỞ/THU GỌN -->
         <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
           <div>
             <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800 flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
-              <span>Cây danh mục Bệnh tật & Tiêu chuẩn phân loại chi tiết</span>
+              <span>Chuyên khoa: <span class="text-sky-700" x-text="clinicalSubTab === 'noi' ? ('Nội khoa › ' + (getCurrentRenderSpec()?.name || 'Tim mạch')) : (clinicalSubTab === 'all' ? 'Tất cả chuyên khoa' : (getCurrentRenderSpec()?.name || getClinicalSubTabTitle(clinicalSubTab)))"></span></span>
             </h3>
-            <p class="text-xs text-slate-500 mt-0.5">Duyệt và chọn tiêu chuẩn phân loại chi tiết theo từng chuyên khoa và mục bệnh tật.</p>
+            <p class="text-xs text-slate-500 mt-0.5">Kết luận tự động tổng hợp từ các tiêu chuẩn đã chọn. Khi tất cả Loại 1 → <b>Bình thường</b>.</p>
           </div>
           <div class="flex items-center gap-2">
             <button
               type="button"
-              @click="expandAllFullTree = true"
+              @click="expandAllDiseases()"
               class="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors"
             >
               Mở tất cả
             </button>
             <button
               type="button"
-              @click="expandAllFullTree = false"
+              @click="collapseAllDiseases()"
               class="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors"
             >
               Thu gọn tất cả
@@ -752,67 +803,259 @@
           </div>
         </div>
 
-        <!-- DANH SÁCH BỆNH TẬT CỦA CHUYÊN KHOA ĐANG CHỌN -->
+        <!-- BẢNG ĐO THỊ LỰC (KHI Ở MẮT HOẶC CÓ BT_MAT_THI_LUC) -->
+        <div x-show="clinicalSubTab === 'mat' || clinicalSubTab === 'all' || getCurrentRenderSpecId() === 'CK_MAT'" class="bg-blue-50/70 rounded-xl shadow-xs border border-blue-200 p-4 space-y-3">
+          <div class="flex items-center justify-between border-b border-blue-200/80 pb-2.5">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-blue-900 flex items-center gap-2">
+              <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              <span>Bảng đo Thị lực & Phân loại tự động</span>
+            </h3>
+            <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-md shadow-xs score-1" :class="'score-' + visionState.baseVisionScore" x-text="'Loại ' + visionState.baseVisionScore"></span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div class="bg-white p-3 rounded-lg border border-blue-100 space-y-2">
+              <div class="font-semibold text-slate-700">Mắt phải (MP)</div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[11px] text-slate-500">Không kính (/10):</label>
+                  <input type="number" min="0" max="10" step="1" x-model="visionState.rightAcuity" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
+                </div>
+                <div>
+                  <label class="text-[11px] text-slate-500">Có kính (/10):</label>
+                  <input type="number" min="0" max="10" step="1" x-model="visionState.rightGlass" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center" placeholder="Đeo kính" />
+                </div>
+              </div>
+            </div>
+            <div class="bg-white p-3 rounded-lg border border-blue-100 space-y-2">
+              <div class="font-semibold text-slate-700">Mắt trái (MT)</div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[11px] text-slate-500">Không kính (/10):</label>
+                  <input type="number" min="0" max="10" step="1" x-model="visionState.leftAcuity" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
+                </div>
+                <div>
+                  <label class="text-[11px] text-slate-500">Có kính (/10):</label>
+                  <input type="number" min="0" max="10" step="1" x-model="visionState.leftGlass" @input="recalcVisionScore()" class="input-box text-xs py-1 text-center" placeholder="Đeo kính" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BẢNG ĐO THÍNH LỰC (KHI Ở TMH HOẶC CÓ BT_TMH_TAI_TRONG) -->
+        <div x-show="clinicalSubTab === 'tmh' || clinicalSubTab === 'all' || getCurrentRenderSpecId() === 'CK_TMH'" class="bg-violet-50/70 rounded-xl shadow-xs border border-violet-200 p-4 space-y-3">
+          <div class="flex items-center justify-between border-b border-violet-200/80 pb-2.5">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-violet-900 flex items-center gap-2">
+              <svg class="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
+              <span>Bảng đo Sức nghe & Phân loại tự động</span>
+            </h3>
+            <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-md shadow-xs score-1" :class="'score-' + hearingState.voice" x-text="'Loại ' + hearingState.voice"></span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div class="bg-white p-3 rounded-lg border border-violet-100 space-y-2">
+              <div class="font-semibold text-slate-700">Tai trái (m)</div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[11px] text-slate-500">Nói thường (m):</label>
+                  <input type="number" min="0" max="10" step="0.5" x-model="hearingState.leftNormal" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
+                </div>
+                <div>
+                  <label class="text-[11px] text-slate-500">Nói thầm (m):</label>
+                  <input type="number" min="0" max="5" step="0.5" x-model="hearingState.leftWhisper" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
+                </div>
+              </div>
+            </div>
+            <div class="bg-white p-3 rounded-lg border border-violet-100 space-y-2">
+              <div class="font-semibold text-slate-700">Tai phải (m)</div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[11px] text-slate-500">Nói thường (m):</label>
+                  <input type="number" min="0" max="10" step="0.5" x-model="hearingState.rightNormal" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
+                </div>
+                <div>
+                  <label class="text-[11px] text-slate-500">Nói thầm (m):</label>
+                  <input type="number" min="0" max="5" step="0.5" x-model="hearingState.rightWhisper" @input="recalcHearingScore()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DANH SÁCH BỆNH TẬT CỦA PHÂN KHOA ĐANG CHỌN -->
         <div class="space-y-3">
           <template x-for="disease in getDiseasesForCurrentTab()" :key="disease.id">
-            <div class="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden" x-data="{ expanded: false }">
-              <button
-                type="button"
-                @click="expanded = !expanded"
-                class="w-full flex items-center justify-between px-4 py-3 bg-slate-50/80 hover:bg-sky-50/60 transition-colors text-left"
-              >
-                <div class="flex-1 min-w-0 pr-3">
-                  <div class="text-xs font-bold text-slate-800" x-text="disease.name"></div>
-                  <div class="text-[11px] text-slate-500 truncate" x-text="getSelectedStandardName(disease.id) || 'Mặc định: Bình thường (Loại 1)'"></div>
-                </div>
-                <div class="flex items-center gap-2 shrink-0">
-                  <span
-                    class="text-[10px] font-bold px-2 py-0.5 rounded-full shadow-2xs"
-                    :class="getDiseaseScore(disease.id) === 1 ? 'bg-emerald-100 text-emerald-800' : (getDiseaseScore(disease.id) === 2 ? 'bg-blue-100 text-blue-800' : (getDiseaseScore(disease.id) === 3 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'))"
-                    x-text="'Loại ' + getDiseaseScore(disease.id)"
-                  ></span>
-                  <svg
-                    class="w-4 h-4 text-slate-400 transition-transform duration-200"
-                    :class="expanded || expandAllFullTree ? 'rotate-180' : ''"
-                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                  </svg>
-                </div>
-              </button>
-
-              <div x-show="expanded || expandAllFullTree" class="p-3 border-t border-slate-100 space-y-1 bg-white">
-                <template x-for="st in getStandardsForDisease(disease.id)" :key="st.id">
-                  <label
-                    class="flex items-start gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-slate-50 text-xs border transition-colors"
-                    :class="isStandardSelected(disease.id, st.id) ? 'bg-sky-50/70 border-sky-200' : 'border-transparent'"
-                  >
-                    <input
-                      type="radio"
-                      :name="'disease_' + disease.id"
-                      :value="st.id"
-                      :checked="isStandardSelected(disease.id, st.id)"
-                      @change="selectStandard(disease.id, st)"
-                      class="mt-0.5 text-sky-600 focus:ring-sky-500"
-                    />
-                    <div class="flex-1 min-w-0">
-                      <span class="font-medium text-slate-800" x-text="st.name"></span>
+            <div>
+              <!-- TRƯỜNG HỢP: BỆNH TỰ ĐỘNG THỊ LỰC -->
+              <div x-show="disease.id === 'BT_MAT_THI_LUC'" class="bg-white rounded-lg shadow-sm border border-slate-200 mb-3 overflow-hidden">
+                <div class="px-4 py-3 bg-gradient-to-r from-blue-50 to-white border-l-4 border-blue-500 flex items-center justify-between">
+                  <div>
+                    <h4 class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                      <span x-text="disease.name"></span>
+                      <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700 font-semibold uppercase">Tự động</span>
+                    </h4>
+                    <div class="text-[11.5px] text-slate-600 mt-1">
+                      Thị lực: MP <b x-text="(visionState.rightAcuity || '10') + '/10'"></b> — MT <b x-text="(visionState.leftAcuity || '10') + '/10'"></b>
                     </div>
+                  </div>
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-md shadow-xs" :class="'score-' + visionState.baseVisionScore" x-text="'Loại ' + visionState.baseVisionScore"></span>
+                </div>
+              </div>
+
+              <!-- TRƯỜNG HỢP: BỆNH TỰ ĐỘNG THÍNH LỰC -->
+              <div x-show="disease.id === 'BT_TMH_TAI_TRONG'" class="bg-white rounded-lg shadow-sm border border-slate-200 mb-3 overflow-hidden">
+                <div class="px-4 py-3 bg-gradient-to-r from-violet-50 to-white border-l-4 border-violet-500 flex items-center justify-between">
+                  <div>
+                    <h4 class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span class="w-2 h-2 rounded-full bg-violet-600"></span>
+                      <span x-text="disease.name"></span>
+                      <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-violet-100 text-violet-700 font-semibold uppercase">Tự động</span>
+                    </h4>
+                    <div class="text-[11.5px] text-slate-600 mt-1">
+                      Sức nghe hiện tại: <b x-text="'Loại ' + hearingState.voice"></b>
+                    </div>
+                  </div>
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-md shadow-xs" :class="'score-' + hearingState.voice" x-text="'Loại ' + hearingState.voice"></span>
+                </div>
+              </div>
+
+              <!-- TRƯỜNG HỢP: BỆNH THÔNG THƯỜNG (ACCORDION CARD) -->
+              <div x-show="disease.id !== 'BT_MAT_THI_LUC' && disease.id !== 'BT_TMH_TAI_TRONG'" class="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+                <button
+                  type="button"
+                  @click="toggleDisease(disease.id)"
+                  class="w-full flex items-center justify-between px-4 py-3 bg-slate-50/80 hover:bg-sky-50/60 transition-colors text-left"
+                >
+                  <div class="flex-1 min-w-0 pr-3">
+                    <div class="text-xs font-bold text-slate-800" x-text="disease.name"></div>
+                    <div class="text-[11px] text-slate-500 truncate" x-text="getSelectedStandardName(disease.id) || 'Mặc định: Bình thường (Loại 1)'"></div>
+                  </div>
+                  <div class="flex items-center gap-2 shrink-0">
                     <span
-                      class="text-[10px] font-bold px-2 py-0.5 rounded shrink-0"
-                      :class="st.score === 1 ? 'bg-emerald-100 text-emerald-800' : (st.score === 2 ? 'bg-blue-100 text-blue-800' : (st.score === 3 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'))"
-                      x-text="'Loại ' + st.score"
+                      class="text-[10px] font-bold px-2.5 py-0.5 rounded-md shadow-xs"
+                      :class="'score-' + getDiseaseScore(disease.id)"
+                      x-text="'Loại ' + getDiseaseScore(disease.id)"
                     ></span>
-                  </label>
-                </template>
+                    <svg
+                      class="w-4 h-4 text-slate-400 group-chevron"
+                      :class="(expandedDiseases[disease.id] || expandAllFullTree) ? 'rotated' : ''"
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </div>
+                </button>
+
+                <!-- NỘI DUNG TIÊU CHUẨN KHI MỞ RỘNG -->
+                <div x-show="expandedDiseases[disease.id] || expandAllFullTree" class="p-3 border-t border-slate-100 space-y-1 bg-white">
+                  <template x-for="c in getClassifications(disease.id)" :key="c.id">
+                    <label
+                      class="flex items-start gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-slate-50 text-xs border transition-colors"
+                      :class="selectedClassifications[disease.id] === c.id ? 'bg-sky-50/70 border-sky-300' : 'border-transparent'"
+                    >
+                      <input
+                        type="radio"
+                        :name="'disease_' + disease.id"
+                        :value="c.id"
+                        :checked="selectedClassifications[disease.id] === c.id"
+                        @change="updateSelection(disease.id, c.id)"
+                        class="mt-0.5 text-sky-600 focus:ring-sky-500"
+                      />
+                      <div class="flex-1 min-w-0">
+                        <span class="font-medium text-slate-800" x-text="c.name"></span>
+                        <div x-show="c.refRule" class="text-[10.5px] text-amber-700 italic mt-0.5" x-text="'↳ ' + c.refRule"></div>
+                      </div>
+                      <span
+                        class="text-[10px] font-bold px-2 py-0.5 rounded shrink-0 shadow-2xs"
+                        :class="'score-' + calcClassificationScore(c)"
+                        x-text="'Loại ' + calcClassificationScore(c) + (c.refDiseaseId ? ' *' : '')"
+                      ></span>
+                    </label>
+                  </template>
+                </div>
               </div>
             </div>
           </template>
 
           <div x-show="getDiseasesForCurrentTab().length === 0" class="p-8 text-center text-xs text-slate-400 italic">
-            Chuyên khoa này chưa có danh mục bệnh tật chi tiết.
+            Chuyên khoa này chưa có mục bệnh tật chi tiết trong danh mục.
           </div>
         </div>
+
+        <!-- KHỐI KẾT LUẬN TỰ ĐỘNG CHUYÊN KHOA CHI TIẾT -->
+        <div class="mt-5 pt-4 border-t border-slate-200">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800">
+              Kết luận chuyên khoa: <span class="text-sky-700" x-text="clinicalSubTab === 'noi' ? ('Nội khoa › ' + (getCurrentRenderSpec()?.name || 'Tim mạch')) : (clinicalSubTab === 'all' ? 'Tất cả chuyên khoa' : (getCurrentRenderSpec()?.name || getClinicalSubTabTitle(clinicalSubTab)))"></span>
+            </h4>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold px-3 py-1 rounded-md shadow-xs" :class="'score-' + getMaxScoreForSpecialty(getCurrentRenderSpecId())" x-text="'Loại ' + getMaxScoreForSpecialty(getCurrentRenderSpecId())"></span>
+              <button
+                type="button"
+                @click="openCustomDiseaseModal()"
+                class="px-2.5 py-1 text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg flex items-center gap-1 transition-colors"
+              >
+                + Thêm bệnh khác...
+              </button>
+            </div>
+          </div>
+
+          <!-- KHI TẤT CẢ BÌNH THƯỜNG -->
+          <div x-show="getDiseasesWithScoreAbove(getCurrentRenderSpecId(), 1).length === 0 && (getConclusionExtra(getCurrentRenderSpecId()).manualRows || []).length === 0" class="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-900">
+            <div class="flex items-center gap-2.5">
+              <span class="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0">✓</span>
+              <div>
+                <div class="font-bold">Tất cả các chỉ tiêu đều bình thường</div>
+                <div class="text-[11px] text-emerald-700">Chuyên khoa này đạt tiêu chuẩn: <b>Bình thường (Loại 1)</b></div>
+              </div>
+            </div>
+            <span class="font-bold px-2.5 py-1 rounded bg-emerald-200 text-emerald-900">Loại 1</span>
+          </div>
+
+          <!-- KHI CÓ BỆNH LOẠI > 1 HOẶC NHẬP TAY -->
+          <div x-show="getDiseasesWithScoreAbove(getCurrentRenderSpecId(), 1).length > 0 || (getConclusionExtra(getCurrentRenderSpecId()).manualRows || []).length > 0" class="overflow-hidden border border-slate-200 rounded-xl">
+            <table class="w-full text-left text-xs divide-y divide-slate-200">
+              <thead class="bg-slate-50 text-slate-700 font-semibold">
+                <tr>
+                  <th class="p-2.5">Bệnh tật / Tiêu chuẩn phát hiện</th>
+                  <th class="p-2.5 text-center w-24">Phân loại</th>
+                  <th class="p-2.5 text-right w-24">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white">
+                <template x-for="row in getDiseasesWithScoreAbove(getCurrentRenderSpecId(), 1)" :key="row.disease.id">
+                  <tr class="hover:bg-slate-50">
+                    <td class="p-2.5">
+                      <div class="font-semibold text-slate-800" x-text="row.classification ? row.classification.name : row.disease.name"></div>
+                      <div class="text-[11px] text-slate-500" x-text="row.disease.name"></div>
+                    </td>
+                    <td class="p-2.5 text-center">
+                      <span class="inline-block px-2 py-0.5 rounded text-[11px] font-bold shadow-2xs" :class="'score-' + row.score" x-text="'Loại ' + row.score"></span>
+                    </td>
+                    <td class="p-2.5 text-right text-slate-400 text-[11px]">
+                      Tự động
+                    </td>
+                  </tr>
+                </template>
+                <template x-for="m in (getConclusionExtra(getCurrentRenderSpecId()).manualRows || [])" :key="m.id">
+                  <tr class="hover:bg-amber-50/50 bg-amber-50/20">
+                    <td class="p-2.5">
+                      <div class="font-semibold text-slate-800" x-text="m.name"></div>
+                      <div class="text-[11px] text-amber-700 italic">Nhập ngoài danh mục</div>
+                    </td>
+                    <td class="p-2.5 text-center">
+                      <span class="inline-block px-2 py-0.5 rounded text-[11px] font-bold shadow-2xs" :class="'score-' + m.score" x-text="'Loại ' + m.score"></span>
+                    </td>
+                    <td class="p-2.5 text-right">
+                      <button type="button" @click="removeManualDisease(getCurrentRenderSpecId(), m.id)" class="text-red-500 hover:text-red-700 text-xs font-medium">Xóa</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
 

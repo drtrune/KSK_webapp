@@ -5,56 +5,69 @@
 
 function kskApp() {
   return {
-        // --- CÀI ĐẶT CÁ NHÂN & GIAO DIỆN ---
-        userSettings: {
-          theme: 'light',
-          fontSize: 'normal',
-          defaultInputMode: 'focus',
-          autoNavigateTab: true,
-          soundOnSave: false
-        },
-        showUserSettingsModal: false,
-        changePasswordForm: {
-          old_password: '',
-          new_password: '',
-          confirm_password: ''
-        },
-        changingPassword: false,
+    // --- CÀI ĐẶT CÁ NHÂN & GIAO DIỆN ---
+    userSettings: {
+      theme: 'light', // 'light' | 'dark' | 'system'
+      fontSize: 'normal', // 'normal' | 'large' | 'xlarge'
+      defaultInputMode: 'focus', // 'focus' | 'minimal' | 'full'
+      autoNavigateTab: true,
+      soundOnSave: false
+    },
+    userSettingsTab: 'preferences', // 'preferences' | 'profile' | 'password'
+    showUserSettingsModal: false,
+    profileForm: { full_name: '' },
+    profileLoading: false,
+    pwForm: { old_password: '', new_password: '', confirm_password: '' },
+    pwLoading: false,
 
-        // --- 3 CHẾ ĐỘ KHÁM LÂM SÀNG ---
-        clinicalInputMode: 'focus', // 'focus' | 'minimal' | 'full'
-        clinicalSubTab: 'noi',     // 'noi' | 'ngoai' | 'dalieu' | 'san' | 'mat' | 'tmh' | 'rhm' | 'all'
-        focusVision: {
-          right: '10',
-          left: '10',
-          score: 1
-        },
-        focusHearing: {
-          leftNormal: 5,
-          leftWhisper: 0.5,
-          rightNormal: 5,
-          rightWhisper: 0.5,
-          score: 1
-        },
-        focusRecordedDiseases: [],
-        focusOverallScore: 1,
-        focusConclusionText: 'Tất cả các chuyên khoa Loại 1: Bình thường',
-        showCustomDiseaseModal: false,
-        customDiseaseForm: {
-          name: '',
-          specialtyId: 'noi',
-          score: 2,
-          note: ''
-        },
-        expandAllFullTree: false,
-        selectedCatalogStandards: {},
-        provinceMap: {},
-        wardMap: {},
+    // --- 3 CHẾ ĐỘ KHÁM LÂM SÀNG (FOCUS | MINIMAL | FULL) ---
+    clinicalInputMode: 'focus', // 'focus' | 'minimal' | 'full'
+    clinicalSubTab: 'noi',     // 'noi' | 'ngoai' | 'dalieu' | 'san' | 'mat' | 'tmh' | 'rhm' | 'all'
+    activeInternalSubTab: 'CK_NOI_TIM_MACH', // Sub-tab con của Nội khoa (Tim mạch)
+    
+    // Trạng thái đo thị lực & sức nghe
+    visionState: {
+      rightAcuity: '10',
+      leftAcuity: '10',
+      rightGlass: '',
+      leftGlass: '',
+      baseVisionScore: 1
+    },
+    hearingState: {
+      voice: 1,
+      audiometer: 1,
+      leftNormal: '5',
+      leftWhisper: '0.5',
+      rightNormal: '5',
+      rightWhisper: '0.5'
+    },
+
+    // Bản đồ lưu các phân loại đã chọn: diseaseId -> classificationId
+    selectedClassifications: {},
+    expandedDiseases: {}, // diseaseId -> boolean
+    conclusionExtra: {}, // specialtyId -> { notes: '', manualRows: [] }
+    expandAllFullTree: false,
+
+    // Khám nhanh (Focus Mode)
+    focusRecordedDiseases: [],
+    focusOverallScore: 1,
+    focusConclusionText: 'Tất cả các chuyên khoa Loại 1: Bình thường',
+
+    // Modal nhập bệnh khác ngoài danh mục
+    showCustomDiseaseModal: false,
+    customDiseaseForm: {
+      name: '',
+      specialtyId: 'noi',
+      score: 2,
+      note: ''
+    },
+
+    provinceMap: {},
+    wardMap: {},
 
     token: localStorage.getItem('ksk_token') || '',
     currentUser: null,
     activeTab: 'reception',
-    clinicalSubTab: 'noi', // Tab con chuyên khoa khám lâm sàng (noi, ngoai, dalieu, san, mat, tmh, rhm, all)
     loginForm: { username: '', password: '' },
     loginLoading: false,
 
@@ -299,15 +312,45 @@ function kskApp() {
     tomInstances: {},
 
     async initApp() {
+      this.loadUserPreferences();
+      this.initDefaultClassifications();
+
       if (this.token) {
         await this.loadMe();
         await this.loadCatalogs();
         await this.loadRecordsList();
       }
+
       this.$watch('activeTab', () => {
         this.$nextTick(() => {
           this.syncAllSelects();
         });
+      });
+
+      // Lắng nghe sự kiện phím tắt toàn cục
+      window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+          e.preventDefault();
+          this.handleSave();
+        } else if (e.altKey && e.key === '1') {
+          e.preventDefault();
+          this.clinicalInputMode = 'focus';
+          this.saveUserPreferences();
+          this.toast('Đã chuyển sang chế độ: Khám nhanh (Focus)', 'success');
+        } else if (e.altKey && e.key === '2') {
+          e.preventDefault();
+          this.clinicalInputMode = 'minimal';
+          this.saveUserPreferences();
+          this.toast('Đã chuyển sang chế độ: Tối thiểu (Phiếu giấy)', 'success');
+        } else if (e.altKey && e.key === '3') {
+          e.preventDefault();
+          this.clinicalInputMode = 'full';
+          this.saveUserPreferences();
+          this.toast('Đã chuyển sang chế độ: Chi tiết (Danh mục)', 'success');
+        } else if (e.altKey && (e.key === 'p' || e.key === 'P' || e.code === 'KeyP')) {
+          e.preventDefault();
+          this.printFullRecord();
+        }
       });
     },
 
@@ -657,6 +700,9 @@ function kskApp() {
         if (res.ok) {
           const data = await res.json();
           this.currentUser = data.user;
+          if (this.currentUser) {
+            this.profileForm.full_name = this.currentUser.full_name || '';
+          }
           this.facility = {
             ten_cskcb: data.facility?.ten_cskcb || data.cskcb?.ten_cskcb || 'BỆNH VIỆN BÌNH ĐỊNH',
             ma_cskcb: data.facility?.ma_cskcb || data.cskcb?.ma_cskcb || '52208',
@@ -1069,6 +1115,7 @@ function kskApp() {
           this.updatedBy = rec.updated_by;
           this.updatedAt = rec.updated_at;
           this.toast('Đã lưu hồ sơ thành công! Đã mở quyền In phiếu.');
+          this.playBeep();
           await this.loadRecordsList();
         } else {
           this.toast(data.error || 'Lỗi khi lưu hồ sơ', 'error');
@@ -1160,6 +1207,10 @@ function kskApp() {
       } else {
         this.printBlank();
       }
+    },
+
+    printPhieuKsk() {
+      this.printFullRecord();
     },
 
     // Tải file DOCX (Word)
@@ -1675,14 +1726,18 @@ function kskApp() {
           console.error('Lỗi tạo Barcode:', e);
         }
       }
-    }
+    },
   
     // ===================================================================
-    // MODULE CÀI ĐẶT DÀNH CHO CÁ NHÂN
+    // MODULE CÀI ĐẶT DÀNH CHO CÁ NHÂN & PROFILE
     // ===================================================================
     openUserSettingsModal() {
       this.showUserSettingsModal = true;
-      this.changePasswordForm = { old_password: '', new_password: '', confirm_password: '' };
+      this.userSettingsTab = 'preferences';
+      this.pwForm = { old_password: '', new_password: '', confirm_password: '' };
+      if (this.currentUser) {
+        this.profileForm.full_name = this.currentUser.full_name || '';
+      }
     },
 
     closeUserSettingsModal() {
@@ -1705,9 +1760,19 @@ function kskApp() {
       this.applyUserSettings();
     },
 
+    setClinicalInputMode(mode) {
+      this.clinicalInputMode = mode;
+      this.userSettings.defaultInputMode = mode;
+      this.saveUserPreferences();
+      const labels = { focus: 'Khám nhanh (Focus)', minimal: 'Tối thiểu (Phiếu giấy)', full: 'Chi tiết (Danh mục)' };
+      this.toast(`Đã chuyển sang chế độ: ${labels[mode] || mode}`, 'success');
+    },
+
     saveUserPreferences() {
       try {
-        this.userSettings.defaultInputMode = this.clinicalInputMode;
+        if (this.clinicalInputMode) {
+          this.userSettings.defaultInputMode = this.clinicalInputMode;
+        }
         localStorage.setItem('ksk_user_preferences', JSON.stringify(this.userSettings));
         this.applyUserSettings();
       } catch (e) {
@@ -1716,24 +1781,58 @@ function kskApp() {
     },
 
     applyUserSettings() {
-      // Áp dụng Theme (Sáng / Tối)
       const body = document.body;
+      if (!body) return;
+
+      // Theme
       if (this.userSettings.theme === 'dark') {
+        body.classList.add('dark');
+      } else if (this.userSettings.theme === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         body.classList.add('dark');
       } else {
         body.classList.remove('dark');
       }
 
-      // Áp dụng Cỡ chữ (Tiêu chuẩn / Lớn)
+      // Font size
+      body.classList.remove('font-size-large', 'font-size-xlarge');
       if (this.userSettings.fontSize === 'large') {
         body.classList.add('font-size-large');
-      } else {
-        body.classList.remove('font-size-large');
+      } else if (this.userSettings.fontSize === 'xlarge') {
+        body.classList.add('font-size-xlarge');
       }
     },
 
+    getBodyClasses() {
+      const classes = [];
+      if (this.userSettings.theme === 'dark' || (this.userSettings.theme === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        classes.push('dark');
+      }
+      if (this.userSettings.fontSize === 'large') classes.push('font-size-large');
+      if (this.userSettings.fontSize === 'xlarge') classes.push('font-size-xlarge');
+      return classes.join(' ');
+    },
+
+    playBeep() {
+      if (!this.userSettings.soundOnSave) return;
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // Âm thanh D5 êm tai
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.15);
+      } catch (e) {}
+    },
+
     async handleChangePassword() {
-      const f = this.changePasswordForm;
+      const f = this.pwForm;
       if (!f.old_password || !f.new_password) {
         this.toast('Vui lòng nhập mật khẩu hiện tại và mật khẩu mới!', 'error');
         return;
@@ -1747,7 +1846,7 @@ function kskApp() {
         return;
       }
 
-      this.changingPassword = true;
+      this.pwLoading = true;
       try {
         const token = localStorage.getItem('ksk_token') || sessionStorage.getItem('ksk_token');
         const res = await fetch('/api/me/change-password', {
@@ -1768,99 +1867,301 @@ function kskApp() {
         }
 
         this.toast('Đổi mật khẩu thành công! Vui lòng ghi nhớ mật khẩu mới.', 'success');
+        this.pwForm = { old_password: '', new_password: '', confirm_password: '' };
         this.closeUserSettingsModal();
       } catch (err) {
         this.toast(err.message, 'error');
       } finally {
-        this.changingPassword = false;
+        this.pwLoading = false;
+      }
+    },
+
+    async handleUpdateProfile() {
+      if (!this.profileForm.full_name || !this.profileForm.full_name.trim()) {
+        this.toast('Vui lòng nhập họ tên / chức danh hiển thị!', 'error');
+        return;
+      }
+      this.profileLoading = true;
+      try {
+        const token = localStorage.getItem('ksk_token') || sessionStorage.getItem('ksk_token');
+        const res = await fetch('/api/me/profile', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ full_name: this.profileForm.full_name.trim() })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || data.error || 'Cập nhật thất bại');
+        if (this.currentUser) {
+          this.currentUser.full_name = data.full_name;
+        }
+        this.toast('Cập nhật họ tên & chức danh Bác sĩ ký thành công!', 'success');
+      } catch (err) {
+        this.toast(err.message, 'error');
+      } finally {
+        this.profileLoading = false;
       }
     },
 
     // ===================================================================
-    // PHƯƠNG THỨC 3 CHẾ ĐỘ KHÁM LÂM SÀNG (FOCUS, MINIMAL, FULL)
+    // DANH MỤC PHÂN LOẠI & RULE THAM CHIẾU (PHAN_LOAI_CONFIG)
     // ===================================================================
-    recalcFocusVision() {
-      const r = parseFloat(this.form.KHONG_KINH_MAT_PHAI || this.form.CO_KINH_MAT_PHAI || '10');
-      const l = parseFloat(this.form.KHONG_KINH_MAT_TRAI || this.form.CO_KINH_MAT_TRAI || '10');
-      const minVal = Math.min(isNaN(r) ? 10 : r, isNaN(l) ? 10 : l);
-      let sc = 1;
-      if (minVal >= 9) sc = 1;
-      else if (minVal >= 7) sc = 2;
-      else if (minVal >= 5) sc = 3;
-      else if (minVal >= 2) sc = 4;
-      else sc = 5;
-
-      this.focusVision.score = sc;
-      this.form.MAT_PL = String(sc);
-      this.recalcFocusConclusion();
+    getPlConfig() {
+      return window.PHAN_LOAI_CONFIG || { specialties: [], diseases: [], classifications: [] };
     },
 
-    recalcFocusHearing() {
-      const tn = parseFloat(this.form.TAI_TRAI_NOI_THUONG || '5');
-      const pn = parseFloat(this.form.TAI_PHAI_NOI_THUONG || '5');
-      const minN = Math.min(isNaN(tn) ? 5 : tn, isNaN(pn) ? 5 : pn);
-      let sc = 1;
-      if (minN >= 5) sc = 1;
-      else if (minN >= 4) sc = 2;
-      else if (minN >= 2.5) sc = 3;
-      else if (minN >= 1) sc = 4;
-      else sc = 5;
-
-      this.focusHearing.score = sc;
-      this.form.TMH_PL = String(sc);
-      this.recalcFocusConclusion();
+    getSpecialties() {
+      return this.getPlConfig().specialties || [];
     },
 
+    getSpecialty(id) {
+      return this.getSpecialties().find(s => s.id === id);
+    },
+
+    getChildren(parentId) {
+      return this.getSpecialties().filter(s => s.parentId === parentId);
+    },
+
+    getDiseases(specId) {
+      return (this.getPlConfig().diseases || []).filter(d => d.specialtyId === specId);
+    },
+
+    getClassifications(diseaseId) {
+      return (this.getPlConfig().classifications || []).filter(c => c.diseaseId === diseaseId);
+    },
+
+    calcClassificationScore(c) {
+      if (!c) return 1;
+      if (c.refDiseaseId === 'BT_MAT_THI_LUC') {
+        const vs = this.visionState.baseVisionScore || 1;
+        let delta = 0;
+        if (c.refAdjustment && c.refAdjustment.includes('+1')) delta = 1;
+        else if (c.refAdjustment && c.refAdjustment.includes('+2')) delta = 2;
+        return Math.min(5, Math.max(1, vs + delta));
+      }
+      return parseInt(c.score || '1', 10);
+    },
+
+    initDefaultClassifications() {
+      const diseases = this.getPlConfig().diseases || [];
+      const classifications = this.getPlConfig().classifications || [];
+      for (const d of diseases) {
+        if (!this.selectedClassifications[d.id]) {
+          const cls = classifications.filter(c => c.diseaseId === d.id);
+          const defaultCls = cls.find(c => parseInt(c.score || '1', 10) === 1) || cls[0];
+          if (defaultCls) {
+            this.selectedClassifications[d.id] = defaultCls.id;
+          }
+        }
+      }
+    },
+
+    toggleDisease(diseaseId) {
+      this.expandedDiseases[diseaseId] = !this.expandedDiseases[diseaseId];
+    },
+
+    expandAllDiseases() {
+      this.expandAllFullTree = true;
+      const diseases = this.getPlConfig().diseases || [];
+      for (const d of diseases) {
+        this.expandedDiseases[d.id] = true;
+      }
+    },
+
+    collapseAllDiseases() {
+      this.expandAllFullTree = false;
+      this.expandedDiseases = {};
+    },
+
+    updateSelection(diseaseId, clsId) {
+      this.selectedClassifications[diseaseId] = clsId;
+      this.syncClinicalToForm();
+    },
+
+    recalcVisionScore() {
+      const r = parseFloat(this.visionState.rightAcuity || this.form.KHONG_KINH_MAT_PHAI || '10');
+      const l = parseFloat(this.visionState.leftAcuity || this.form.KHONG_KINH_MAT_TRAI || '10');
+      const rg = parseFloat(this.visionState.rightGlass || this.form.CO_KINH_MAT_PHAI || '');
+      const lg = parseFloat(this.visionState.leftGlass || this.form.CO_KINH_MAT_TRAI || '');
+
+      const bestR = (!isNaN(rg) && rg > 0) ? rg : (isNaN(r) ? 10 : r);
+      const bestL = (!isNaN(lg) && lg > 0) ? lg : (isNaN(l) ? 10 : l);
+      const total = bestR + bestL;
+      const minEye = Math.min(bestR, bestL);
+
+      let sc = 1;
+      let clsId = 'PL_MAT_1';
+      if (total >= 19 && minEye >= 9) {
+        sc = 1; clsId = 'PL_MAT_1';
+      } else if (total >= 16 && minEye >= 6) {
+        sc = 2; clsId = 'PL_MAT_2';
+      } else if (total >= 13 && minEye >= 5) {
+        sc = 3; clsId = 'PL_MAT_3';
+      } else if (total >= 8 && minEye >= 3) {
+        sc = 4; clsId = 'PL_MAT_4';
+      } else {
+        sc = 5; clsId = 'PL_MAT_5';
+      }
+
+      this.visionState.baseVisionScore = sc;
+      this.selectedClassifications['BT_MAT_THI_LUC'] = clsId;
+      this.form.KHAM_MAT_PL = String(sc);
+      this.syncClinicalToForm();
+    },
+
+    recalcHearingScore() {
+      const lt = parseFloat(this.hearingState.leftNormal || this.form.TAI_TRAI_NOI_THUONG || '5');
+      const rt = parseFloat(this.hearingState.rightNormal || this.form.TAI_PHAI_NOI_THUONG || '5');
+      const lw = parseFloat(this.hearingState.leftWhisper || this.form.TAI_TRAI_NOI_THAM || '0.5');
+      const rw = parseFloat(this.hearingState.rightWhisper || this.form.TAI_PHAI_NOI_THAM || '0.5');
+
+      const minNormal = Math.min(isNaN(lt) ? 5 : lt, isNaN(rt) ? 5 : rt);
+      const minWhisper = Math.min(isNaN(lw) ? 0.5 : lw, isNaN(rw) ? 0.5 : rw);
+
+      let sc = 1;
+      let clsId = 'PL_TMH_1';
+      if (minNormal >= 5 && minWhisper >= 0.5) {
+        sc = 1; clsId = 'PL_TMH_1';
+      } else if (minNormal >= 4) {
+        sc = 2; clsId = 'PL_TMH_2';
+      } else if (minNormal >= 2.5) {
+        sc = 3; clsId = 'PL_TMH_3';
+      } else if (minNormal >= 1) {
+        sc = 4; clsId = 'PL_TMH_4';
+      } else {
+        sc = 5; clsId = 'PL_TMH_5';
+      }
+
+      this.hearingState.voice = sc;
+      this.selectedClassifications['BT_TMH_TAI_TRONG'] = clsId;
+      this.form.KHAM_TAI_MUI_HONG_PL = String(sc);
+      this.syncClinicalToForm();
+    },
+
+    getDiseasesWithScoreAbove(specId, minScore = 1) {
+      const diseases = this.getDiseases(specId);
+      const rows = [];
+      for (const d of diseases) {
+        const clsId = this.selectedClassifications[d.id];
+        const classifications = this.getClassifications(d.id);
+        const sel = classifications.find(c => c.id === clsId) || classifications[0];
+        const score = sel ? this.calcClassificationScore(sel) : 1;
+        if (score > minScore) {
+          rows.push({
+            disease: d,
+            classification: sel,
+            score: score,
+            isManual: false
+          });
+        }
+      }
+      return rows;
+    },
+
+    getConclusionExtra(specId) {
+      if (!this.conclusionExtra[specId]) {
+        this.conclusionExtra[specId] = { notes: '', manualRows: [] };
+      }
+      return this.conclusionExtra[specId];
+    },
+
+    getMaxScoreForSpecialty(specId) {
+      const autoRows = this.getDiseasesWithScoreAbove(specId, 1);
+      const extra = this.getConclusionExtra(specId);
+      let maxSc = 1;
+      for (const r of autoRows) {
+        if (r.score > maxSc) maxSc = r.score;
+      }
+      for (const m of (extra.manualRows || [])) {
+        if (m.score > maxSc) maxSc = m.score;
+      }
+      return maxSc;
+    },
+
+    // --- SEARCHABLE DROPDOWN & FOCUS KHÁM NHANH ---
     filterAbnormalOptions(keyword) {
       if (!keyword || keyword.trim().length < 2) return [];
       const kw = keyword.toLowerCase().trim();
-      const results = [];
-      const standards = (this.catalogs && this.catalogs.tieu_chuan) ? this.catalogs.tieu_chuan : [];
+      const currentMatches = [];
+      const otherMatches = [];
+      const classifications = this.getPlConfig().classifications || [];
+      const diseases = this.getPlConfig().diseases || [];
+      const specialties = this.getPlConfig().specialties || [];
+      const currentSpecId = this.getCurrentRenderSpecId();
 
-      for (const st of standards) {
-        const name = (st.name || st.ten || '').toLowerCase();
+      for (const c of classifications) {
+        const score = this.calcClassificationScore(c);
+        if (score <= 1) continue; // Chỉ tìm tiêu chuẩn bất thường Loại > 1
+
+        const name = (c.name || '').toLowerCase();
         if (name.includes(kw)) {
-          results.push({
-            id: st.id || st.code,
-            name: st.name || st.ten,
-            score: parseInt(st.score || st.phan_loai || '2', 10),
-            specialtyName: st.chuyen_khoa || 'Chuyên khoa',
-            diseaseName: st.benh_tat || ''
-          });
-          if (results.length >= 15) break;
+          const d = diseases.find(item => item.id === c.diseaseId);
+          const s = d ? specialties.find(item => item.id === d.specialtyId) : null;
+          const entry = {
+            id: c.id,
+            name: c.name,
+            score: score,
+            diseaseId: c.diseaseId,
+            diseaseName: d ? d.name : '',
+            specialtyId: d ? d.specialtyId : '',
+            specialtyName: s ? s.name : ''
+          };
+          if (d && d.specialtyId === currentSpecId) {
+            currentMatches.push(entry);
+          } else {
+            otherMatches.push(entry);
+          }
+          if (currentMatches.length + otherMatches.length >= 30) break;
         }
       }
-      return results;
+      return [...currentMatches, ...otherMatches].slice(0, 20);
     },
 
     addFocusDisease(item) {
       if (!item) return;
-      const exists = this.focusRecordedDiseases.some(d => d.id === item.id);
-      if (exists) {
-        this.toast('Tiêu chuẩn / bệnh này đã được ghi nhận!', 'warning');
-        return;
+      if (item.diseaseId) {
+        this.selectedClassifications[item.diseaseId] = item.id;
       }
-      this.focusRecordedDiseases.push({
-        id: item.id,
-        name: item.name,
-        score: item.score || 2,
-        specialtyName: item.specialtyName,
-        diseaseName: item.diseaseName
-      });
-      this.recalcFocusConclusion();
+      const exists = this.focusRecordedDiseases.some(d => d.id === item.id);
+      if (!exists) {
+        this.focusRecordedDiseases.push({
+          id: item.id,
+          diseaseId: item.diseaseId,
+          specialtyId: item.specialtyId,
+          name: item.name,
+          score: item.score || 2,
+          specialtyName: item.specialtyName,
+          diseaseName: item.diseaseName
+        });
+      }
+      this.syncClinicalToForm();
       this.toast('Đã ghi nhận: ' + item.name, 'success');
     },
 
     removeFocusRecordedRow(idx) {
-      this.focusRecordedDiseases.splice(idx, 1);
-      this.recalcFocusConclusion();
+      const removed = this.focusRecordedDiseases.splice(idx, 1)[0];
+      if (removed && removed.diseaseId) {
+        // Trả về tiêu chuẩn mặc định loại 1
+        const cls = this.getClassifications(removed.diseaseId);
+        const def = cls.find(c => parseInt(c.score || '1', 10) === 1) || cls[0];
+        if (def) {
+          this.selectedClassifications[removed.diseaseId] = def.id;
+        }
+      }
+      this.syncClinicalToForm();
+    },
+
+    recalcFocusConclusion() {
+      this.syncClinicalToForm();
     },
 
     openCustomDiseaseModal() {
       this.showCustomDiseaseModal = true;
       this.customDiseaseForm = {
         name: '',
-        specialtyId: this.clinicalSubTab === 'all' ? 'noi' : this.clinicalSubTab,
+        specialtyId: this.clinicalSubTab === 'noi' ? (this.activeInternalSubTab || 'CK_NOI_TIM_MACH') : (this.clinicalSubTab === 'san' ? 'CK_PHU_SAN' : this.getCurrentRenderSpecId()),
         score: 2,
         note: ''
       };
@@ -1872,152 +2173,208 @@ function kskApp() {
         this.toast('Vui lòng nhập tên bệnh tật / phát hiện bất thường!', 'error');
         return;
       }
-      const specialtyMap = {
+      const specId = f.specialtyId || this.getCurrentRenderSpecId();
+      const extra = this.getConclusionExtra(specId);
+      const row = {
+        id: 'MANUAL_' + Date.now(),
+        name: f.name.trim(),
+        score: parseInt(f.score, 10),
+        note: f.note || ''
+      };
+      extra.manualRows.push(row);
+
+      // Thêm vào focusRecordedDiseases
+      const spec = this.getSpecialty(specId);
+      this.focusRecordedDiseases.push({
+        id: row.id,
+        name: row.name,
+        score: row.score,
+        specialtyName: spec ? spec.name : 'Chuyên khoa',
+        diseaseName: 'Ghi nhận ngoài danh mục'
+      });
+
+      this.showCustomDiseaseModal = false;
+      this.syncClinicalToForm();
+      this.toast('Đã thêm bệnh: ' + row.name, 'success');
+    },
+
+    removeManualDisease(specId, manualId) {
+      const extra = this.getConclusionExtra(specId);
+      extra.manualRows = extra.manualRows.filter(m => m.id !== manualId);
+      this.focusRecordedDiseases = this.focusRecordedDiseases.filter(d => d.id !== manualId);
+      this.syncClinicalToForm();
+    },
+
+    getClinicalSubTabTitle(subTab) {
+      const map = {
         noi: '1. Nội khoa',
         ngoai: '2. Ngoại khoa',
         dalieu: '3. Da liễu',
         san: '4. Sản phụ khoa',
         mat: '5. Mắt',
         tmh: '6. Tai - Mũi - Họng',
-        rhm: '7. Răng - Hàm - Mặt'
+        rhm: '7. Răng - Hàm - Mặt',
+        all: 'Tất cả chuyên khoa'
       };
-      this.focusRecordedDiseases.push({
-        id: 'CUSTOM_' + Date.now(),
-        name: f.name.trim(),
-        score: parseInt(f.score, 10),
-        specialtyName: specialtyMap[f.specialtyId] || 'Chuyên khoa',
-        diseaseName: 'Ghi nhận ngoài danh mục'
-      });
-      this.showCustomDiseaseModal = false;
-      this.recalcFocusConclusion();
-      this.toast('Đã thêm bệnh: ' + f.name.trim(), 'success');
+      return map[subTab] || 'Khám lâm sàng';
     },
 
-    recalcFocusConclusion() {
-      let maxScore = 1;
-      if (this.focusVision.score > maxScore) maxScore = this.focusVision.score;
-      if (this.focusHearing.score > maxScore) maxScore = this.focusHearing.score;
+    // ===================================================================
+    // ĐỒNG BỘ 2 CHIỀU VÀO 121 CHỈ TIÊU (FORM.*)
+    // ===================================================================
+    syncClinicalToForm() {
+      // 1. Phân khoa Nội khoa (khớp chính xác 8 phân khoa trong danh mục)
+      const noiMap = [
+        { id: 'CK_NOI_TIM_MACH', field: 'NOI_KHOA_TUAN_HOAN', plField: 'NOI_KHOA_TUAN_HOAN_PL' },
+        { id: 'CK_NOI_HO_HAP', field: 'NOI_KHOA_HO_HAP', plField: 'NOI_KHOA_HO_HAP_PL' },
+        { id: 'CK_NOI_TIEU_HOA', field: 'NOI_KHOA_TIEU_HOA', plField: 'NOI_KHOA_TIEU_HOA_PL' },
+        { id: 'CK_NOI_TIET_NIEU_SD', field: 'NOI_KHOA_THAN_TN_SD', plField: 'NOI_KHOA_THAN_TIETNIEU_PL' },
+        { id: 'CK_NOI_NOITIET', field: 'NOI_KHOA_NOI_TIET', plField: 'NOI_KHOA_NOI_TIET_PL' },
+        { id: 'CK_NOI_CO_XUONG_KHOP', field: 'NOI_KHOA_CO_XUONG_KHOP', plField: 'NOI_KHOA_CO_XUONG_KHOP_PL' },
+        { id: 'CK_NOI_THAN_KINH', field: 'NOI_KHOA_THAN_KINH', plField: 'NOI_KHOA_THAN_KINH_PL' },
+        { id: 'CK_NOI_TAM_THAN', field: 'NOI_KHOA_TAM_THAN', plField: 'NOI_KHOA_TAM_THAN_PL' },
+      ];
 
-      for (const d of this.focusRecordedDiseases) {
-        const sc = parseInt(d.score, 10);
-        if (sc > maxScore) maxScore = sc;
+      for (const item of noiMap) {
+        const abn = this.getDiseasesWithScoreAbove(item.id, 1);
+        const extra = this.getConclusionExtra(item.id);
+        const manual = extra.manualRows || [];
+        const maxScore = this.getMaxScoreForSpecialty(item.id);
+        this.form[item.plField] = String(maxScore);
+
+        if (abn.length === 0 && manual.length === 0) {
+          if (!this.form[item.field]) this.form[item.field] = 'Bình thường';
+        } else {
+          const names = [
+            ...abn.map(a => a.classification ? a.classification.name : a.disease.name),
+            ...manual.map(m => m.name)
+          ];
+          this.form[item.field] = names.join('; ');
+        }
       }
 
-      this.focusOverallScore = maxScore;
-      if (maxScore === 1) {
+      // 2. Ngoại khoa
+      const ngoaiAbn = this.getDiseasesWithScoreAbove('CK_NGOAI', 1);
+      const ngoaiExtra = this.getConclusionExtra('CK_NGOAI');
+      const ngoaiMax = this.getMaxScoreForSpecialty('CK_NGOAI');
+      this.form.KHAM_NGOAI_KHOA_PL = String(ngoaiMax);
+      if (ngoaiAbn.length > 0 || (ngoaiExtra.manualRows && ngoaiExtra.manualRows.length > 0)) {
+        const names = [...ngoaiAbn.map(a => a.classification ? a.classification.name : a.disease.name), ...(ngoaiExtra.manualRows || []).map(m => m.name)];
+        this.form.KET_QUA_KHAM_NGOAI_KHOA = names.join('; ');
+      } else if (!this.form.KET_QUA_KHAM_NGOAI_KHOA) {
+        this.form.KET_QUA_KHAM_NGOAI_KHOA = 'Bình thường';
+      }
+
+      // 3. Da liễu
+      const dlAbn = this.getDiseasesWithScoreAbove('CK_DA_LIEU', 1);
+      const dlExtra = this.getConclusionExtra('CK_DA_LIEU');
+      const dlMax = this.getMaxScoreForSpecialty('CK_DA_LIEU');
+      this.form.KHAM_DA_LIEU_PL = String(dlMax);
+      if (dlAbn.length > 0 || (dlExtra.manualRows && dlExtra.manualRows.length > 0)) {
+        const names = [...dlAbn.map(a => a.classification ? a.classification.name : a.disease.name), ...(dlExtra.manualRows || []).map(m => m.name)];
+        this.form.KET_QUA_KHAM_DA_LIEU = names.join('; ');
+      } else if (!this.form.KET_QUA_KHAM_DA_LIEU) {
+        this.form.KET_QUA_KHAM_DA_LIEU = 'Bình thường';
+      }
+
+      // 4. Sản phụ khoa (khớp đúng mã CK_PHU_SAN)
+      const sanAbn = this.getDiseasesWithScoreAbove('CK_PHU_SAN', 1);
+      const sanExtra = this.getConclusionExtra('CK_PHU_SAN');
+      const sanMax = this.getMaxScoreForSpecialty('CK_PHU_SAN');
+      this.form.KHAM_SAN_PHU_KHOA_PL = String(sanMax);
+      if (sanAbn.length > 0 || (sanExtra.manualRows && sanExtra.manualRows.length > 0)) {
+        const names = [...sanAbn.map(a => a.classification ? a.classification.name : a.disease.name), ...(sanExtra.manualRows || []).map(m => m.name)];
+        this.form.KET_QUA_KHAM_SAN_PHU_KHOA = names.join('; ');
+      } else if (!this.form.KET_QUA_KHAM_SAN_PHU_KHOA) {
+        this.form.KET_QUA_KHAM_SAN_PHU_KHOA = 'Bình thường';
+      }
+
+      // 5. Mắt
+      const matMax = this.getMaxScoreForSpecialty('CK_MAT');
+      this.form.KHAM_MAT_PL = String(matMax);
+      const matAbn = this.getDiseasesWithScoreAbove('CK_MAT', 1).filter(a => a.disease.id !== 'BT_MAT_THI_LUC');
+      if (matAbn.length > 0) {
+        this.form.BENH_KHAC_MAT = matAbn.map(a => a.classification ? a.classification.name : a.disease.name).join('; ');
+      }
+
+      // 6. Tai - Mũi - Họng
+      const tmhMax = this.getMaxScoreForSpecialty('CK_TMH');
+      this.form.KHAM_TAI_MUI_HONG_PL = String(tmhMax);
+      const tmhAbn = this.getDiseasesWithScoreAbove('CK_TMH', 1).filter(a => a.disease.id !== 'BT_TMH_TAI_TRONG');
+      if (tmhAbn.length > 0) {
+        this.form.BENH_KHAC_TAI_MUI_HONG = tmhAbn.map(a => a.classification ? a.classification.name : a.disease.name).join('; ');
+      }
+
+      // 7. Răng - Hàm - Mặt
+      const rhmMax = this.getMaxScoreForSpecialty('CK_RHM');
+      this.form.KHAM_RANG_HAM_MAT_PL = String(rhmMax);
+
+      // Điểm tổng thể (Overall Conclusion)
+      let overallMax = 1;
+      const allSpecs = [
+        'CK_NOI_TIM_MACH', 'CK_NOI_HO_HAP', 'CK_NOI_TIEU_HOA', 'CK_NOI_TIET_NIEU_SD',
+        'CK_NOI_NOITIET', 'CK_NOI_CO_XUONG_KHOP', 'CK_NOI_THAN_KINH', 'CK_NOI_TAM_THAN',
+        'CK_NGOAI', 'CK_DA_LIEU', 'CK_PHU_SAN', 'CK_MAT', 'CK_TMH', 'CK_RHM'
+      ];
+      for (const sp of allSpecs) {
+        const sc = this.getMaxScoreForSpecialty(sp);
+        if (sc > overallMax) overallMax = sc;
+      }
+
+      this.focusOverallScore = overallMax;
+      if (overallMax === 1) {
         this.focusConclusionText = 'Tất cả các chuyên khoa Loại 1: Bình thường';
+        if (!this.form.TINH_TRANG_SUC_KHOE) {
+          this.form.TINH_TRANG_SUC_KHOE = 'Hiện tại sức khỏe bình thường, chưa phát hiện bệnh lý';
+        }
+        if (!this.form.KET_LUAN_PHAN_LOAI) {
+          this.form.KET_LUAN_PHAN_LOAI = '1';
+        }
       } else {
-        const abnormalNames = this.focusRecordedDiseases.map(d => d.name).slice(0, 3).join(', ');
-        this.focusConclusionText = `Phân loại ${maxScore} (${abnormalNames || 'Có chuyên khoa loại ' + maxScore})`;
+        this.focusConclusionText = `Phân loại ${overallMax} (Có chuyên khoa đạt phân loại ${overallMax})`;
+        if (!this.form.KET_LUAN_PHAN_LOAI || this.form.KET_LUAN_PHAN_LOAI === '1') {
+          this.form.KET_LUAN_PHAN_LOAI = String(overallMax);
+        }
       }
     },
 
-    syncFocusToFormFields() {
-      // Đồng bộ các ghi nhận bệnh vào các trường form tương ứng
-      const grouped = {};
-      for (const d of this.focusRecordedDiseases) {
-        const sp = (d.specialtyName || '').toLowerCase();
-        if (!grouped[sp]) grouped[sp] = [];
-        grouped[sp].push(d.name + ' (Loại ' + d.score + ')');
-      }
-
-      // Nội khoa
-      if (grouped['1. nội khoa'] || grouped['nội khoa']) {
-        const arr = grouped['1. nội khoa'] || grouped['nội khoa'];
-        this.form.NOI_KHOA_TUAN_HOAN = arr.join('; ');
-      }
-      // Ngoại khoa
-      if (grouped['2. ngoại khoa'] || grouped['ngoại khoa']) {
-        const arr = grouped['2. ngoại khoa'] || grouped['ngoại khoa'];
-        this.form.KET_QUA_KHAM_NGOAI_KHOA = arr.join('; ');
-      }
-      // Da liễu
-      if (grouped['3. da liễu'] || grouped['da liễu']) {
-        const arr = grouped['3. da liễu'] || grouped['da liễu'];
-        this.form.KET_QUA_KHAM_DA_LIEU = arr.join('; ');
-      }
-      // Sản phụ khoa
-      if (grouped['4. sản phụ khoa'] || grouped['sản phụ khoa']) {
-        const arr = grouped['4. sản phụ khoa'] || grouped['sản phụ khoa'];
-        this.form.KET_QUA_KHAM_SAN_PHU_KHOA = arr.join('; ');
-      }
-      // Mắt
-      if (grouped['5. mắt'] || grouped['mắt']) {
-        const arr = grouped['5. mắt'] || grouped['mắt'];
-        this.form.CAC_BENH_VE_MAT = arr.join('; ');
-      }
-      // TMH
-      if (grouped['6. tai - mũi - họng'] || grouped['tai - mũi - họng']) {
-        const arr = grouped['6. tai - mũi - họng'] || grouped['tai - mũi - họng'];
-        this.form.CAC_BENH_VE_TAI_MUI_HONG = arr.join('; ');
-      }
-      // RHM
-      if (grouped['7. răng - hàm - mặt'] || grouped['răng - hàm - mặt']) {
-        const arr = grouped['7. răng - hàm - mặt'] || grouped['răng - hàm - mặt'];
-        this.form.CAC_BENH_VE_RHM = arr.join('; ');
-      }
-
-      // Kết luận phân loại chung
-      if (this.focusOverallScore > 1) {
-        this.form.KET_LUAN_PHAN_LOAI = String(this.focusOverallScore);
-        this.form.TINH_TRANG_SUC_KHOE = this.focusRecordedDiseases.map(d => d.name).join(', ');
-      } else {
-        this.form.KET_LUAN_PHAN_LOAI = '1';
-        this.form.TINH_TRANG_SUC_KHOE = 'Hiện tại sức khỏe bình thường, chưa phát hiện bệnh lý';
-      }
-
-      this.toast('Đã đồng bộ kết quả Khám nhanh vào hồ sơ!', 'success');
-      this.handleSave();
+    getCurrentRenderSpecId() {
+      if (this.clinicalSubTab === 'noi') return this.activeInternalSubTab || 'CK_NOI_TIM_MACH';
+      if (this.clinicalSubTab === 'ngoai') return 'CK_NGOAI';
+      if (this.clinicalSubTab === 'dalieu') return 'CK_DA_LIEU';
+      if (this.clinicalSubTab === 'san') return 'CK_PHU_SAN';
+      if (this.clinicalSubTab === 'mat') return 'CK_MAT';
+      if (this.clinicalSubTab === 'tmh') return 'CK_TMH';
+      if (this.clinicalSubTab === 'rhm') return 'CK_RHM';
+      return this.activeInternalSubTab || 'CK_NOI_TIM_MACH';
     },
 
-    // --- FULL MODE TREE HELPERS ---
+    getCurrentRenderSpec() {
+      return this.getSpecialty(this.getCurrentRenderSpecId());
+    },
+
     getDiseasesForCurrentTab() {
-      const list = (this.catalogs && this.catalogs.benh_tat) ? this.catalogs.benh_tat : [];
-      if (this.clinicalSubTab === 'all') return list.slice(0, 50);
-      const tabMap = {
-        noi: 'CK_NOI',
-        ngoai: 'CK_NGOAI',
-        dalieu: 'CK_DA_LIEU',
-        san: 'CK_SAN',
-        mat: 'CK_MAT',
-        tmh: 'CK_TMH',
-        rhm: 'CK_RHM'
-      };
-      const catCode = tabMap[this.clinicalSubTab];
-      return list.filter(d => !catCode || d.specialtyId === catCode || d.parent_code === catCode || (d.code && d.code.startsWith(catCode)));
-    },
-
-    getStandardsForDisease(diseaseId) {
-      const list = (this.catalogs && this.catalogs.tieu_chuan) ? this.catalogs.tieu_chuan : [];
-      return list.filter(s => s.diseaseId === diseaseId || s.parent_code === diseaseId || s.refDiseaseId === diseaseId);
-    },
-
-    isStandardSelected(diseaseId, standardId) {
-      return this.selectedCatalogStandards[diseaseId] === standardId;
-    },
-
-    selectStandard(diseaseId, standard) {
-      this.selectedCatalogStandards[diseaseId] = standard.id;
-      // Nếu score > 1, tự động thêm vào focusRecordedDiseases
-      if (standard.score > 1) {
-        this.addFocusDisease(standard);
+      if (this.clinicalSubTab === 'all') {
+        return this.getPlConfig().diseases || [];
       }
+      const specId = this.getCurrentRenderSpecId();
+      return this.getDiseases(specId);
+    },
+
+    getSelectedClassification(diseaseId) {
+      const clsId = this.selectedClassifications[diseaseId];
+      const list = this.getClassifications(diseaseId);
+      return list.find(c => c.id === clsId) || list[0];
     },
 
     getDiseaseScore(diseaseId) {
-      const selId = this.selectedCatalogStandards[diseaseId];
-      if (!selId) return 1;
-      const list = (this.catalogs && this.catalogs.tieu_chuan) ? this.catalogs.tieu_chuan : [];
-      const found = list.find(s => s.id === selId);
-      return found ? parseInt(found.score || '1', 10) : 1;
+      const sel = this.getSelectedClassification(diseaseId);
+      return sel ? this.calcClassificationScore(sel) : 1;
     },
 
     getSelectedStandardName(diseaseId) {
-      const selId = this.selectedCatalogStandards[diseaseId];
-      if (!selId) return '';
-      const list = (this.catalogs && this.catalogs.tieu_chuan) ? this.catalogs.tieu_chuan : [];
-      const found = list.find(s => s.id === selId);
-      return found ? found.name : '';
+      const sel = this.getSelectedClassification(diseaseId);
+      return sel ? sel.name : '';
     },
 
   };

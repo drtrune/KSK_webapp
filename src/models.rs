@@ -451,6 +451,19 @@ pub struct UpdateUserRequest {
     pub is_locked: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub old_password: String,
+    pub new_password: String,
+    #[serde(default)]
+    pub revoke_other_sessions: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateProfileRequest {
+    pub full_name: String,
+}
+
 // ============================================================================
 // TÍCH HỢP API HIS
 // ============================================================================

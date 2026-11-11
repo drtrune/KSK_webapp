@@ -364,6 +364,95 @@ pub async fn toggle_lock_user_handler(
     .into_response()
 }
 
+pub async fn change_my_password_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(req): Json<ChangePasswordRequest>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+
+    let old_p_hash = hash_password(req.old_password.trim());
+    if user.password_hash != old_p_hash {
+        return api_error(StatusCode::BAD_REQUEST, "Mật khẩu hiện tại không đúng");
+    }
+
+    let new_pw = req.new_password.trim();
+    if new_pw.len() < 6 {
+        return api_error(StatusCode::BAD_REQUEST, "Mật khẩu mới phải có ít nhất 6 ký tự");
+    }
+
+    let new_p_hash = hash_password(new_pw);
+    if let Err(e) = sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
+        .bind(&new_p_hash)
+        .bind(user.id)
+        .execute(&*db)
+        .await
+    {
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Không thể cập nhật mật khẩu: {}", e),
+        );
+    }
+
+    if req.revoke_other_sessions.unwrap_or(false) {
+        let cur_token = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.strip_prefix("Bearer "))
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let _ = sqlx::query("DELETE FROM sessions WHERE user_id = ? AND token != ?")
+            .bind(user.id)
+            .bind(cur_token)
+            .execute(&*db)
+            .await;
+    }
+
+    Json(json!({
+        "message": "Đổi mật khẩu thành công! Vui lòng sử dụng mật khẩu mới cho các lần đăng nhập tiếp theo."
+    }))
+    .into_response()
+}
+
+pub async fn update_my_profile_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(req): Json<UpdateProfileRequest>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+
+    let full_name = req.full_name.trim();
+    if full_name.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, "Họ tên / Chức danh không được để trống");
+    }
+
+    if let Err(e) = sqlx::query("UPDATE users SET full_name = ? WHERE id = ?")
+        .bind(full_name)
+        .bind(user.id)
+        .execute(&*db)
+        .await
+    {
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Lỗi cập nhật họ tên / chức danh: {}", e),
+        );
+    }
+
+    Json(json!({
+        "message": "Cập nhật họ tên / chức danh thành công!",
+        "full_name": full_name
+    }))
+    .into_response()
+}
+
 // ============================================================================
 // 2. TÍCH HỢP API HIS
 // ============================================================================
