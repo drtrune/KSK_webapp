@@ -1,9 +1,12 @@
 <!-- ===================================================================== -->
-<!-- PHÔI IN GIẤY KHÁM SỨC KHỎE A4 – 5 TRANG                               -->
-<!-- - Header mỗi trang: Barcode + "Mã tiếp nhận" bên phải                 -->
-<!-- - Mỗi trang cao cố định 279mm (flex): chân trang luôn ở cuối trang    -->
-<!-- - Trang 1: bảng Tiền sử tự giãn để lấp hết trang                      -->
-<!-- - Placeholder dùng chấm mảnh (.d / .v / .dot-line), không gõ "...."   -->
+<!-- PHÔI IN GIẤY KHÁM SỨC KHỎE A4 CHUẨN BỘ Y TẾ – 5 TRANG ĐỘC LẬP         -->
+<!-- - Cắt trang chính xác:                                                -->
+<!--   + Trang 1: Hành chính + Tiền sử gia đình + Tiền sử bản thân (đến mục 6/17) -->
+<!--   + Trang 2: Tiền sử bản thân (từ mục 7/18) + Câu hỏi khác + Chữ ký người KSK -->
+<!--   + Trang 3: Thể lực (Người đo thể lực) + Lâm sàng đến Sản phụ khoa   -->
+<!--   + Trang 4: Mắt, TMH, RHM, Da liễu + Cận lâm sàng học/làm (đến CLS khác) -->
+<!--   + Trang 5: CLS định kỳ + Kết luận & Chữ ký người kết luận           -->
+<!-- - Header mỗi trang: Barcode + Mã tiếp nhận (Gọn gàng, không đè chữ)  -->
 <!-- ===================================================================== -->
 
 <style>
@@ -14,17 +17,19 @@
   @media print {
     @page {
       size: A4 portrait;
-      margin: 8mm 10mm 8mm 14mm;
+      margin: 8mm 10mm 8mm 12mm;
     }
 
-    html,
-    body {
+    html, body {
       height: auto !important;
       min-height: 0 !important;
       overflow: visible !important;
       margin: 0 !important;
       padding: 0 !important;
       background: #fff !important;
+      font-family: 'Times New Roman', Times, serif !important;
+      font-size: 11.5pt !important;
+      color: #000 !important;
     }
 
     body :not(#print-area):not(#print-area *):not(:has(#print-area)) {
@@ -35,13 +40,9 @@
       display: block !important;
       position: static !important;
       height: auto !important;
-      max-height: none !important;
-      min-height: 0 !important;
       overflow: visible !important;
-      transform: none !important;
       margin: 0 !important;
       padding: 0 !important;
-      width: auto !important;
       border: 0 !important;
       box-shadow: none !important;
       background: #fff !important;
@@ -54,101 +55,90 @@
       color: #000 !important;
       background: #fff !important;
       font-family: 'Times New Roman', Times, serif !important;
-      font-size: 12pt !important;
     }
 
-    /* ---- Mỗi .print-page = 1 mặt A4 (279mm = 297 - 2×8 - dự phòng), flex cột ---- */
+    /* Mỗi trang là một khối A4 riêng biệt cao ~275mm, ngắt trang bắt buộc */
     .print-page {
       box-sizing: border-box !important;
       display: flex !important;
       flex-direction: column !important;
-      position: static !important;
+      justify-content: space-between !important;
       width: 100% !important;
-      height: 277mm !important;
-      min-height: 0 !important;
-      max-height: none !important;
+      height: 275mm !important;
+      max-height: 278mm !important;
       padding: 0 !important;
       margin: 0 !important;
-      overflow: visible !important;
-      break-after: page !important;
+      overflow: hidden !important;
       page-break-after: always !important;
+      break-after: page !important;
+      position: relative !important;
     }
 
     .print-page:last-child {
-      break-after: auto !important;
       page-break-after: auto !important;
+      break-after: auto !important;
     }
 
     .print-page-body {
+      flex: 1 1 auto !important;
       display: flex !important;
       flex-direction: column !important;
-      flex: 1 1 auto !important;
-      min-height: 0 !important;
-      width: 100% !important;
     }
 
-    /* Chân trang luôn nằm cuối trang */
     .print-footer {
       flex: none !important;
-      margin-top: auto !important;
-      padding-top: 3px !important;
       text-align: center !important;
-      font-size: 11pt !important;
+      font-size: 10.5pt !important;
       line-height: 1.2 !important;
+      padding-top: 2px !important;
+      margin-top: auto !important;
     }
 
-    /* ---- Header: Barcode + Mã tiếp nhận ---- */
+    /* Header góc phải: Barcode + Mã tiếp nhận */
     .bc-top {
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      margin-bottom: 0;
+      margin-bottom: 2px;
+      line-height: 1;
     }
 
     .bc-top svg {
-      height: 28px;
+      height: 30px;
       width: auto;
-      max-width: 375px;
+      max-width: 260px;
     }
 
     .bc-cap {
-      font-size: 10pt;
+      font-size: 9.5pt;
       color: #000;
-      margin-top: 0;
-      line-height: 1.1;
+      margin-top: 1px;
+      font-family: 'Times New Roman', Times, serif;
     }
 
-    /* ---- Bảng ---- */
+    /* Bảng chuẩn in */
     .print-table {
       width: 100%;
       border-collapse: collapse;
+      font-size: 11pt;
     }
 
-    .print-table th,
-    .print-table td {
+    .print-table th, .print-table td {
       border: 1px solid #000;
-      padding: 2px 4px;
+      padding: 2.5px 4px;
       vertical-align: top;
     }
 
     .ts-table {
       line-height: 1.2;
+      font-size: 10.5pt;
     }
-
-    .ts-table th,
-    .ts-table td {
+    .ts-table th, .ts-table td {
       padding: 2px 3px;
     }
 
-    .ts-table td:nth-child(2),
-    .ts-table th:nth-child(2) {
-      padding: 2px 5px;
-    }
-
-    /* ---- Chấm mảnh làm placeholder ---- */
-    .d,
-    .v,
-    .dot-line {
+    /* Chấm mảnh placeholder */
+    .d, .v, .dot-line {
       background-image: radial-gradient(circle, #000 0.5px, transparent 0.75px);
       background-size: 3px 3px;
       background-repeat: repeat-x;
@@ -157,7 +147,6 @@
       print-color-adjust: exact;
     }
 
-    /* Ô chấm trống (inline mặc định 12mm) */
     .d {
       display: inline-block;
       width: 12mm;
@@ -166,533 +155,481 @@
       vertical-align: baseline;
     }
 
-    /* Dòng chấm trọn bề ngang */
     .dot-line {
       width: 100%;
       height: 14px;
     }
 
-    /* Ô chứa dữ liệu: chữ nằm trên nền chấm */
     .v {
       display: inline-block;
-      min-height: 1.25em;
+      min-height: 1.2em;
       padding-bottom: 1px;
       vertical-align: bottom;
+      font-weight: 500;
     }
 
-    /* Dòng "nhãn + chấm tự giãn đến hết dòng" (không bao giờ xuống dòng) */
     .fl {
       display: flex;
       align-items: flex-end;
       white-space: nowrap;
     }
 
-    .fl>span {
-      flex: none;
-    }
-
-    .fl>span.g {
-      margin-left: 8px;
-    }
-
-    .fl>.d {
+    .fl > span { flex: none; }
+    .fl > span.g { margin-left: 8px; }
+    .fl > .d {
       flex: 1 1 auto;
       width: auto;
       min-width: 6mm;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
     }
-
-    .fl>.d.w1 {
-      flex: none;
-      width: 14mm;
-    }
-
-    .fl>.d.w2 {
-      flex: none;
-      width: 22mm;
-    }
-
-    .fl>.d.w3 {
-      flex: none;
-      width: 32mm;
-    }
-
-    .fl>.v {
+    .fl > .d.w1 { flex: none; width: 14mm; }
+    .fl > .d.w2 { flex: none; width: 22mm; }
+    .fl > .d.w3 { flex: none; width: 32mm; }
+    .fl > .v {
       flex: 1 1 auto;
       margin-left: 3px;
-      min-width: 10mm;
+      min-width: 8mm;
     }
 
-    /* ---- Trang 1 ---- */
+    /* Trang 1 Admin */
     .p1 .adm {
-      font-size: 13pt;
-      line-height: 1.4;
+      font-size: 11.5pt;
+      line-height: 1.35;
     }
-
-    .p1 .adm>div {
-      margin-top: 5px;
-    }
-
-    .p1 .ts-wrap {
-      flex: 1 1 0 !important;
-      position: relative;
-      min-height: 0;
+    .p1 .adm > div {
       margin-top: 3px;
-    }
-
-    .p1 .ts-wrap .ts-table {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      font-size: 13pt;
-    }
-
-    .p1 .ts-table td,
-    .p1 .ts-table th {
-      vertical-align: middle;
-    }
-
-    .so {
-      text-align: center;
-      font-weight: 400;
-      margin-top: 2px;
     }
   }
 </style>
 
-<div id="print-area" class="print-only text-black bg-white"
-  style="font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.3;">
+<div id="print-area">
 
-  <!-- ==================== TRANG 1 / 5 ==================== -->
+  <!-- ================================================================= -->
+  <!-- TRANG 1 / 5                                                       -->
+  <!-- ================================================================= -->
   <div class="print-page p1">
     <div class="print-page-body">
+      <!-- Header Barcode góc trên phải -->
       <div class="bc-top">
         <svg id="print_barcode_p1"></svg>
-        <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN"></strong></div>
+        <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN || '..........'"></strong></div>
       </div>
 
       <!-- QUỐC HIỆU - TIÊU NGỮ -->
       <table style="width: 100%; border: none; margin-top: 0;">
         <tr>
           <td style="width: 44%; vertical-align: top; border: none; padding: 0; text-align: center; line-height: 1.2;">
-            <div style="text-transform: uppercase;">BỘ Y TẾ</div>
-            <div style="font-weight: bold; text-transform: uppercase;"
-              x-text="facility.ten_cskcb || 'BỆNH VIỆN BÌNH ĐỊNH'"></div>
-            <div class="d" style="display:block; width:25mm; margin:3px auto 2px;"></div>
-            <div class="so">Số: <span class="v" style="min-width:12mm; text-align:center;"
-                x-text="form.SO_PHIEU"></span>/GKSK-<span x-text="facility.ma_cskcb || '52208'"></span>/<span
-                x-text="(form.NGAY_VAO || '').slice(-2) || '26'"></span></div>
+            <div style="text-transform: uppercase; font-size: 11pt;">BỘ Y TẾ</div>
+            <div style="font-weight: bold; text-transform: uppercase; font-size: 11pt;" x-text="facility.ten_cskcb || 'BỆNH VIỆN BÌNH ĐỊNH'"></div>
+            <div class="d" style="display:block; width:25mm; margin:2px auto 2px;"></div>
+            <div style="font-size: 10.5pt;">Số: <span class="v" style="min-width:12mm; text-align:center;" x-text="form.SO_PHIEU || '........'"></span>/GKSK</div>
           </td>
-          <td style="width: 56%; text-align: center; vertical-align: top; border: none; padding: 0; line-height: 1.2;">
-            <div style="font-weight: bold; text-transform: uppercase;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
-            <div style="font-weight: bold;">Độc lập - Tự do - Hạnh phúc</div>
-            <div class="d" style="display:block; width:40mm; margin:3px auto 0;"></div>
+          <td style="width: 56%; vertical-align: top; border: none; padding: 0; text-align: center; line-height: 1.2;">
+            <div style="font-weight: bold; text-transform: uppercase; font-size: 11pt;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
+            <div style="font-weight: bold; font-size: 11pt;">Độc lập - Tự do - Hạnh phúc</div>
+            <div class="d" style="display:block; width:35mm; margin:2px auto 2px;"></div>
           </td>
         </tr>
       </table>
 
-      <!-- TIÊU ĐỀ -->
-      <div style="text-align: center; margin: 8px 0 4px 0;">
-        <h1 style="font-size: 13pt; font-weight: bold; text-transform: uppercase; margin: 0; line-height: 1.25;">
-          GIẤY KHÁM SỨC KHỎE VÀ KHÁM SỨC KHỎE ĐỊNH KỲ DÙNG CHO<br />NGƯỜI TỪ ĐỦ 18 TUỔI TRỞ LÊN
-        </h1>
+      <!-- TIÊU ĐỀ GIẤY KHÁM SỨC KHỎE -->
+      <div style="text-align: center; margin: 6px 0 4px 0;">
+        <div style="font-size: 16pt; font-weight: bold; text-transform: uppercase;">GIẤY KHÁM SỨC KHỎE</div>
       </div>
 
-      <!-- THÔNG TIN HÀNH CHÍNH (MỤC 1 - 13) -->
-      <div class="adm">
-        <div class="fl"><span><strong>1. Họ và tên (viết chữ in hoa):</strong></span><span class="v"
-            style="text-transform: uppercase; font-weight: bold;" x-text="form.HO_TEN"></span></div>
-        <div>
-          <strong>2. Giới tính:</strong>
-          <span x-text="form.GIOI_TINH === '1' ? '☑' : '☐'"></span> Nam &nbsp;&nbsp;
-          <span x-text="form.GIOI_TINH === '2' ? '☑' : '☐'"></span> Nữ
+      <!-- HÀNH CHÍNH & KHUNG ẢNH 4x6 -->
+      <table style="width: 100%; border: none; margin-bottom: 2px;">
+        <tr>
+          <td style="width: 25mm; vertical-align: top; border: none; padding: 0 4mm 0 0;">
+            <div style="width: 24mm; height: 32mm; border: 1px solid #000; text-align: center; font-size: 9pt; padding-top: 12mm; box-sizing: border-box;">
+              Ảnh<br/>(4 x 6 cm)
+            </div>
+          </td>
+          <td style="vertical-align: top; border: none; padding: 0;">
+            <div class="adm">
+              <div class="fl">
+                <span><strong>1. Họ và tên</strong> <i>(chữ in hoa):</i></span>
+                <span class="v" style="font-weight: bold; text-transform: uppercase; font-size: 12pt;" x-text="form.HO_TEN"></span>
+              </div>
+              <div class="fl">
+                <span><strong>2. Ngày tháng năm sinh:</strong></span>
+                <span class="v" style="width: 28mm;" x-text="form.NGAY_SINH"></span>
+                <span class="g"><strong>3. Giới tính:</strong></span>
+                <span class="v" style="width: 15mm;" x-text="form.GIOI_TINH === '1' ? 'Nam' : (form.GIOI_TINH === '2' ? 'Nữ' : '')"></span>
+              </div>
+              <div class="fl">
+                <span><strong>4. Số CCCD/ĐDCN:</strong></span>
+                <span class="v" x-text="form.SO_CCCD"></span>
+              </div>
+              <div class="fl">
+                <span>Ngày cấp:</span>
+                <span class="v" style="width: 26mm;" x-text="form.NGAYCAP_CCCD"></span>
+                <span class="g">Nơi cấp:</span>
+                <span class="v" x-text="form.NOICAP_CCCD"></span>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- HÀNH CHÍNH TIẾP (5..11) -->
+      <div class="adm" style="margin-bottom: 4px;">
+        <div class="fl">
+          <span><strong>5. Dân tộc:</strong></span>
+          <span class="v" style="width: 25mm;" x-text="getCatalogName(catalogs.dan_toc, form.MA_DAN_TOC, 'MA_DAN_TOC')"></span>
+          <span class="g"><strong>6. Đối tượng:</strong></span>
+          <span class="v" x-text="getCatalogName(catalogs.doi_tuong, form.DOI_TUONG, 'DOI_TUONG')"></span>
         </div>
-        <div class="fl"><span><strong>3. Ngày tháng năm sinh:</strong></span><span class="v"
-            style="flex: none; min-width: 32mm;" x-text="form.NGAY_SINH"></span>
-          <span class="g">(<strong>Tuổi:</strong>&nbsp;<strong
-              x-text="form.NGAY_SINH ? (new Date().getFullYear() - parseInt(form.NGAY_SINH.slice(-4))) : ''"></strong>)</span>
+        <div class="fl">
+          <span><strong>7. Nguồn chi trả:</strong></span>
+          <span class="v" style="width: 35mm;" x-text="getCatalogName(catalogs.nguon_chi_tra, form.NGUON_CHI_TRA, 'NGUON_CHI_TRA')"></span>
+          <span class="g"><strong>8. Nhóm máu:</strong></span>
+          <span class="v" style="width: 15mm;" x-text="form.NHOM_MAU"></span>
+          <span class="g"><strong>9. ĐT:</strong></span>
+          <span class="v" x-text="form.DIEN_THOAI"></span>
         </div>
-        <div class="fl"><span><strong>4. Số CCCD/Hộ chiếu/Mã định danh:</strong></span><span class="v"
-            x-text="form.SO_CCCD"></span></div>
-        <div class="fl"><span><strong>5. Cấp ngày:</strong></span><span class="v" style="flex: none; min-width: 32mm;"
-            x-text="form.NGAYCAP_CCCD"></span><span class="g"><strong>Nơi cấp:</strong></span><span class="v"
-            x-text="form.NOICAP_CCCD"></span></div>
-        <div class="fl"><span><strong>6. Dân tộc:</strong></span><span class="v"
-            x-text="getCatalogName(catalogs.dan_toc, form.MA_DAN_TOC, 'MA_DAN_TOC')"></span><span class="g"><strong>7.
-              Đối tượng:</strong></span><span class="v"
-            x-text="getCatalogName(catalogs.doi_tuong, form.DOI_TUONG, 'DOI_TUONG')"></span></div>
-        <div class="fl"><span><strong>8. Nguồn chi trả:</strong></span><span class="v"
-            x-text="getCatalogName(catalogs.nguon_chi_tra, form.NGUON_CHI_TRA, 'NGUON_CHI_TRA')"></span></div>
-        <div class="fl"><span><strong>9. Nhóm máu:</strong></span><span class="v" style="flex: none; min-width: 22mm;"
-            x-text="form.NHOM_MAU"></span><span class="g"><strong>Điện thoại:</strong></span><span class="v"
-            x-text="form.DIEN_THOAI"></span></div>
-        <div class="fl"><span><strong>10. Nơi ở hiện tại: Tỉnh/thành:</strong></span><span class="v"
-            x-text="getCatalogName(catalogs.tinh, form.MATINH_CU_TRU, 'MATINH_CU_TRU')"></span><span
-            class="g"><strong>Phường/xã:</strong></span><span class="v"
-            x-text="getCatalogName(catalogs.xa, form.MAXA_CU_TRU, 'MAXA_CU_TRU')"></span></div>
-        <div class="fl"><span style="padding-left: 8mm;"><strong>Số nhà/thôn/xóm:</strong></span><span class="v"
-            x-text="form.DIA_CHI"></span></div>
-        <div class="fl"><span><strong>11. Nghề nghiệp:</strong></span><span class="v"
-            x-text="getCatalogName(catalogs.nghe_nghiep, form.MA_NGHE_NGHIEP, 'MA_NGHE_NGHIEP')"></span></div>
-        <div class="fl"><span><strong>12. Nơi làm việc, học tập:</strong></span><span class="v"
-            x-text="form.NOI_LAM_VIEC_HOC_TAP"></span></div>
-        <div class="fl"><span><strong>13. Lý do khám sức khỏe:</strong></span><span class="v"
-            x-text="form.LY_DO_VV || 'Khám sức khỏe'"></span></div>
-      </div>
-
-      <!-- ===== TIỀN SỬ BỆNH ===== -->
-      <div style="font-weight: bold; text-transform: uppercase; margin-top: 12px; margin-bottom: 3px; font-size: 13pt;">
-        TIỀN SỬ BỆNH CỦA ĐỐI TƯỢNG KHÁM SỨC KHỎE</div>
-
-      <div style="line-height: 1.35; font-size: 13pt;">
-        <div><strong>1. Tiền sử gia đình:</strong> Có ai trong gia đình ông (bà) mắc một trong các bệnh: truyền nhiễm,
-          tim mạch, đái tháo đường, lao, hen phế quản, ung thư, động kinh, rối loạn tâm thần, bệnh khác:</div>
-        <div class="fl" style="margin-left: 10px; margin-top: 3px;">
-          <span>a) ☐ Không &nbsp;&nbsp; b) ☐ Có; Nếu "có", đề nghị ghi cụ thể tên bệnh:</span><i class="d"></i>
+        <div class="fl">
+          <span><strong>10. Nơi ở hiện tại: Tỉnh/thành:</strong></span>
+          <span class="v" x-text="getCatalogName(catalogs.tinh, form.MATINH_CU_TRU, 'MATINH_CU_TRU')"></span>
+          <span class="g"><strong>Phường/xã:</strong></span>
+          <span class="v" x-text="getCatalogName(catalogs.xa, form.MAXA_CU_TRU, 'MAXA_CU_TRU')"></span>
+        </div>
+        <div class="fl">
+          <span style="padding-left: 8mm;"><strong>Số nhà/thôn/xóm:</strong></span>
+          <span class="v" x-text="form.DIA_CHI"></span>
+        </div>
+        <div class="fl">
+          <span><strong>11. Nghề nghiệp:</strong></span>
+          <span class="v" x-text="getCatalogName(catalogs.nghe_nghiep, form.MA_NGHE_NGHIEP, 'MA_NGHE_NGHIEP')"></span>
+        </div>
+        <div class="fl">
+          <span>Nơi làm việc, học tập:</span>
+          <span class="v" x-text="form.NOI_LAM_VIEC_HOC_TAP"></span>
+        </div>
+        <div class="fl">
+          <span>Lý do khám sức khỏe:</span>
+          <span class="v" x-text="form.LY_DO_VV || 'Khám sức khỏe'"></span>
         </div>
       </div>
 
-      <div style="margin-top: 8px; font-size: 13pt;"><strong>2. Tiền sử bản thân:</strong> Ông (bà) đã/đang mắc bệnh,
-        tình
-        trạng bệnh nào sau đây không:</div>
-
-      <!-- Bảng tự giãn chiều cao để lấp hết phần còn lại của trang -->
-      <div class="ts-wrap">
-        <table class="print-table ts-table">
-          <thead>
-            <tr style="font-weight: bold; text-align: center;">
-              <th style="width: 5%;">TT</th>
-              <th style="width: 75%;">Tên bệnh, tật</th>
-              <th style="width: 10%;">Có</th>
-              <th style="width: 10%;">Không</th>
-            </tr>
-          </thead>
-          <tbody style="text-align: left;">
-            <tr>
-              <td align="center">1</td>
-              <td>Có bệnh hay bị thương trong 5 năm qua</td>
-              <td align="center">☐</td>
-              <td align="center">☐</td>
-            </tr>
-            <tr>
-              <td align="center">2</td>
-              <td>Có bệnh thần kinh hay bị thương ở đầu</td>
-              <td align="center">☐</td>
-              <td align="center">☐</td>
-            </tr>
-            <tr>
-              <td align="center">3</td>
-              <td>Bệnh mắt hoặc giảm thị lực (trừ trường hợp đeo kính thuốc)</td>
-              <td align="center">☐</td>
-              <td align="center">☐</td>
-            </tr>
-            <tr>
-              <td align="center">4</td>
-              <td>Bệnh ở tai, giảm sức nghe hoặc thăng bằng</td>
-              <td align="center">☐</td>
-              <td align="center">☐</td>
-            </tr>
-            <tr>
-              <td align="center">5</td>
-              <td>Bệnh ở tim, hoặc nhồi máu cơ tim, bệnh tim mạch khác</td>
-              <td align="center">☐</td>
-              <td align="center">☐</td>
-            </tr>
-            <tr>
-              <td align="center">6</td>
-              <td>Phẫu thuật can thiệp tim - mạch (thay van, bắc cầu nối, tạo hình mạch, máy tạo nhịp, đặt stent mạch,
-                ghép tim)</td>
-              <td align="center">☐</td>
-              <td align="center">☐</td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- TIỀN SỬ BỆNH -->
+      <div style="font-weight: bold; text-transform: uppercase; margin: 4px 0 2px 0;">TIỀN SỬ BỆNH CỦA ĐỐI TƯỢNG KHÁM SỨC KHỎE</div>
+      <div style="margin-bottom: 3px;">
+        <strong>1. Tiền sử gia đình:</strong> Có ai trong gia đình mắc một trong các bệnh: truyền nhiễm, tim mạch, đái tháo đường, lao, hen phế quản, ung thư, động kinh, rối loạn tâm thần, liệt...:<br/>
+        <span>a) ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; b) ☐ Có; Nếu "có", đề nghị ghi cụ thể tên bệnh:</span><i class="d"></i>
       </div>
+
+      <div style="font-weight: bold; margin-bottom: 2px;">2. Tiền sử bản thân: Ông (bà) đã/đang mắc bệnh, tình trạng bệnh nào sau đây không:</div>
+
+      <!-- BẢNG TIỀN SỬ BẢN THÂN TRANG 1: DÒNG 1 ĐẾN 6 VÀ 12 ĐẾN 17 -->
+      <table class="print-table ts-table" style="margin-top: 1px;">
+        <thead>
+          <tr style="font-weight: bold; text-align: center;">
+            <th style="width: 4%;">TT</th>
+            <th style="width: 38%;">Tên bệnh, tật</th>
+            <th style="width: 4%;">Có</th>
+            <th style="width: 4%;">Không</th>
+            <th style="width: 4%;">TT</th>
+            <th style="width: 38%;">Tên bệnh, tật</th>
+            <th style="width: 4%;">Có</th>
+            <th style="width: 4%;">Không</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td align="center">1</td>
+            <td>Có bệnh hay bị thương trong 5 năm qua</td>
+            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">12</td>
+            <td>Đái tháo đường hoặc kiểm soát tăng đường huyết</td>
+            <td align="center">☐</td><td align="center">☐</td>
+          </tr>
+          <tr>
+            <td align="center">2</td>
+            <td>Có bệnh thần kinh hay bị thương ở đầu</td>
+            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">13</td>
+            <td>Bệnh tâm thần</td>
+            <td align="center">☐</td><td align="center">☐</td>
+          </tr>
+          <tr>
+            <td align="center">3</td>
+            <td>Bệnh mắt hoặc giảm thị lực (trừ đeo kính)</td>
+            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">14</td>
+            <td>Mất ý thức, rối loạn ý thức</td>
+            <td align="center">☐</td><td align="center">☐</td>
+          </tr>
+          <tr>
+            <td align="center">4</td>
+            <td>Bệnh ở tai, giảm sức nghe hoặc thăng bằng</td>
+            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">15</td>
+            <td>Ngất, chóng mặt</td>
+            <td align="center">☐</td><td align="center">☐</td>
+          </tr>
+          <tr>
+            <td align="center">5</td>
+            <td>Bệnh ở tim hoặc nhồi máu cơ tim</td>
+            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">16</td>
+            <td>Bệnh tiêu hóa</td>
+            <td align="center">☐</td><td align="center">☐</td>
+          </tr>
+          <tr>
+            <td align="center">6</td>
+            <td>Phẫu thuật can thiệp tim - mạch (thay van, tạo hình mạch, máy tạo nhịp, đặt stent mạch, ghép tim)</td>
+            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">17</td>
+            <td>Rối loạn giấc ngủ, ngáy to</td>
+            <td align="center">☐</td><td align="center">☐</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="print-footer">- Trang 1/5 -</div>
   </div>
 
 
-  <!-- ==================== TRANG 2 / 5 ==================== -->
+  <!-- ================================================================= -->
+  <!-- TRANG 2 / 5                                                       -->
+  <!-- ================================================================= -->
   <div class="print-page">
     <div class="print-page-body">
+      <!-- Header Barcode góc trên phải -->
       <div class="bc-top">
         <svg id="print_barcode_p2"></svg>
-        <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN"></strong></div>
+        <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN || '..........'"></strong></div>
       </div>
 
-      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 3px;">2. TIỀN SỬ BẢN THÂN (TIẾP THEO):
-      </div>
-      <table class="print-table ts-table">
+      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 2px;">2. TIỀN SỬ BẢN THÂN (TIẾP THEO):</div>
+      <!-- BẢNG TIỀN SỬ BẢN THÂN TRANG 2: DÒNG 7 ĐẾN 11 VÀ 18 ĐẾN 22 -->
+      <table class="print-table ts-table" style="margin-bottom: 6px;">
         <thead>
           <tr style="font-weight: bold; text-align: center;">
-            <th style="width: 5%;">TT</th>
-            <th style="width: 75%;">Tên bệnh, tật</th>
-            <th style="width: 10%;">Có</th>
-            <th style="width: 10%;">Không</th>
+            <th style="width: 4%;">TT</th>
+            <th style="width: 38%;">Tên bệnh, tật</th>
+            <th style="width: 4%;">Có</th>
+            <th style="width: 4%;">Không</th>
+            <th style="width: 4%;">TT</th>
+            <th style="width: 38%;">Tên bệnh, tật</th>
+            <th style="width: 4%;">Có</th>
+            <th style="width: 4%;">Không</th>
           </tr>
         </thead>
-        <tbody style="text-align: left;">
+        <tbody>
           <tr>
             <td align="center">7</td>
             <td>Tăng huyết áp</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
+            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">18</td>
+            <td>Tai biến mạch máu não hoặc liệt</td>
+            <td align="center">☐</td><td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">8</td>
             <td>Khó thở</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
+            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">19</td>
+            <td>Bệnh hoặc tổn thương cột sống</td>
+            <td align="center">☐</td><td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">9</td>
-            <td>Bệnh phổi, hen, khí phế thũng, viêm phế quản mạn tính</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
+            <td>Bệnh phổi, hen, viêm phế quản mạn</td>
+            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">20</td>
+            <td>Sử dụng rượu thường xuyên, liên tục</td>
+            <td align="center">☐</td><td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">10</td>
             <td>Bệnh thận, lọc máu</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
+            <td align="center">☐</td><td align="center">☐</td>
+            <td align="center">21</td>
+            <td>Sử dụng ma túy và chất gây nghiện</td>
+            <td align="center">☐</td><td align="center">☐</td>
           </tr>
           <tr>
             <td align="center">11</td>
             <td>Nghiện rượu, bia</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
-          </tr>
-          <tr>
-            <td align="center">12</td>
-            <td>Đái tháo đường hoặc kiểm soát tăng đường huyết</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
-          </tr>
-          <tr>
-            <td align="center">13</td>
-            <td>Bệnh tâm thần</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
-          </tr>
-          <tr>
-            <td align="center">14</td>
-            <td>Mất ý thức, rối loạn ý thức</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
-          </tr>
-          <tr>
-            <td align="center">15</td>
-            <td>Ngất, chóng mặt</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
-          </tr>
-          <tr>
-            <td align="center">16</td>
-            <td>Bệnh tiêu hóa</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
-          </tr>
-          <tr>
-            <td align="center">17</td>
-            <td>Rối loạn giấc ngủ, ngừng thở khi ngủ, ngủ rũ ban ngày, ngáy to</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
-          </tr>
-          <tr>
-            <td align="center">18</td>
-            <td>Tai biến mạch máu não hoặc liệt</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
-          </tr>
-          <tr>
-            <td align="center">19</td>
-            <td>Bệnh hoặc tổn thương cột sống</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
-          </tr>
-          <tr>
-            <td align="center">20</td>
-            <td>Sử dụng rượu thường xuyên, liên tục</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
-          </tr>
-          <tr>
-            <td align="center">21</td>
-            <td>Sử dụng ma túy và chất gây nghiện</td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
-          </tr>
-          <tr>
+            <td align="center">☐</td><td align="center">☐</td>
             <td align="center">22</td>
-            <td>
-              <div class="fl"><span>Bệnh khác (ghi rõ):</span><i class="d"></i></div>
-            </td>
-            <td align="center">☐</td>
-            <td align="center">☐</td>
+            <td>Bệnh khác (nếu có):<div class="dot-line" style="height:12px; margin-top:2px;"></div></td>
+            <td align="center">☐</td><td align="center">☐</td>
           </tr>
         </tbody>
       </table>
 
-      <!-- ===== MỤC 3 ===== -->
-      <div style="line-height: 1.35; margin-top: 8px;">
-        <div><strong>3. Câu hỏi khác (nếu có):</strong></div>
-        <div style="margin-left: 8px; margin-top: 2px;">
-          <div>a) Ông (bà) có đang điều trị bệnh gì không?</div>
-          <div style="margin-left: 12px; margin-top: 2px;">
-            ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; ☐ Có (Nếu có, xin hãy liệt kê tên bệnh, các thuốc đang dùng và liều lượng):
-          </div>
-          <div class="dot-line" style="height: 16px; margin-top: 3px;"></div>
-          <div class="dot-line" style="height: 16px; margin-top: 3px;"></div>
-        </div>
-        <div style="margin-left: 8px; margin-top: 5px;">
-          <div>b) Tiền sử thai sản (Đối với phụ nữ):</div>
-          <div style="margin-left: 12px; margin-top: 2px;">
-            ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; ☐ Có (Nếu có, xin hãy liệt kê tên bệnh, các thuốc đang dùng và liều lượng):
-          </div>
-          <div class="dot-line" style="height: 16px; margin-top: 3px;"></div>
-          <div class="dot-line" style="height: 16px; margin-top: 3px;"></div>
-        </div>
+      <!-- 3. CÂU HỎI KHÁC -->
+      <div style="font-weight: bold; margin-bottom: 3px;">3. Câu hỏi khác (nếu có):</div>
+      <div style="margin-left: 2px; line-height: 1.45;">
+        <div>a) Ông (bà) có đang điều trị bệnh gì không? ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; ☐ Có (nếu có, xin hãy liệt kê tên bệnh, các thuốc đang dùng và liều lượng):</div>
+        <div class="dot-line" style="margin-top: 3px;"></div>
+        <div class="dot-line" style="margin-top: 3px;"></div>
+
+        <div style="margin-top: 6px;">b) Tiền sử thai sản (đối với phụ nữ): ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; ☐ Có (nếu có, xin hãy liệt kê tên bệnh, các thuốc đang dùng và liều lượng):</div>
+        <div class="dot-line" style="margin-top: 3px;"></div>
+        <div class="dot-line" style="margin-top: 3px;"></div>
       </div>
 
-      <!-- CAM ĐOẠN & CHỮ KÝ -->
-      <table style="width: 100%; border: none; margin-top: 12px;">
-        <tr>
-          <td
-            style="width: 48%; vertical-align: top; border: none; padding-right: 14px; font-style: italic; line-height: 1.3;">
-            Tôi xin cam đoan những điều khai trên đây hoàn toàn đúng với sự thật theo sự hiểu biết của tôi.
-          </td>
-          <td style="width: 52%; text-align: center; vertical-align: top; border: none; padding: 0; line-height: 1.25;">
-            <div style="font-style: italic;"><span x-text="facility.dia_danh || 'Gia Lai'"></span>, ngày <i class="d"
-                style="width:8mm"></i> tháng <i class="d" style="width:8mm"></i> năm 20<i class="d"
-                style="width:8mm"></i></div>
-            <div style="font-weight: bold; text-transform: uppercase; margin-top: 3px;">Người đề nghị khám sức khỏe
-            </div>
-            <div style="font-style: italic; font-size: 11pt;">(Ký và ghi rõ họ, tên)</div>
-            <div style="height: 45px;"></div>
-          </td>
-        </tr>
-      </table>
+      <!-- LỜI CAM ĐOAN & CHỮ KÝ NGƯỜI ĐỀ NGHỊ KSK -->
+      <div style="margin-top: 14px; line-height: 1.4;">
+        <div style="font-style: italic;">
+          Tôi xin cam đoan những điều khai trên đây hoàn toàn đúng với sự thật theo sự hiểu biết của tôi.
+        </div>
+
+        <table style="width: 100%; border: none; margin-top: 10px;">
+          <tr>
+            <td style="width: 45%; border: none;"></td>
+            <td style="width: 55%; text-align: center; border: none; padding: 0;">
+              <div style="font-style: italic;">
+                <span x-text="facility.dia_danh || 'Gia Lai'"></span>, ngày <span class="d" style="width:10mm;"></span> tháng <span class="d" style="width:10mm;"></span> năm 20<span class="d" style="width:8mm;"></span>
+              </div>
+              <div style="font-weight: bold; text-transform: uppercase; margin-top: 3px;">NGƯỜI ĐỀ NGHỊ KHÁM SỨC KHỎE</div>
+              <div style="font-style: italic; font-size: 10.5pt;">(Ký và ghi rõ họ, tên)</div>
+              <div style="height: 65px;"></div>
+              <div style="font-weight: bold; text-transform: uppercase;" x-text="form.HO_TEN"></div>
+            </td>
+          </tr>
+        </table>
+      </div>
     </div>
 
     <div class="print-footer">- Trang 2/5 -</div>
   </div>
 
 
-  <!-- ==================== TRANG 3 / 5 ==================== -->
+  <!-- ================================================================= -->
+  <!-- TRANG 3 / 5                                                       -->
+  <!-- ================================================================= -->
   <div class="print-page">
     <div class="print-page-body">
+      <!-- Header Barcode góc trên phải -->
       <div class="bc-top">
         <svg id="print_barcode_p3"></svg>
-        <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN"></strong></div>
+        <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN || '..........'"></strong></div>
       </div>
 
-      <!-- ===== I. KHÁM THỂ LỰC ===== -->
-      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 3px;">I. KHÁM THỂ LỰC</div>
-      <div style="line-height: 1.6;">
-        <div class="fl"><span>• Chiều cao:</span><i class="d w1"></i><span>cm;</span><span class="g">• Cân
-            nặng:</span><i class="d w1"></i><span>kg;</span><span class="g">• Chỉ số BMI:</span><i class="d w1"></i>
+      <!-- I. KHÁM THỂ LỰC -->
+      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 2px;">I. KHÁM THỂ LỰC</div>
+      <div style="line-height: 1.5; font-size: 11pt;">
+        <div class="fl">
+          <span>• Chiều cao:</span><span class="v" style="width: 16mm; text-align: center;" x-text="form.CHIEU_CAO"></span><span>cm;</span>
+          <span class="g">• Cân nặng:</span><span class="v" style="width: 16mm; text-align: center;" x-text="form.CAN_NANG"></span><span>kg;</span>
+          <span class="g">• Chỉ số BMI:</span><span class="v" style="width: 16mm; text-align: center;" x-text="form.BMI"></span>
         </div>
-        <div class="fl"><span>• Mạch:</span><i class="d w1"></i><span>lần/phút;</span><span class="g">• Huyết
-            áp:</span><i class="d w1"></i><span>/</span><i class="d w1"></i><span>mmHg</span></div>
-        <div class="fl"><span>• Phân loại thể lực:</span><i class="d"></i></div>
+        <div class="fl">
+          <span>• Mạch:</span><span class="v" style="width: 16mm; text-align: center;" x-text="form.MACH"></span><span>lần/phút;</span>
+          <span class="g">• Huyết áp:</span><span class="v" style="width: 28mm; text-align: center;" x-text="form.HUYET_AP"></span><span>mmHg</span>
+        </div>
+        <div class="fl">
+          <span>• Phân loại thể lực:</span><span class="v" x-text="form.KHAM_THE_LUC_PL ? ('Loại ' + form.KHAM_THE_LUC_PL) : ''"></span>
+        </div>
       </div>
-      <table style="width: 100%; border: none; margin: 3px 0 6px 0;">
+
+      <!-- CHỮ KÝ NGƯỜI ĐO THỂ LỰC -->
+      <table style="width: 100%; border: none; margin: 2px 0 4px 0;">
         <tr>
           <td style="width: 55%; border: none;"></td>
           <td style="width: 45%; text-align: center; border: none; padding: 0;">
             <div style="font-weight: bold;">Người đo thể lực</div>
-            <div style="font-style: italic; font-size: 11pt;">(Ký, ghi rõ họ tên)</div>
-            <div style="height: 35px;"></div>
+            <div style="font-style: italic; font-size: 10pt;">(Ký, ghi rõ họ tên)</div>
+            <div style="height: 38px;"></div>
+            <div style="font-weight: 500;" x-text="form.BS_THE_LUC || ''"></div>
           </td>
         </tr>
       </table>
 
-      <!-- ===== II. KHÁM LÂM SÀNG ===== -->
-      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 3px;">II. KHÁM LÂM SÀNG</div>
+      <!-- II. KHÁM LÂM SÀNG: 1. NỘI KHOA, 2. NGOẠI KHOA, 3. SẢN PHỤ KHOA -->
+      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 2px;">II. KHÁM LÂM SÀNG</div>
       <table class="print-table" style="line-height: 1.25;">
         <thead>
           <tr style="font-weight: bold;">
-            <th style="width: 75%; text-align: center;">Nội dung khám</th>
-            <th style="width: 25%; text-align: center;">Họ tên và chữ ký của Bác sỹ</th>
+            <th style="width: 74%; text-align: center;">Nội dung khám</th>
+            <th style="width: 26%; text-align: center;">Họ tên và chữ ký của Bác sỹ</th>
           </tr>
         </thead>
         <tbody>
-          <tr style="font-weight: bold;">
+          <!-- 1. NỘI KHOA -->
+          <tr style="font-weight: bold; background-color: #fcfcfc;">
             <td>1. Nội khoa</td>
-            <td rowspan="9"></td>
-          </tr>
-          <tr>
-            <td>
-              <div class="fl"><span>a) Tuần hoàn:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+            <td rowspan="9" style="vertical-align: bottom; text-align: center; padding-bottom: 8px;">
+              <div style="font-weight: 500;" x-text="form.BS_NOI || ''"></div>
             </td>
           </tr>
           <tr>
             <td>
-              <div class="fl"><span>b) Hô hấp:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>a) Tuần hoàn:</span><span class="v" x-text="form.NOI_KHOA_TUAN_HOAN"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_TUAN_HOAN_PL ? ('Loại ' + form.NOI_KHOA_TUAN_HOAN_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
             <td>
-              <div class="fl"><span>c) Tiêu hóa:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>b) Hô hấp:</span><span class="v" x-text="form.NOI_KHOA_HO_HAP"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_HO_HAP_PL ? ('Loại ' + form.NOI_KHOA_HO_HAP_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
             <td>
-              <div class="fl"><span>d) Thận - Tiết niệu - Sinh dục:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>c) Tiêu hóa:</span><span class="v" x-text="form.NOI_KHOA_TIEU_HOA"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_TIEU_HOA_PL ? ('Loại ' + form.NOI_KHOA_TIEU_HOA_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
             <td>
-              <div class="fl"><span>đ) Nội tiết:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>d) Thận - Tiết niệu - Sinh dục:</span><span class="v" x-text="form.NOI_KHOA_THAN_TN_SD"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_THAN_TIETNIEU_PL ? ('Loại ' + form.NOI_KHOA_THAN_TIETNIEU_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
             <td>
-              <div class="fl"><span>e) Cơ – xương – khớp:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>đ) Nội tiết:</span><span class="v" x-text="form.NOI_KHOA_NOI_TIET"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_NOI_TIET_PL ? ('Loại ' + form.NOI_KHOA_NOI_TIET_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
             <td>
-              <div class="fl"><span>g) Thần kinh:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>e) Cơ – xương – khớp:</span><span class="v" x-text="form.NOI_KHOA_CO_XUONG_KHOP"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_CO_XUONG_KHOP_PL ? ('Loại ' + form.NOI_KHOA_CO_XUONG_KHOP_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
             <td>
-              <div class="fl"><span>h) Tâm thần:</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d"></i></div>
+              <div class="fl"><span>g) Thần kinh:</span><span class="v" x-text="form.NOI_KHOA_THAN_KINH"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_THAN_KINH_PL ? ('Loại ' + form.NOI_KHOA_THAN_KINH_PL) : ''"></span></div>
             </td>
           </tr>
           <tr>
-            <td><strong>2. Ngoại khoa:</strong>
-              <div class="dot-line" style="height: 15px;"></div>
-              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><i class="d w3"></i></div>
+            <td>
+              <div class="fl"><span>h) Tâm thần:</span><span class="v" x-text="form.NOI_KHOA_TAM_THAN"></span></div>
+              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.NOI_KHOA_TAM_THAN_PL ? ('Loại ' + form.NOI_KHOA_TAM_THAN_PL) : ''"></span></div>
             </td>
-            <td></td>
           </tr>
+
+          <!-- 2. NGOẠI KHOA -->
           <tr>
-            <td><strong>3. Da liễu:</strong>
-              <div class="dot-line" style="height: 15px;"></div>
-              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><i class="d w3"></i></div>
+            <td>
+              <strong>2. Ngoại khoa:</strong>
+              <div class="v" style="display:block; min-height:14px;" x-text="form.KET_QUA_KHAM_NGOAI_KHOA"></div>
+              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><span class="v" x-text="form.NGOAI_KHOA_PL ? ('Loại ' + form.NGOAI_KHOA_PL) : ''"></span></div>
             </td>
-            <td></td>
+            <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
+              <div style="font-weight: 500;" x-text="form.BS_NGOAI || ''"></div>
+            </td>
           </tr>
+
+          <!-- 3. SẢN PHỤ KHOA (ĐẾN HẾT TRANG 3 THEO YÊU CẦU USER) -->
           <tr>
-            <td><strong>4. Sản phụ khoa (đối với nữ):</strong>
-              <div class="dot-line" style="height: 15px;"></div>
-              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><i class="d w3"></i></div>
+            <td>
+              <strong>3. Sản phụ khoa</strong> <i>(đối với nữ):</i>
+              <div class="v" style="display:block; min-height:14px;" x-text="form.KET_QUA_KHAM_SAN_PHU_KHOA"></div>
+              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><span class="v" x-text="form.SAN_PHU_KHOA_PL ? ('Loại ' + form.SAN_PHU_KHOA_PL) : ''"></span></div>
             </td>
-            <td></td>
+            <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
+              <div style="font-weight: 500;" x-text="form.BS_SAN || ''"></div>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -702,109 +639,128 @@
   </div>
 
 
-  <!-- ==================== TRANG 4 / 5 ==================== -->
+  <!-- ================================================================= -->
+  <!-- TRANG 4 / 5                                                       -->
+  <!-- ================================================================= -->
   <div class="print-page">
     <div class="print-page-body">
+      <!-- Header Barcode góc trên phải -->
       <div class="bc-top">
         <svg id="print_barcode_p4"></svg>
-        <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN"></strong></div>
+        <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN || '..........'"></strong></div>
       </div>
 
-      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 3px;">II. KHÁM LÂM SÀNG (TIẾP THEO)</div>
-      <table class="print-table" style="line-height: 1.2;">
+      <!-- II. KHÁM LÂM SÀNG (TIẾP THEO): 4. MẮT, 5. TAI-MŨI-HỌNG, 6. RĂNG-HÀM-MẶT, 7. DA LIỄU -->
+      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 2px;">II. KHÁM LÂM SÀNG (TIẾP THEO)</div>
+      <table class="print-table" style="line-height: 1.25; margin-bottom: 5px;">
         <thead>
           <tr style="font-weight: bold;">
-            <th style="width: 75%; text-align: center;">Nội dung khám</th>
-            <th style="width: 25%; text-align: center;">Họ tên và chữ ký của Bác sỹ</th>
+            <th style="width: 74%; text-align: center;">Nội dung khám</th>
+            <th style="width: 26%; text-align: center;">Họ tên và chữ ký của Bác sỹ</th>
           </tr>
         </thead>
         <tbody>
+          <!-- 4. MẮT -->
           <tr>
             <td>
-              <strong>5. Mắt:</strong><br />
-              Kết quả khám thị lực:
-              <div class="fl"><span>&nbsp;&nbsp;• Không kính: Mắt phải:</span><i class="d"
-                  style="flex:none;width:12mm"></i><span>/10</span><span class="g" style="margin-left:14mm">Mắt
-                  trái:</span><i class="d" style="flex:none;width:12mm"></i><span>/10</span></div>
-              <div class="fl"><span>&nbsp;&nbsp;• Có kính:</span><span style="margin-left:10.5mm">Mắt phải:</span><i
-                  class="d" style="flex:none;width:12mm"></i><span>/10</span><span class="g"
-                  style="margin-left:14mm">Mắt trái:</span><i class="d"
-                  style="flex:none;width:12mm"></i><span>/10</span></div>
-              <div class="fl"><span>Các bệnh về mắt (nếu có):</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d w3"></i></div>
+              <strong>4. Mắt:</strong><br/>
+              - Thị lực không kính: Mắt phải: <span class="v" style="width:12mm; text-align:center;" x-text="form.KHONG_KINH_MAT_PHAI"></span>/10; Mắt trái: <span class="v" style="width:12mm; text-align:center;" x-text="form.KHONG_KINH_MAT_TRAI"></span>/10<br/>
+              - Thị lực có kính: Mắt phải: <span class="v" style="width:12mm; text-align:center;" x-text="form.CO_KINH_MAT_PHAI"></span>/10; Mắt trái: <span class="v" style="width:12mm; text-align:center;" x-text="form.CO_KINH_MAT_TRAI"></span>/10<br/>
+              - Các bệnh về mắt (nếu có): <span class="v" x-text="form.CAC_BENH_VE_MAT"></span><br/>
+              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.MAT_PL ? ('Loại ' + form.MAT_PL) : ''"></span></div>
             </td>
-            <td></td>
+            <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
+              <div style="font-weight: 500;" x-text="form.BS_MAT || ''"></div>
+            </td>
           </tr>
+
+          <!-- 5. TAI - MŨI - HỌNG -->
           <tr>
             <td>
-              <strong>6. Tai – Mũi – Họng:</strong><br />
-              Kết quả khám thính lực:
-              <div class="fl"><span>&nbsp;&nbsp;• Tai trái:</span><span style="margin-left:3mm">Nói thường:</span><i
-                  class="d w1"></i><span>m;</span><span class="g">Nói thầm:</span><i class="d w1"></i><span>m</span>
-              </div>
-              <div class="fl"><span>&nbsp;&nbsp;• Tai phải:</span><span style="margin-left:2mm">Nói thường:</span><i
-                  class="d w1"></i><span>m;</span><span class="g">Nói thầm:</span><i class="d w1"></i><span>m</span>
-              </div>
-              <div class="fl"><span>Các bệnh về tai mũi họng (nếu có):</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d w3"></i></div>
+              <strong>5. Tai - Mũi - Họng:</strong><br/>
+              - Tai trái: Nói thường: <span class="v" style="width:12mm; text-align:center;" x-text="form.TAI_TRAI_NOI_THUONG"></span>m; Nói thầm: <span class="v" style="width:12mm; text-align:center;" x-text="form.TAI_TRAI_NOI_THAM"></span>m<br/>
+              - Tai phải: Nói thường: <span class="v" style="width:12mm; text-align:center;" x-text="form.TAI_PHAI_NOI_THUONG"></span>m; Nói thầm: <span class="v" style="width:12mm; text-align:center;" x-text="form.TAI_PHAI_NOI_THAM"></span>m<br/>
+              - Các bệnh về tai, mũi, họng (nếu có): <span class="v" x-text="form.CAC_BENH_VE_TAI_MUI_HONG"></span><br/>
+              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.TMH_PL ? ('Loại ' + form.TMH_PL) : ''"></span></div>
             </td>
-            <td></td>
+            <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
+              <div style="font-weight: 500;" x-text="form.BS_TMH || ''"></div>
+            </td>
           </tr>
+
+          <!-- 6. RĂNG - HÀM - MẶT -->
           <tr>
             <td>
-              <strong>7. Răng – Hàm – Mặt:</strong><br />
-              Kết quả khám:
-              <div class="fl"><span>&nbsp;&nbsp;• Hàm trên:</span><i class="d"></i></div>
-              <div class="fl"><span>&nbsp;&nbsp;• Hàm dưới:</span><i class="d"></i></div>
-              <div class="fl"><span>Các bệnh về răng hàm mặt (nếu có):</span><i class="d"></i></div>
-              <div class="fl"><span>Phân loại:</span><i class="d w3"></i></div>
+              <strong>6. Răng - Hàm - Mặt:</strong><br/>
+              - Hàm trên: <span class="v" x-text="form.HAM_TREN"></span>; Hàm dưới: <span class="v" x-text="form.HAM_DUOI"></span><br/>
+              - Các bệnh về răng, hàm, mặt (nếu có): <span class="v" x-text="form.CAC_BENH_VE_RHM"></span><br/>
+              <div class="fl"><span>Phân loại:</span><span class="v" x-text="form.RHM_PL ? ('Loại ' + form.RHM_PL) : ''"></span></div>
             </td>
-            <td></td>
+            <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
+              <div style="font-weight: 500;" x-text="form.BS_RHM || ''"></div>
+            </td>
+          </tr>
+
+          <!-- 7. DA LIỄU -->
+          <tr>
+            <td>
+              <strong>7. Da liễu:</strong>
+              <div class="v" style="display:block; min-height:14px;" x-text="form.KET_QUA_KHAM_DA_LIEU"></div>
+              <div class="fl" style="margin-top: 2px;"><span>Phân loại:</span><span class="v" x-text="form.DA_LIEU_PL ? ('Loại ' + form.DA_LIEU_PL) : ''"></span></div>
+            </td>
+            <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
+              <div style="font-weight: 500;" x-text="form.BS_DALIEU || ''"></div>
+            </td>
           </tr>
         </tbody>
       </table>
 
-      <div style="font-weight: bold; text-transform: uppercase; margin: 8px 0 2px 0;">III. KHÁM CẬN LÂM SÀNG</div>
-      <div style="font-style: italic; margin-bottom: 3px;">Khám phân loại sức khỏe để đi học, đi làm thực hiện khám cận
-        lâm sàng sau:</div>
+      <!-- III. KHÁM CẬN LÂM SÀNG: HỌC/LÀM ĐẾN HẾT MỤC d) CẬN LÂM SÀNG KHÁC -->
+      <div style="font-weight: bold; text-transform: uppercase; margin: 4px 0 1px 0;">III. KHÁM CẬN LÂM SÀNG</div>
+      <div style="font-style: italic; margin-bottom: 2px; font-size: 10.5pt;">Khám phân loại sức khỏe để đi học, đi làm thực hiện khám cận lâm sàng sau:</div>
       <table class="print-table" style="line-height: 1.2;">
         <thead>
           <tr style="font-weight: bold;">
-            <th style="width: 75%; text-align: center;">Nội dung khám</th>
-            <th style="width: 25%; text-align: center;">Họ tên, chữ ký của Bác sỹ</th>
+            <th style="width: 74%; text-align: center;">Nội dung khám</th>
+            <th style="width: 26%; text-align: center;">Họ tên, chữ ký của Bác sỹ</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td>
               <strong>a) Xét nghiệm máu:</strong>
-              <div class="fl"><span>• Huyết học: Tổng phân tích tế bào máu ngoại vi:</span><i class="d"></i></div>
-              <div class="fl"><span>• Sinh hóa máu: Đường máu:</span><i class="d"></i><span>; Urê:</span><i
-                  class="d"></i><span>; Creatinin:</span><i class="d"></i></div>
-              <div class="fl"><span>&nbsp;&nbsp;ASAT (GOT):</span><i class="d"></i><span>; ALAT (GPT):</span><i
-                  class="d"></i></div>
+              <div class="fl"><span>• Huyết học: Tổng phân tích tế bào máu ngoại vi:</span><span class="v" x-text="form.XN_MAU_HUYET_HOC"></span></div>
+              <div class="fl">
+                <span>• Sinh hóa: Đường máu:</span><span class="v" style="width:12mm; text-align:center;" x-text="form.XN_MAU_DUONG_HUYET"></span>
+                <span>; Urê:</span><span class="v" style="width:12mm; text-align:center;" x-text="form.XN_MAU_URE"></span>
+                <span>; Creatinin:</span><span class="v" style="width:12mm; text-align:center;" x-text="form.XN_MAU_CREATININ"></span>
+              </div>
+              <div class="fl">
+                <span>&nbsp;&nbsp;ASAT (GOT):</span><span class="v" style="width:12mm; text-align:center;" x-text="form.XN_MAU_ASAT"></span>
+                <span>; ALAT (GPT):</span><span class="v" style="width:12mm; text-align:center;" x-text="form.XN_MAU_ALAT"></span>
+              </div>
             </td>
-            <td rowspan="4"></td>
+            <td rowspan="4" style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
+              <div style="font-weight: 500;" x-text="form.BS_CAN_LAM_SANG || ''"></div>
+            </td>
           </tr>
           <tr>
             <td>
               <strong>b) Xét nghiệm nước tiểu:</strong>
-              <div class="fl"><span>• Tổng phân tích nước tiểu (bằng máy tự động):</span><i class="d"></i></div>
-              <div class="fl"><span>• Khác (nếu có):</span><i class="d"></i></div>
+              <div class="fl"><span>• Tổng phân tích nước tiểu:</span><span class="v" x-text="form.XN_NUOC_TIEU"></span></div>
+              <div class="fl"><span>• Khác (nếu có):</span><span class="v" x-text="form.XN_NUOC_TIEU_KHAC"></span></div>
             </td>
           </tr>
           <tr>
-            <td><strong>c) Chẩn đoán hình ảnh (XQ tim phổi thẳng):</strong>
-              <div class="dot-line" style="height: 15px;"></div>
-              <div class="dot-line" style="height: 15px; margin-top: 2px;"></div>
-              <div class="dot-line" style="height: 15px; margin-top: 2px;"></div>
+            <td>
+              <strong>c) Chẩn đoán hình ảnh (XQ tim phổi thẳng):</strong>
+              <div class="v" style="display:block; min-height:14px;" x-text="form.CDHA_XQUANG"></div>
             </td>
           </tr>
           <tr>
-            <td><strong>d) Kết quả khám Cận lâm sàng khác:</strong><br />
-              ☐ Không &nbsp;&nbsp;&nbsp;&nbsp; ☐ Có (Nếu có, hãy liệt kê chi tiết):
-              <div class="dot-line" style="height: 15px; margin-top: 2px;"></div>
-              <div class="dot-line" style="height: 15px; margin-top: 2px;"></div>
+            <td>
+              <strong>d) Kết quả khám Cận lâm sàng khác:</strong>
+              <div class="v" style="display:block; min-height:14px;" x-text="form.CAN_LAM_SANG_KHAC"></div>
             </td>
           </tr>
         </tbody>
@@ -815,69 +771,84 @@
   </div>
 
 
-  <!-- ==================== TRANG 5 / 5 ==================== -->
+  <!-- ================================================================= -->
+  <!-- TRANG 5 / 5                                                       -->
+  <!-- ================================================================= -->
   <div class="print-page">
     <div class="print-page-body">
+      <!-- Header Barcode góc trên phải -->
       <div class="bc-top">
         <svg id="print_barcode_p5"></svg>
-        <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN"></strong></div>
+        <div class="bc-cap">Mã tiếp nhận: <strong x-text="form.MA_TIEP_NHAN || '..........'"></strong></div>
       </div>
 
-      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 2px;">III. KHÁM CẬN LÂM SÀNG (TIẾP THEO)
-      </div>
-      <div style="font-style: italic; margin-bottom: 4px;">Khám sức khỏe định kỳ (cận lâm sàng thực hiện theo chỉ định
-        của bác sỹ)</div>
-      <table class="print-table" style="margin-bottom: 14px;">
+      <!-- III. KHÁM CẬN LÂM SÀNG (TIẾP THEO) - ĐỊNH KỲ THEO CHỈ ĐỊNH -->
+      <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 1px;">III. KHÁM CẬN LÂM SÀNG (TIẾP THEO)</div>
+      <div style="font-style: italic; margin-bottom: 3px; font-size: 10.5pt;">Khám sức khỏe định kỳ (cận lâm sàng thực hiện theo chỉ định của bác sỹ)</div>
+      <table class="print-table" style="margin-bottom: 10px;">
         <thead>
           <tr style="font-weight: bold;">
-            <th style="width: 75%; text-align: center;">Nội dung khám</th>
-            <th style="width: 25%; text-align: center;">Họ tên, chữ ký của Bác sỹ</th>
+            <th style="width: 74%; text-align: center;">Nội dung khám</th>
+            <th style="width: 26%; text-align: center;">Họ tên, chữ ký của Bác sỹ</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td style="padding: 6px 8px;">
+            <td style="padding: 4px 6px;">
               <strong>Cận lâm sàng thực hiện theo chỉ định của bác sỹ:</strong>
-              <div style="margin-top: 3px;">Kết quả:</div>
-              <div class="dot-line" style="margin-top: 4px;"></div>
-              <div class="dot-line" style="margin-top: 4px;"></div>
-              <div class="dot-line" style="margin-top: 4px;"></div>
-              <div class="dot-line" style="margin-top: 4px;"></div>
-              <div class="dot-line" style="margin-top: 4px;"></div>
-              <div class="dot-line" style="margin-top: 4px;"></div>
-              <div class="dot-line" style="margin-top: 4px;"></div>
+              <div style="margin-top: 2px;">Kết quả:</div>
+              <div class="v" style="display:block; min-height:36px;" x-text="form.CAN_LAM_SANG_DINH_KY"></div>
+              <div class="dot-line" style="margin-top: 3px;"></div>
+              <div class="dot-line" style="margin-top: 3px;"></div>
+              <div class="dot-line" style="margin-top: 3px;"></div>
             </td>
-            <td></td>
+            <td style="vertical-align: bottom; text-align: center; padding-bottom: 6px;">
+              <div style="font-weight: 500;" x-text="form.BS_CAN_LAM_SANG_DK || ''"></div>
+            </td>
           </tr>
         </tbody>
       </table>
 
-      <div style="font-weight: bold; text-transform: uppercase; font-size: 13pt; margin: 14px 0 6px 0;">IV. KẾT LUẬN
-      </div>
-      <div style="line-height: 1.5;">
+      <!-- IV. KẾT LUẬN -->
+      <div style="font-weight: bold; text-transform: uppercase; font-size: 13pt; margin: 8px 0 4px 0;">IV. KẾT LUẬN</div>
+      <div style="line-height: 1.5; font-size: 11.5pt;">
         <div><strong>1. Tình trạng sức khỏe; mắc các bệnh, tật (nếu có):</strong></div>
-        <div style="margin-left: 10px; margin-top: 5px;">
-          <div class="dot-line"></div>
-          <div class="dot-line" style="margin-top: 5px;"></div>
-          <div class="dot-line" style="margin-top: 5px;"></div>
-          <div class="dot-line" style="margin-top: 5px;"></div>
-          <div class="dot-line" style="margin-top: 5px;"></div>
+        <div style="margin-left: 8px; margin-top: 2px;">
+          <div class="v" style="display:block; min-height:16px;" x-text="form.TINH_TRANG_SUC_KHOE"></div>
+          <div class="dot-line" style="margin-top: 3px;"></div>
+          <div class="dot-line" style="margin-top: 3px;"></div>
         </div>
-        <div class="fl" style="margin-top: 12px;"><span><strong>2. Phân loại sức khỏe (theo quy định của Bộ Y
-              tế):</strong></span><i class="d"></i></div>
+
+        <div style="margin-top: 8px;">
+          <strong>2. Phân loại sức khỏe (theo quy định của Bộ Y tế):</strong>
+          <span class="v" style="font-weight: bold; font-size: 12pt; margin-left: 4px;" x-text="form.KET_LUAN_PHAN_LOAI ? ('Loại ' + form.KET_LUAN_PHAN_LOAI) : '...................................................'"></span>
+        </div>
+
+        <div style="margin-top: 8px;">
+          <strong>3. Các bệnh, tật chuyên khoa (nếu có):</strong>
+          <div class="v" style="display:block; min-height:16px; margin-left: 8px;" x-text="form.CAC_BENH_TAT_CHUYEN_KHOA"></div>
+          <div class="dot-line" style="margin-top: 3px; margin-left: 8px;"></div>
+        </div>
+
+        <div style="margin-top: 8px;">
+          <strong>4. Ghi chú / Đề nghị khám lại (nếu có):</strong>
+          <div class="v" style="display:block; min-height:16px; margin-left: 8px;" x-text="form.GHI_CHU"></div>
+          <div class="dot-line" style="margin-top: 3px; margin-left: 8px;"></div>
+        </div>
       </div>
 
-      <table style="width: 100%; border: none; margin-top: 24px;">
+      <!-- KÝ TÊN VÀ ĐÓNG DẤU NGƯỜI KẾT LUẬN -->
+      <table style="width: 100%; border: none; margin-top: 14px;">
         <tr>
-          <td style="width: 45%; border: none; padding: 0;"></td>
-          <td style="width: 55%; text-align: center; vertical-align: top; border: none; padding: 0;">
-            <div style="font-style: italic;"><span x-text="facility.dia_danh || 'Gia Lai'"></span>, ngày <i class="d"
-                style="width:8mm"></i> tháng <i class="d" style="width:8mm"></i> năm 20<i class="d"
-                style="width:8mm"></i></div>
-            <div style="font-weight: bold; text-transform: uppercase; font-size: 13pt; margin-top: 4px;">NGƯỜI KẾT LUẬN
+          <td style="width: 45%; border: none;"></td>
+          <td style="width: 55%; text-align: center; border: none; padding: 0;">
+            <div style="font-style: italic;">
+              <span x-text="facility.dia_danh || 'Gia Lai'"></span>, ngày <span class="d" style="width:10mm;" x-text="form.NGAY_KET_LUAN ? form.NGAY_KET_LUAN.split('/')[0] : ''"></span> tháng <span class="d" style="width:10mm;" x-text="form.NGAY_KET_LUAN ? form.NGAY_KET_LUAN.split('/')[1] : ''"></span> năm 20<span class="d" style="width:8mm;" x-text="form.NGAY_KET_LUAN ? form.NGAY_KET_LUAN.split('/')[2].slice(-2) : ''"></span>
             </div>
-            <div style="font-style: italic; font-size: 11pt;">(Ký, ghi rõ họ tên và đóng dấu)</div>
-            <div style="height: 60px;"></div>
+            <div style="font-weight: bold; text-transform: uppercase; margin-top: 3px; font-size: 12pt;">NGƯỜI KẾT LUẬN</div>
+            <div style="font-style: italic; font-size: 10.5pt;">(Ký, ghi rõ họ tên và đóng dấu)</div>
+            <div style="height: 70px;"></div>
+            <div style="font-weight: bold; text-transform: uppercase; font-size: 12pt;" x-text="form.NGUOI_KET_LUAN || ''"></div>
           </td>
         </tr>
       </table>
@@ -888,47 +859,69 @@
 
 </div>
 
-<!-- SCRIPT LOGIC IN PHÔI KSK (5 TRANG) – giữ nguyên -->
+<!-- ===================================================================== -->
+<!-- SERVICE IN TOÀN BỘ LOGIC IN ĐẶT TẠI print.html                        -->
+<!-- ===================================================================== -->
 <script>
   window.PrintService = {
-    async printBlank(app) {
-      if (app.form.MATINH_CU_TRU && (!app.catalogs.xa || !app.catalogs.xa.length)) {
-        await app.loadWardsForProvince(app.form.MATINH_CU_TRU);
-      }
-      const code = app.form.MA_TIEP_NHAN || '0';
+    renderBarcodes(app) {
+      const code = (app && app.form && app.form.MA_TIEP_NHAN) ? String(app.form.MA_TIEP_NHAN) : '0';
       if (typeof JsBarcode !== 'undefined') {
         ['p1', 'p2', 'p3', 'p4', 'p5'].forEach(p => {
           const el = document.querySelector('#print_barcode_' + p);
           if (el) {
-            JsBarcode('#print_barcode_' + p, code, {
-              format: 'CODE128',
-              displayValue: false,
-              margin: 0,
-              width: 2.1,
-              height: 40
-            });
+            try {
+              JsBarcode('#print_barcode_' + p, code, {
+                format: 'CODE128',
+                displayValue: false,
+                margin: 0,
+                width: 1.5,
+                height: 38
+              });
+            } catch (err) {
+              console.warn('JsBarcode error for ' + p, err);
+            }
           }
         });
       }
-      app.$nextTick(() => window.print());
     },
 
-    printReceptionBlank(app) {
-      if (!app.form.MA_TIEP_NHAN) {
-        app.toast('Vui lòng nhập Mã tiếp nhận trước khi in phôi!', 'error');
+    async prepareAddress(app) {
+      if (app && app.form && app.form.MATINH_CU_TRU) {
+        if (!app.catalogs.xa || !app.catalogs.xa.length) {
+          if (typeof app.loadWardsForProvince === 'function') {
+            await app.loadWardsForProvince(app.form.MATINH_CU_TRU);
+          }
+        }
+      }
+    },
+
+    async printBlank(app) {
+      await this.prepareAddress(app);
+      this.renderBarcodes(app);
+      if (app && app.$nextTick) {
+        app.$nextTick(() => window.print());
+      } else {
+        setTimeout(() => window.print(), 100);
+      }
+    },
+
+    async printReceptionBlank(app) {
+      if (!app.form || !app.form.MA_TIEP_NHAN) {
+        if (app.toast) app.toast('Vui lòng nhập Mã tiếp nhận trước khi in phôi!', 'error');
         return;
       }
       app.printModeReception = true;
-      this.printBlank(app);
+      await this.printBlank(app);
     },
 
-    printFullRecord(app) {
-      if (!app.form.MA_TIEP_NHAN) {
-        app.toast('Vui lòng nhập Mã tiếp nhận trước khi in!', 'error');
+    async printFullRecord(app) {
+      if (!app.form || !app.form.MA_TIEP_NHAN) {
+        if (app.toast) app.toast('Vui lòng nhập Mã tiếp nhận trước khi in!', 'error');
         return;
       }
       app.printModeReception = false;
-      this.printBlank(app);
+      await this.printBlank(app);
     }
   };
 </script>

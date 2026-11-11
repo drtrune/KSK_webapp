@@ -1,114 +1,133 @@
 <!-- TAB 4: KHÁM LÂM SÀNG CÁC CHUYÊN KHOA -->
-<div x-show="activeTab === 'clinical'" class="space-y-4 no-print">
+<div x-show="activeTab === 'clinical'" class="space-y-4 no-print relative">
+
 
   <!-- ============================================================== -->
-  <!-- THANH SUB-TAB CÁC CHUYÊN KHOA LÂM SÀNG (DESIGN SYSTEM SPEC)    -->
+  <!-- 1. THANH SUB-TAB CHUYÊN KHOA CỐ ĐỊNH Ở ĐỈNH (STICKY TOP-0)       -->
   <!-- ============================================================== -->
-  <div class="bg-white rounded-xl p-2 border border-slate-200 shadow-xs flex items-center gap-1.5 overflow-x-auto sticky top-[112px] z-10">
-    <!-- 1. Nội khoa -->
-    <button
-      type="button"
-      @click="clinicalSubTab = 'noi'"
-      :class="clinicalSubTab === 'noi' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-      class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-    >
-      <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'noi' ? 'bg-white' : 'bg-blue-500'"></span>
-      <span>1. Nội khoa</span>
-      <span x-show="form.NOI_KHOA_TUAN_HOAN" class="text-[10px] opacity-90 font-bold">✓</span>
-    </button>
+  <div class="sticky top-0 z-30 bg-white/95 backdrop-blur-xs border-b border-slate-200 shadow-xs flex items-center justify-between gap-2 overflow-x-auto px-4 py-2 rounded-xl mb-4">
+    <!-- Cụm các nút chuyên khoa -->
+    <div class="flex items-center gap-1.5 overflow-x-auto shrink-0">
+      <!-- 1. Nội khoa -->
+      <button
+        type="button"
+        @click="clinicalSubTab = 'noi'"
+        :class="clinicalSubTab === 'noi' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
+      >
+        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'noi' ? 'bg-white' : 'bg-blue-500'"></span>
+        <span>1. Nội khoa</span>
+        <span x-show="form.NOI_KHOA_TUAN_HOAN" class="text-[10px] opacity-90 font-bold">✓</span>
+      </button>
 
-    <!-- 2. Ngoại khoa -->
-    <button
-      type="button"
-      @click="clinicalSubTab = 'ngoai'"
-      :class="clinicalSubTab === 'ngoai' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-      class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-    >
-      <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'ngoai' ? 'bg-white' : 'bg-orange-500'"></span>
-      <span>2. Ngoại khoa</span>
-      <span x-show="form.KET_QUA_KHAM_NGOAI_KHOA" class="text-[10px] opacity-90 font-bold">✓</span>
-    </button>
+      <!-- 2. Ngoại khoa -->
+      <button
+        type="button"
+        @click="clinicalSubTab = 'ngoai'"
+        :class="clinicalSubTab === 'ngoai' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
+      >
+        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'ngoai' ? 'bg-white' : 'bg-orange-500'"></span>
+        <span>2. Ngoại khoa</span>
+        <span x-show="form.KET_QUA_KHAM_NGOAI_KHOA" class="text-[10px] opacity-90 font-bold">✓</span>
+      </button>
 
-    <!-- 3. Da liễu -->
-    <button
-      type="button"
-      @click="clinicalSubTab = 'dalieu'"
-      :class="clinicalSubTab === 'dalieu' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-      class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-    >
-      <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'dalieu' ? 'bg-white' : 'bg-teal-500'"></span>
-      <span>3. Da liễu</span>
-      <span x-show="form.KET_QUA_KHAM_DA_LIEU" class="text-[10px] opacity-90 font-bold">✓</span>
-    </button>
+      <!-- 3. Da liễu -->
+      <button
+        type="button"
+        @click="clinicalSubTab = 'dalieu'"
+        :class="clinicalSubTab === 'dalieu' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
+      >
+        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'dalieu' ? 'bg-white' : 'bg-teal-500'"></span>
+        <span>3. Da liễu</span>
+        <span x-show="form.KET_QUA_KHAM_DA_LIEU" class="text-[10px] opacity-90 font-bold">✓</span>
+      </button>
 
-    <!-- 4. Sản phụ khoa (Chỉ hiển thị khi là Nữ: form.GIOI_TINH === '2') -->
-    <button
-      x-show="form.GIOI_TINH === '2'"
-      type="button"
-      @click="clinicalSubTab = 'san'"
-      :class="clinicalSubTab === 'san' ? 'bg-[#E84393] text-white font-medium shadow-xs' : 'bg-pink-100 text-pink-700 hover:bg-pink-200'"
-      class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-      x-cloak
-    >
-      <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'san' ? 'bg-white' : 'bg-pink-500'"></span>
-      <span>4. Sản phụ khoa</span>
-      <span x-show="form.KET_QUA_KHAM_SAN_PHU_KHOA" class="text-[10px] opacity-90 font-bold">✓</span>
-    </button>
+      <!-- 4. Sản phụ khoa (Chỉ hiển thị khi là Nữ: form.GIOI_TINH === '2') -->
+      <button
+        x-show="form.GIOI_TINH === '2'"
+        type="button"
+        @click="clinicalSubTab = 'san'"
+        :class="clinicalSubTab === 'san' ? 'bg-[#E84393] text-white font-medium shadow-xs' : 'bg-pink-100 text-pink-700 hover:bg-pink-200'"
+        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
+        x-cloak
+      >
+        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'san' ? 'bg-white' : 'bg-pink-500'"></span>
+        <span>4. Sản phụ khoa</span>
+        <span x-show="form.KET_QUA_KHAM_SAN_PHU_KHOA" class="text-[10px] opacity-90 font-bold">✓</span>
+      </button>
 
-    <!-- 5. Mắt -->
-    <button
-      type="button"
-      @click="clinicalSubTab = 'mat'"
-      :class="clinicalSubTab === 'mat' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-      class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-    >
-      <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'mat' ? 'bg-white' : 'bg-cyan-500'"></span>
-      <span>5. Mắt</span>
-      <span x-show="form.KHONG_KINH_MAT_PHAI" class="text-[10px] opacity-90 font-bold">✓</span>
-    </button>
+      <!-- 5. Mắt -->
+      <button
+        type="button"
+        @click="clinicalSubTab = 'mat'"
+        :class="clinicalSubTab === 'mat' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
+      >
+        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'mat' ? 'bg-white' : 'bg-cyan-500'"></span>
+        <span>5. Mắt</span>
+        <span x-show="form.KHONG_KINH_MAT_PHAI" class="text-[10px] opacity-90 font-bold">✓</span>
+      </button>
 
-    <!-- 6. Tai - Mũi - Họng -->
-    <button
-      type="button"
-      @click="clinicalSubTab = 'tmh'"
-      :class="clinicalSubTab === 'tmh' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-      class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-    >
-      <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'tmh' ? 'bg-white' : 'bg-violet-500'"></span>
-      <span>6. Tai - Mũi - Họng</span>
-      <span x-show="form.TAI_TRAI_NOI_THUONG" class="text-[10px] opacity-90 font-bold">✓</span>
-    </button>
+      <!-- 6. Tai - Mũi - Họng -->
+      <button
+        type="button"
+        @click="clinicalSubTab = 'tmh'"
+        :class="clinicalSubTab === 'tmh' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
+      >
+        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'tmh' ? 'bg-white' : 'bg-violet-500'"></span>
+        <span>6. Tai - Mũi - Họng</span>
+        <span x-show="form.TAI_TRAI_NOI_THUONG" class="text-[10px] opacity-90 font-bold">✓</span>
+      </button>
 
-    <!-- 7. Răng - Hàm - Mặt -->
-    <button
-      type="button"
-      @click="clinicalSubTab = 'rhm'"
-      :class="clinicalSubTab === 'rhm' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-      class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-    >
-      <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'rhm' ? 'bg-white' : 'bg-rose-500'"></span>
-      <span>7. Răng - Hàm - Mặt</span>
-      <span x-show="form.HAM_TREN" class="text-[10px] opacity-90 font-bold">✓</span>
-    </button>
+      <!-- 7. Răng - Hàm - Mặt -->
+      <button
+        type="button"
+        @click="clinicalSubTab = 'rhm'"
+        :class="clinicalSubTab === 'rhm' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
+      >
+        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'rhm' ? 'bg-white' : 'bg-rose-500'"></span>
+        <span>7. Răng - Hàm - Mặt</span>
+        <span x-show="form.HAM_TREN" class="text-[10px] opacity-90 font-bold">✓</span>
+      </button>
 
-    <!-- Xem tất cả -->
-    <button
-      type="button"
-      @click="clinicalSubTab = 'all'"
-      :class="clinicalSubTab === 'all' ? 'bg-slate-800 text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-      class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5 ml-auto"
-      title="Hiển thị tất cả 7 chuyên khoa trên một trang"
-    >
-      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-      <span>Xem tất cả</span>
-    </button>
+      <!-- Xem tất cả -->
+      <button
+        type="button"
+        @click="clinicalSubTab = 'all'"
+        :class="clinicalSubTab === 'all' ? 'bg-slate-800 text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
+        title="Hiển thị tất cả chuyên khoa trên một trang"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+        <span>Xem tất cả</span>
+      </button>
+    </div>
+
+    <!-- Cụm chọn Chế độ nhập liệu bên phải -->
+    <div class="flex items-center gap-1.5 shrink-0 ml-auto border-l border-slate-200 pl-3">
+      <span class="text-[11px] text-slate-500 hidden md:inline">Chế độ:</span>
+      <select x-model="clinicalInputMode" @change="saveUserPreferences()" class="px-2 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border-none cursor-pointer focus:ring-1 focus:ring-sky-500">
+        <option value="focus">⚡ Khám nhanh (Focus)</option>
+        <option value="minimal">📋 Tối thiểu (Phiếu giấy)</option>
+        <option value="full">📑 Chi tiết (Danh mục)</option>
+      </select>
+    </div>
   </div>
 
-  <!-- ============================================================== -->
-  <!-- 1. NỘI KHOA (BS_NOI)                                           -->
-  <!-- ============================================================== -->
-  <fieldset
-    x-show="clinicalSubTab === 'noi' || clinicalSubTab === 'all'"
+
+  <!-- 2. KHU VỰC NỘI DUNG NHẬP LIỆU CHUYÊN KHOA -->
+  <div class="space-y-4">
+
+    <!-- ============================================================== -->
+    <!-- A. CHẾ ĐỘ 1: TỐI THIỂU (MINIMAL MODE - PHIẾU GIẤY TRUYỀN THỐNG) -->
+    <!-- ============================================================== -->
+    <div x-show="clinicalInputMode === 'minimal'" class="space-y-4">
+<fieldset
+    x-show="(clinicalInputMode === 'minimal') && (clinicalSubTab === 'noi' || clinicalSubTab === 'all')"
     :disabled="!canEditClinicalNoi"
     class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4"
   >
@@ -218,11 +237,8 @@
     </div>
   </fieldset>
 
-  <!-- ============================================================== -->
-  <!-- 2. NGOẠI KHOA (BS_NGOAI)                                       -->
-  <!-- ============================================================== -->
-  <fieldset
-    x-show="clinicalSubTab === 'ngoai' || clinicalSubTab === 'all'"
+<fieldset
+    x-show="(clinicalInputMode === 'minimal') && (clinicalSubTab === 'ngoai' || clinicalSubTab === 'all')"
     :disabled="!canEditClinicalNgoai"
     class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4"
   >
@@ -249,11 +265,8 @@
     </div>
   </fieldset>
 
-  <!-- ============================================================== -->
-  <!-- 3. DA LIỄU (BS_DALIEU)                                         -->
-  <!-- ============================================================== -->
-  <fieldset
-    x-show="clinicalSubTab === 'dalieu' || clinicalSubTab === 'all'"
+<fieldset
+    x-show="(clinicalInputMode === 'minimal') && (clinicalSubTab === 'dalieu' || clinicalSubTab === 'all')"
     :disabled="!canEditClinicalDaLieu"
     class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4"
   >
@@ -280,11 +293,8 @@
     </div>
   </fieldset>
 
-  <!-- ============================================================== -->
-  <!-- 4. SẢN PHỤ KHOA (BS_SAN - CHỈ DÀNH CHO NỮ)                    -->
-  <!-- ============================================================== -->
-  <fieldset
-    x-show="form.GIOI_TINH === '2' && (clinicalSubTab === 'san' || clinicalSubTab === 'all')"
+<fieldset
+    x-show="(clinicalInputMode === 'minimal') && (form.GIOI_TINH === '2' && (clinicalSubTab === 'san' || clinicalSubTab === 'all'))"
     :disabled="!canEditClinicalSan"
     class="bg-pink-50/50 rounded-xl p-5 border border-pink-200 shadow-sm space-y-4"
     x-cloak
@@ -312,11 +322,8 @@
     </div>
   </fieldset>
 
-  <!-- ============================================================== -->
-  <!-- 5. MẮT (BS_MAT)                                                -->
-  <!-- ============================================================== -->
-  <fieldset
-    x-show="clinicalSubTab === 'mat' || clinicalSubTab === 'all'"
+<fieldset
+    x-show="(clinicalInputMode === 'minimal') && (clinicalSubTab === 'mat' || clinicalSubTab === 'all')"
     :disabled="!canEditClinicalMat"
     class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4"
   >
@@ -373,11 +380,8 @@
     </div>
   </fieldset>
 
-  <!-- ============================================================== -->
-  <!-- 6. TAI MŨI HỌNG (BS_TMH)                                       -->
-  <!-- ============================================================== -->
-  <fieldset
-    x-show="clinicalSubTab === 'tmh' || clinicalSubTab === 'all'"
+<fieldset
+    x-show="(clinicalInputMode === 'minimal') && (clinicalSubTab === 'tmh' || clinicalSubTab === 'all')"
     :disabled="!canEditClinicalTmh"
     class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4"
   >
@@ -434,11 +438,8 @@
     </div>
   </fieldset>
 
-  <!-- ============================================================== -->
-  <!-- 7. RĂNG HÀM MẶT (BS_RHM)                                       -->
-  <!-- ============================================================== -->
-  <fieldset
-    x-show="clinicalSubTab === 'rhm' || clinicalSubTab === 'all'"
+<fieldset
+    x-show="(clinicalInputMode === 'minimal') && (clinicalSubTab === 'rhm' || clinicalSubTab === 'all')"
     :disabled="!canEditClinicalRhm"
     class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4"
   >
@@ -475,11 +476,352 @@
       <input type="text" x-model="form.BENH_KHAC_RANG_HAM_MAT" placeholder="Không có bệnh lý răng hàm mặt..." class="input-box text-xs" />
     </div>
   </fieldset>
+    </div>
 
-  <!-- ============================================================== -->
-  <!-- THANH NÚT LƯU KẾT QUẢ KHÁM LÂM SÀNG                            -->
-  <!-- ============================================================== -->
-  <div class="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm sticky bottom-3 z-10">
+
+    <!-- ============================================================== -->
+    <!-- B. CHẾ ĐỘ 2: KHÁM NHANH (FOCUS MODE - SDD & TỰ ĐỘNG PHÂN LOẠI)  -->
+    <!-- ============================================================== -->
+    <div x-show="clinicalInputMode === 'focus'" class="space-y-4" x-cloak>
+      
+      <!-- BẢNG ĐO THỊ LỰC TỰ ĐỘNG (CHỈ HIỂN THỊ Ở CHUYÊN KHOA MẮT HOẶC XEM TẤT CẢ) -->
+      <div x-show="clinicalSubTab === 'mat' || clinicalSubTab === 'all'" class="bg-blue-50/70 rounded-xl shadow-xs border border-blue-200 p-4 space-y-3">
+        <div class="flex items-center justify-between border-b border-blue-200/80 pb-2.5">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-blue-900 flex items-center gap-2">
+            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            <span>Bảng đo Thị lực & Phân loại tự động</span>
+          </h3>
+          <span class="text-[11px] font-bold px-2 py-0.5 rounded-full" :class="focusVision.score === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'" x-text="'Loại ' + focusVision.score"></span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <!-- Mắt phải -->
+          <div class="bg-white p-3 rounded-lg border border-blue-100 space-y-2">
+            <div class="font-semibold text-slate-700">Mắt phải (MP)</div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[11px] text-slate-500">Không kính (/10):</label>
+                <input type="number" min="0" max="10" step="1" x-model="form.KHONG_KINH_MAT_PHAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
+              </div>
+              <div>
+                <label class="text-[11px] text-slate-500">Có kính (/10):</label>
+                <input type="number" min="0" max="10" step="1" x-model="form.CO_KINH_MAT_PHAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center" placeholder="Trống nếu không đeo" />
+              </div>
+            </div>
+          </div>
+          <!-- Mắt trái -->
+          <div class="bg-white p-3 rounded-lg border border-blue-100 space-y-2">
+            <div class="font-semibold text-slate-700">Mắt trái (MT)</div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[11px] text-slate-500">Không kính (/10):</label>
+                <input type="number" min="0" max="10" step="1" x-model="form.KHONG_KINH_MAT_TRAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center font-bold" placeholder="10" />
+              </div>
+              <div>
+                <label class="text-[11px] text-slate-500">Có kính (/10):</label>
+                <input type="number" min="0" max="10" step="1" x-model="form.CO_KINH_MAT_TRAI" @input="recalcFocusVision()" class="input-box text-xs py-1 text-center" placeholder="Trống nếu không đeo" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BẢNG ĐO SỨC NGHE TỰ ĐỘNG (CHỈ HIỂN THỊ Ở TMH HOẶC XEM TẤT CẢ) -->
+      <div x-show="clinicalSubTab === 'tmh' || clinicalSubTab === 'all'" class="bg-violet-50/70 rounded-xl shadow-xs border border-violet-200 p-4 space-y-3">
+        <div class="flex items-center justify-between border-b border-violet-200/80 pb-2.5">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-violet-900 flex items-center gap-2">
+            <svg class="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
+            <span>Bảng đo Thính lực & Phân loại tự động</span>
+          </h3>
+          <span class="text-[11px] font-bold px-2 py-0.5 rounded-full" :class="focusHearing.score === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'" x-text="'Loại ' + focusHearing.score"></span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <!-- Tai trái -->
+          <div class="bg-white p-3 rounded-lg border border-violet-100 space-y-2">
+            <div class="font-semibold text-slate-700">Tai trái (m)</div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[11px] text-slate-500">Nói thường (m):</label>
+                <input type="number" min="0" max="10" step="0.5" x-model="form.TAI_TRAI_NOI_THUONG" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
+              </div>
+              <div>
+                <label class="text-[11px] text-slate-500">Nói thầm (m):</label>
+                <input type="number" min="0" max="5" step="0.5" x-model="form.TAI_TRAI_NOI_THAM" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
+              </div>
+            </div>
+          </div>
+          <!-- Tai phải -->
+          <div class="bg-white p-3 rounded-lg border border-violet-100 space-y-2">
+            <div class="font-semibold text-slate-700">Tai phải (m)</div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[11px] text-slate-500">Nói thường (m):</label>
+                <input type="number" min="0" max="10" step="0.5" x-model="form.TAI_PHAI_NOI_THUONG" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="5" />
+              </div>
+              <div>
+                <label class="text-[11px] text-slate-500">Nói thầm (m):</label>
+                <input type="number" min="0" max="5" step="0.5" x-model="form.TAI_PHAI_NOI_THAM" @input="recalcFocusHearing()" class="input-box text-xs py-1 text-center font-bold" placeholder="0.5" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KHỐI GHI NHẬN BỆNH TẬT / TIÊU CHUẨN BẤT THƯỜNG (SDD SEARCHABLE DROPDOWN) -->
+      <div class="bg-white rounded-xl shadow-xs border border-slate-200 p-5 space-y-4">
+        <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
+          <div>
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+              <span>Ghi nhận bệnh tật & Bất thường (Khám nhanh)</span>
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5">Tìm nhanh tiêu chuẩn hoặc bệnh tật Loại 2 - Loại 5 để ghi nhận cho chuyên khoa hiện tại.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              @click="openCustomDiseaseModal()"
+              class="px-3 py-1.5 text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              <span>+ Nhập bệnh khác...</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Ô TÌM KIẾM SEARCHABLE DROPDOWN -->
+        <div class="space-y-1.5 relative" x-data="{ sddOpen: false, searchKeyword: '' }">
+          <label class="text-xs font-semibold text-slate-700">Tìm kiếm nhanh bệnh tật / tiêu chuẩn phân loại:</label>
+          <div class="relative">
+            <input
+              type="text"
+              x-model="searchKeyword"
+              @focus="sddOpen = true"
+              @click.away="sddOpen = false"
+              placeholder="Gõ tên bệnh tật hoặc từ khóa phân loại (Ví dụ: cận thị, sâu răng, tăng huyết áp...)..."
+              class="input-box text-xs py-2 pl-9 bg-slate-50 hover:bg-white focus:bg-white"
+            />
+            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+
+          <!-- POPUP KẾT QUẢ GỢI Ý SDD -->
+          <div
+            x-show="sddOpen && searchKeyword.trim().length > 1"
+            class="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto z-50 p-1 divide-y divide-slate-100"
+            x-cloak
+          >
+            <template x-for="item in filterAbnormalOptions(searchKeyword)" :key="item.id">
+              <button
+                type="button"
+                @mousedown.prevent="addFocusDisease(item); searchKeyword = ''; sddOpen = false;"
+                class="w-full text-left px-3 py-2 hover:bg-sky-50 rounded-lg transition-colors flex items-center justify-between gap-3 text-xs"
+              >
+                <div class="flex-1 min-w-0">
+                  <div class="font-medium text-slate-800" x-text="item.name"></div>
+                  <div class="text-[11px] text-slate-400 truncate" x-text="item.diseaseName ? (item.diseaseName + ' (' + item.specialtyName + ')') : item.specialtyName"></div>
+                </div>
+                <span
+                  class="font-bold px-2 py-0.5 rounded text-[10px] shrink-0"
+                  :class="item.score === 1 ? 'bg-emerald-100 text-emerald-800' : (item.score === 2 ? 'bg-blue-100 text-blue-800' : (item.score === 3 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'))"
+                  x-text="'Loại ' + item.score"
+                ></span>
+              </button>
+            </template>
+            <div x-show="filterAbnormalOptions(searchKeyword).length === 0" class="p-3 text-center text-xs text-slate-400">
+              Không tìm thấy tiêu chuẩn phù hợp. Bạn có thể bấm <span class="font-semibold text-sky-600 cursor-pointer" @click="openCustomDiseaseModal(); sddOpen = false;">+ Nhập bệnh khác...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- DANH SÁCH BỆNH / TIÊU CHUẨN ĐÃ GHI NHẬN -->
+        <div class="space-y-2 pt-2">
+          <div class="text-xs font-semibold text-slate-700 flex items-center justify-between">
+            <span>Bệnh tật & Tiêu chuẩn đã ghi nhận (<span x-text="focusRecordedDiseases.length"></span>):</span>
+            <span x-show="focusRecordedDiseases.length === 0" class="text-xs font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              ✓ Chưa ghi nhận bất thường (Mặc định: Bình thường - Loại 1)
+            </span>
+          </div>
+
+          <div x-show="focusRecordedDiseases.length === 0" class="p-6 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl space-y-1">
+            <p class="text-xs font-medium text-slate-600">Khám lâm sàng chưa phát hiện bệnh tật bất thường.</p>
+            <p class="text-[11px] text-slate-400">Tất cả chuyên khoa được tự động đánh giá: <b>Bình thường (Loại 1)</b>.</p>
+          </div>
+
+          <div x-show="focusRecordedDiseases.length > 0" class="space-y-1.5 max-h-72 overflow-y-auto">
+            <template x-for="(row, idx) in focusRecordedDiseases" :key="idx">
+              <div class="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-lg text-xs gap-3">
+                <div class="flex-1 min-w-0">
+                  <div class="font-semibold text-slate-800" x-text="row.name"></div>
+                  <div class="text-[11px] text-slate-500 flex items-center gap-2">
+                    <span class="text-sky-700 font-medium" x-text="row.specialtyName || 'Chuyên khoa'"></span>
+                    <span x-show="row.diseaseName" class="text-slate-400">›</span>
+                    <span x-show="row.diseaseName" x-text="row.diseaseName"></span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 shrink-0">
+                  <select
+                    x-model="row.score"
+                    @change="recalcFocusConclusion()"
+                    class="input-box text-xs py-1 px-2 font-bold w-24 text-center"
+                    :class="row.score === 1 ? 'text-emerald-700' : (row.score === 2 ? 'text-blue-700' : (row.score === 3 ? 'text-amber-700' : 'text-red-700'))"
+                  >
+                    <option value="1">Loại 1</option>
+                    <option value="2">Loại 2</option>
+                    <option value="3">Loại 3</option>
+                    <option value="4">Loại 4</option>
+                    <option value="5">Loại 5</option>
+                  </select>
+                  <button
+                    type="button"
+                    @click="removeFocusRecordedRow(idx)"
+                    class="p-1 text-slate-400 hover:text-red-600 rounded transition-colors"
+                    title="Xóa mục này"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- KHỐI KẾT LUẬN TỰ ĐỘNG CỦA KHÁM NHANH (AUTO CONCLUSION BADGE) -->
+        <div class="mt-4 p-4 rounded-xl border flex flex-wrap items-center justify-between gap-3"
+          :class="focusOverallScore === 1 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'"
+        >
+          <div class="flex items-center gap-3">
+            <span
+              class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0"
+              :class="focusOverallScore === 1 ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'"
+              x-text="focusOverallScore"
+            ></span>
+            <div>
+              <div class="font-bold text-xs uppercase tracking-wider flex items-center gap-2">
+                <span>Kết luận lâm sàng tự động:</span>
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-bold"
+                  :class="focusOverallScore === 1 ? 'bg-emerald-200 text-emerald-800' : 'bg-amber-200 text-amber-800'"
+                  x-text="focusOverallScore === 1 ? 'BÌNH THƯỜNG' : ('PHÂN LOẠI ' + focusOverallScore)"
+                ></span>
+              </div>
+              <div class="text-[11px] opacity-80 mt-0.5" x-text="focusConclusionText || 'Tất cả các chuyên khoa Loại 1: Bình thường'"></div>
+            </div>
+          </div>
+          <button
+            type="button"
+            @click="syncFocusToFormFields()"
+            class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white shadow-xs border border-slate-300 hover:bg-slate-50 text-slate-800 transition-colors"
+          >
+            Đồng bộ vào Form & Lưu
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+
+
+
+    <!-- ============================================================== -->
+    <!-- C. CHẾ ĐỘ 3: CHI TIẾT (FULL MODE - DANH MỤC TREE TOÀN BỘ)       -->
+    <!-- ============================================================== -->
+    <div x-show="clinicalInputMode === 'full'" class="space-y-4" x-cloak>
+      <div class="bg-white rounded-xl shadow-xs border border-slate-200 p-5 space-y-4">
+        <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
+          <div>
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+              <span>Cây danh mục Bệnh tật & Tiêu chuẩn phân loại chi tiết</span>
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5">Duyệt và chọn tiêu chuẩn phân loại chi tiết theo từng chuyên khoa và mục bệnh tật.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              @click="expandAllFullTree = true"
+              class="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors"
+            >
+              Mở tất cả
+            </button>
+            <button
+              type="button"
+              @click="expandAllFullTree = false"
+              class="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors"
+            >
+              Thu gọn tất cả
+            </button>
+          </div>
+        </div>
+
+        <!-- DANH SÁCH BỆNH TẬT CỦA CHUYÊN KHOA ĐANG CHỌN -->
+        <div class="space-y-3">
+          <template x-for="disease in getDiseasesForCurrentTab()" :key="disease.id">
+            <div class="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden" x-data="{ expanded: false }">
+              <button
+                type="button"
+                @click="expanded = !expanded"
+                class="w-full flex items-center justify-between px-4 py-3 bg-slate-50/80 hover:bg-sky-50/60 transition-colors text-left"
+              >
+                <div class="flex-1 min-w-0 pr-3">
+                  <div class="text-xs font-bold text-slate-800" x-text="disease.name"></div>
+                  <div class="text-[11px] text-slate-500 truncate" x-text="getSelectedStandardName(disease.id) || 'Mặc định: Bình thường (Loại 1)'"></div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <span
+                    class="text-[10px] font-bold px-2 py-0.5 rounded-full shadow-2xs"
+                    :class="getDiseaseScore(disease.id) === 1 ? 'bg-emerald-100 text-emerald-800' : (getDiseaseScore(disease.id) === 2 ? 'bg-blue-100 text-blue-800' : (getDiseaseScore(disease.id) === 3 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'))"
+                    x-text="'Loại ' + getDiseaseScore(disease.id)"
+                  ></span>
+                  <svg
+                    class="w-4 h-4 text-slate-400 transition-transform duration-200"
+                    :class="expanded || expandAllFullTree ? 'rotate-180' : ''"
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </div>
+              </button>
+
+              <div x-show="expanded || expandAllFullTree" class="p-3 border-t border-slate-100 space-y-1 bg-white">
+                <template x-for="st in getStandardsForDisease(disease.id)" :key="st.id">
+                  <label
+                    class="flex items-start gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-slate-50 text-xs border transition-colors"
+                    :class="isStandardSelected(disease.id, st.id) ? 'bg-sky-50/70 border-sky-200' : 'border-transparent'"
+                  >
+                    <input
+                      type="radio"
+                      :name="'disease_' + disease.id"
+                      :value="st.id"
+                      :checked="isStandardSelected(disease.id, st.id)"
+                      @change="selectStandard(disease.id, st)"
+                      class="mt-0.5 text-sky-600 focus:ring-sky-500"
+                    />
+                    <div class="flex-1 min-w-0">
+                      <span class="font-medium text-slate-800" x-text="st.name"></span>
+                    </div>
+                    <span
+                      class="text-[10px] font-bold px-2 py-0.5 rounded shrink-0"
+                      :class="st.score === 1 ? 'bg-emerald-100 text-emerald-800' : (st.score === 2 ? 'bg-blue-100 text-blue-800' : (st.score === 3 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'))"
+                      x-text="'Loại ' + st.score"
+                    ></span>
+                  </label>
+                </template>
+              </div>
+            </div>
+          </template>
+
+          <div x-show="getDiseasesForCurrentTab().length === 0" class="p-8 text-center text-xs text-slate-400 italic">
+            Chuyên khoa này chưa có danh mục bệnh tật chi tiết.
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+  </div>
+
+
+  <!-- 3. THANH NÚT LƯU KẾT QUẢ KHÁM LÂM SÀNG CỐ ĐỊNH Ở ĐÁY -->
+  <div class="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm sticky bottom-0 z-20 mt-4">
     <div class="text-xs text-slate-500 hidden sm:block">
       <span>Đang khám chuyên khoa: </span>
       <span class="font-semibold text-slate-800 uppercase" x-text="clinicalSubTab === 'noi' ? 'Nội khoa' : (clinicalSubTab === 'ngoai' ? 'Ngoại khoa' : (clinicalSubTab === 'dalieu' ? 'Da liễu' : (clinicalSubTab === 'san' ? 'Sản phụ khoa' : (clinicalSubTab === 'mat' ? 'Mắt' : (clinicalSubTab === 'tmh' ? 'Tai Mũi Họng' : (clinicalSubTab === 'rhm' ? 'Răng Hàm Mặt' : 'Tất cả chuyên khoa'))))))"></span>
@@ -497,5 +839,6 @@
       </button>
     </div>
   </div>
+
 
 </div>

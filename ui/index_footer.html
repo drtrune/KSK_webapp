@@ -194,6 +194,197 @@
     </div>
   </div>
 
+  
+  <!-- ===================================================================== -->
+  <!-- MODAL CÀI ĐẶT CÁ NHÂN & ĐỔI MẬT KHẨU (USER SETTINGS)                 -->
+  <!-- ===================================================================== -->
+  <div x-show="showUserSettingsModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs no-print">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-sm">
+            ⚙
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">Cài đặt tài khoản & Tùy chọn</h3>
+            <p class="text-[11px] text-slate-500">Quản lý giao diện, chế độ nhập khám và bảo mật cá nhân</p>
+          </div>
+        </div>
+        <button type="button" @click="showUserSettingsModal = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-full">✕</button>
+      </div>
+
+      <!-- THANH CHỌN TABS CÀI ĐẶT: TÙY CHỌN / BẢO MẬT / THÔNG TIN -->
+      <div class="flex items-center gap-1.5 border-b border-slate-200 pb-2 text-xs">
+        <button type="button" @click="userSettingsTab = 'preferences'" :class="userSettingsTab === 'preferences' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors">
+          ⚙ Tùy chọn làm việc
+        </button>
+        <button type="button" @click="userSettingsTab = 'password'" :class="userSettingsTab === 'password' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors">
+          🔒 Đổi mật khẩu
+        </button>
+        <button type="button" @click="userSettingsTab = 'info'" :class="userSettingsTab === 'info' ? 'bg-sky-600 text-white font-semibold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition-colors">
+          👤 Tài khoản & Quyền
+        </button>
+      </div>
+
+      <!-- TAB 1: TÙY CHỌN LÀM VIỆC (PREFERENCES) -->
+      <div x-show="userSettingsTab === 'preferences'" class="space-y-4 text-xs">
+        <div>
+          <label class="label-title text-slate-800 font-semibold mb-1">Chế độ nhập Khám lâm sàng mặc định:</label>
+          <div class="grid grid-cols-1 gap-2 mt-1">
+            <label class="flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-colors" :class="userSettings.defaultInputMode === 'focus' ? 'border-sky-500 bg-sky-50/50' : 'border-slate-200 hover:bg-slate-50'">
+              <input type="radio" value="focus" x-model="userSettings.defaultInputMode" @change="saveUserPreferences()" class="mt-0.5 text-sky-600" />
+              <div>
+                <span class="font-bold text-slate-900">⚡ Khám nhanh (Focus Mode - Khuyên dùng)</span>
+                <p class="text-[11px] text-slate-500 mt-0.5">Tự động đo thị lực, thính lực; Tìm kiếm nhanh tiêu chuẩn Loại &gt; 1; Bảng kết luận tự động & nhập bệnh tay.</p>
+              </div>
+            </label>
+
+            <label class="flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-colors" :class="userSettings.defaultInputMode === 'minimal' ? 'border-sky-500 bg-sky-50/50' : 'border-slate-200 hover:bg-slate-50'">
+              <input type="radio" value="minimal" x-model="userSettings.defaultInputMode" @change="saveUserPreferences()" class="mt-0.5 text-sky-600" />
+              <div>
+                <span class="font-bold text-slate-900">📋 Tối thiểu (Minimal Mode - Phiếu giấy)</span>
+                <p class="text-[11px] text-slate-500 mt-0.5">Mẫu phiếu giấy theo QĐ 1613/BYT, bác sĩ nhập trực tiếp kết quả và tự chọn phân loại.</p>
+              </div>
+            </label>
+
+            <label class="flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-colors" :class="userSettings.defaultInputMode === 'full' ? 'border-sky-500 bg-sky-50/50' : 'border-slate-200 hover:bg-slate-50'">
+              <input type="radio" value="full" x-model="userSettings.defaultInputMode" @change="saveUserPreferences()" class="mt-0.5 text-sky-600" />
+              <div>
+                <span class="font-bold text-slate-900">📑 Chi tiết (Full Mode - Danh mục tiêu chuẩn)</span>
+                <p class="text-[11px] text-slate-500 mt-0.5">Duyệt từng mục bệnh tật theo chuyên khoa và tích chọn tiêu chuẩn phân loại cụ thể.</p>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+          <div>
+            <label class="label-title text-slate-800 font-semibold mb-1">Chế độ giao diện:</label>
+            <select x-model="userSettings.theme" @change="saveUserPreferences()" class="input-box bg-white text-xs">
+              <option value="light">☀️ Giao diện Sáng (Chuẩn)</option>
+              <option value="dark">🌙 Chế độ Tối (Dark mode)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="label-title text-slate-800 font-semibold mb-1">Cỡ chữ hiển thị:</label>
+            <select x-model="userSettings.fontSize" @change="saveUserPreferences()" class="input-box bg-white text-xs">
+              <option value="normal">Chuẩn (13.5px)</option>
+              <option value="large">Lớn (15px - Dễ nhìn cho bác sĩ)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-100 space-y-2">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" x-model="userSettings.autoNavigateTab" @change="saveUserPreferences()" class="rounded text-sky-600 focus:ring-sky-500" />
+            <span class="text-slate-800 font-medium">Tự động nhảy đến tab/chuyên khoa được phân quyền</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" x-model="userSettings.soundOnSave" @change="saveUserPreferences()" class="rounded text-sky-600 focus:ring-sky-500" />
+            <span class="text-slate-800 font-medium">Phát âm báo nhẹ khi lưu hồ sơ thành công</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- TAB 2: ĐỔI MẬT KHẨU (CHANGE PASSWORD) -->
+      <div x-show="userSettingsTab === 'password'" class="space-y-3 text-xs">
+        <div>
+          <label class="label-title">Mật khẩu hiện tại <span class="text-red-500">*</span>:</label>
+          <input type="password" x-model="pwForm.old_password" placeholder="Nhập mật khẩu đang dùng..." class="input-box text-xs" />
+        </div>
+
+        <div>
+          <label class="label-title">Mật khẩu mới <span class="text-red-500">*</span>:</label>
+          <input type="password" x-model="pwForm.new_password" placeholder="Ít nhất 6 ký tự..." class="input-box text-xs" />
+        </div>
+
+        <div>
+          <label class="label-title">Xác nhận mật khẩu mới <span class="text-red-500">*</span>:</label>
+          <input type="password" x-model="pwForm.confirm_password" placeholder="Nhập lại mật khẩu mới..." class="input-box text-xs" />
+        </div>
+
+        <div class="pt-2">
+          <button type="button" @click="handleChangePassword()" :disabled="pwLoading" class="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-2">
+            <span x-text="pwLoading ? 'Đang cập nhật...' : 'Cập nhật mật khẩu mới'"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB 3: THÔNG TIN TÀI KHOẢN & VAI TRÒ -->
+      <div x-show="userSettingsTab === 'info'" class="space-y-3 text-xs">
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+          <div class="flex justify-between"><span class="text-slate-500">Tên đăng nhập:</span> <strong class="text-slate-800 font-mono" x-text="currentUser?.username"></strong></div>
+          <div class="flex justify-between"><span class="text-slate-500">Họ và tên:</span> <strong class="text-slate-800" x-text="currentUser?.full_name"></strong></div>
+          <div class="flex justify-between"><span class="text-slate-500">Mã cơ sở KCB:</span> <span class="text-slate-800 font-mono" x-text="facility?.ma_cskcb || '52208'"></span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Đơn vị:</span> <span class="text-slate-800 font-medium" x-text="facility?.ten_cskcb || 'BỆNH VIỆN BÌNH ĐỊNH'"></span></div>
+        </div>
+
+        <div>
+          <label class="label-title font-semibold mb-1">Các vai trò / chuyên khoa được phân quyền:</label>
+          <div class="flex flex-wrap gap-1 mt-1">
+            <template x-for="r in (currentUser?.role || '').split(',')" :key="r">
+              <span class="px-2 py-1 rounded bg-sky-50 text-sky-800 font-mono text-[11px] font-bold border border-sky-200" x-text="r.trim()"></span>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end border-t border-slate-100 pt-3">
+        <button type="button" @click="showUserSettingsModal = false" class="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL NHẬP BỆNH KHÁC (MANUAL DISEASE MODAL - DÀNH CHO KHÁM NHANH)     -->
+  <!-- ===================================================================== -->
+  <div x-show="showCustomDiseaseModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs no-print">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-5 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs">
+            +
+          </div>
+          <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wide">Nhập bệnh khác (Ngoài danh mục)</h3>
+        </div>
+        <button type="button" @click="showCustomDiseaseModal = false" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="label-title">Chuyên khoa ghi nhận:</label>
+          <input type="text" :value="getClinicalSubTabTitle(clinicalSubTab)" disabled class="input-box bg-slate-100 text-slate-700 font-semibold" />
+        </div>
+
+        <div>
+          <label class="label-title">Tên bệnh <span class="text-red-500">*</span>:</label>
+          <input type="text" x-model="customDiseaseForm.name" placeholder="VD: Viêm khớp dạng thấp, polyp tai..." class="input-box" />
+        </div>
+
+        <div>
+          <label class="label-title">Phân loại sức khỏe <span class="text-red-500">*</span>:</label>
+          <select x-model="customDiseaseForm.score" class="input-box font-bold text-slate-800">
+            <option value="2">Loại 2</option>
+            <option value="3">Loại 3</option>
+            <option value="4">Loại 4</option>
+            <option value="5">Loại 5</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="label-title">Mô tả thể hiện bệnh (Ghi chú chi tiết):</label>
+          <textarea rows="2" x-model="customDiseaseForm.manifestation" placeholder="Nếu để trống sẽ tự động lấy tên bệnh..." class="input-box"></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+        <button type="button" @click="showCustomDiseaseModal = false" class="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-medium">Hủy</button>
+        <button type="button" @click="submitCustomDisease()" class="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium shadow-sm transition-colors">Thêm vào hồ sơ</button>
+      </div>
+    </div>
+  </div>
+
   <!-- SCRIPT ALPINE.JS & LOGIC -->
   <script src="/static/js/app.js"></script>
 </body>
