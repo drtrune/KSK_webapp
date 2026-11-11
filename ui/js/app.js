@@ -998,46 +998,30 @@ function kskApp() {
       }
     },
 
-    // In Phiếu Tiếp Nhận (In phôi 4 trang chỉ có dữ liệu hành chính)
+    // In Phiếu Tiếp Nhận (In phôi 5 trang) - Ủy quyền xử lý cho PrintService tại print.html
     async printBlank() {
-      if (this.form.MATINH_CU_TRU && (!this.catalogs.xa || !this.catalogs.xa.length)) {
-        await this.loadWardsForProvince(this.form.MATINH_CU_TRU);
+      if (window.PrintService && window.PrintService.printBlank) {
+        await window.PrintService.printBlank(this);
+      } else {
+        window.print();
       }
-      const code = this.form.MA_TIEP_NHAN || '0';
-      if (typeof JsBarcode !== 'undefined') {
-        ['p1', 'p2', 'p3', 'p4'].forEach(p => {
-          const el = document.querySelector('#print_barcode_' + p);
-          if (el) {
-            JsBarcode('#print_barcode_' + p, code, {
-              format: 'CODE128',
-              displayValue: false,
-              margin: 0,
-              width: 1.4,
-              height: 40
-            });
-          }
-        });
-      }
-      this.$nextTick(() => window.print());
     },
 
     printReceptionBlank() {
-      if (!this.form.MA_TIEP_NHAN) {
-        this.toast('Vui lòng nhập Mã tiếp nhận trước khi in phôi!', 'error');
-        return;
+      if (window.PrintService && window.PrintService.printReceptionBlank) {
+        window.PrintService.printReceptionBlank(this);
+      } else {
+        this.printBlank();
       }
-      this.printModeReception = true;
-      this.printBlank();
     },
 
     // In Phiếu KSK Hoàn chỉnh
     printFullRecord() {
-      if (!this.form.MA_TIEP_NHAN) {
-        this.toast('Vui lòng nhập Mã tiếp nhận trước khi in!', 'error');
-        return;
+      if (window.PrintService && window.PrintService.printFullRecord) {
+        window.PrintService.printFullRecord(this);
+      } else {
+        this.printBlank();
       }
-      this.printModeReception = false;
-      this.printBlank();
     },
 
     // Tải file DOCX (Word)

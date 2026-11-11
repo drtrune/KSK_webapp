@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Preview & Test Phôi In KSK (5 Trang)</title>
+  <!-- JsBarcode -->
+  <script src="js/JsBarcode.all.min.js"></script>
+  <!-- Alpine.js -->
+  <script defer src="js/alpine.min.js"></script>
+
+  <style>
+    /* Thanh công cụ Preview (chỉ hiện trên màn hình, không in) */
+    .test-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 9999;
+      background: #1e293b;
+      color: #fff;
+      padding: 10px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+    }
+    .test-toolbar button {
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .test-toolbar button:hover {
+      background: #2563eb;
+    }
+    .test-toolbar button.btn-secondary {
+      background: #475569;
+    }
+    .test-toolbar button.btn-secondary:hover {
+      background: #334155;
+    }
+    .test-toolbar input, .test-toolbar select {
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    /* Môi trường giả lập A4 trên màn hình */
+    body {
+      margin: 0;
+      background: #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #preview-container {
+      padding: 24px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Giả lập khung trang A4 khi xem trên màn hình */
+    @media screen {
+      #print-area {
+        display: flex !important;
+        flex-direction: column;
+        gap: 24px;
+      }
+      .print-page {
+        width: 210mm !important;
+        min-height: 297mm !important;
+        background: #ffffff !important;
+        box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2), 0 8px 10px -6px rgba(0,0,0,0.1) !important;
+        box-sizing: border-box !important;
+        padding: 10mm 12mm 10mm 15mm !important;
+        position: relative !important;
+      }
+    }
+
+    @media print {
+      .test-toolbar {
+        display: none !important;
+      }
+      body {
+        background: #fff !important;
+      }
+      #preview-container {
+        padding: 0 !important;
+      }
+    }
+  </style>
+</head>
+<body x-data="testPrintApp()" x-init="initData()">
+
+  <!-- THANH CÔNG CỤ ĐIỀU KHIỂN PREVIEW & TEST -->
+  <div class="test-toolbar no-print">
+    <div style="font-weight: bold; font-size: 14px; color: #38bdf8;">
+      🛠️ Test Form Phôi In (5 Trang)
+    </div>
+
+    <div>
+      <label>Mã tiếp nhận:</label>
+      <input type="text" x-model="form.MA_TIEP_NHAN" @input="renderBarcodes()" style="width: 140px;" />
+    </div>
+
+    <div>
+      <label>Họ tên:</label>
+      <input type="text" x-model="form.HO_TEN" style="width: 160px;" />
+    </div>
+
+    <div>
+      <label>Năm sinh:</label>
+      <input type="text" x-model="form.NGAY_SINH" style="width: 90px;" />
+    </div>
+
+    <div>
+      <label>Giới tính:</label>
+      <select x-model="form.GIOI_TINH">
+        <option value="1">1 - Nam</option>
+        <option value="2">2 - Nữ</option>
+      </select>
+    </div>
+
+    <div>
+      <label>Tỉnh/Thành:</label>
+      <input type="text" x-model="mockProvinceName" style="width: 110px;" />
+    </div>
+
+    <div>
+      <label>Phường/Xã:</label>
+      <input type="text" x-model="mockWardName" style="width: 120px;" />
+    </div>
+
+    <!-- Nút Tải lại ngay không cần F5 -->
+    <button type="button" class="btn-secondary" @click="initData()" style="background: #059669;" title="Tải lại file ui/tabs/print.html từ đĩa">
+      ⚡ Tải lại HTML (Live)
+    </button>
+
+    <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer;">
+      <input type="checkbox" x-model="autoReload" /> Tự động Reload mỗi 2s
+    </label>
+
+    <button type="button" @click="triggerPrint()">
+      🖨️ Mở hộp thoại In (Print Preview)
+    </button>
+
+    <button type="button" class="btn-secondary" @click="loadSampleData()">
+      🔄 Nạp dữ liệu mẫu
+    </button>
+  </div>
+
+  <div id="preview-container">
+    <!-- Nạp trực tiếp nội dung phôi từ print.html -->
+    <!--#include virtual="tabs/print.html" -->
+    <div id="print-slot"></div>
+  </div>
+
+  <script>
+    function testPrintApp() {
+      return {
+        form: {
+          MA_TIEP_NHAN: 'TN.2611.0004018',
+          SO_PHIEU: '004018',
+          HO_TEN: 'NGUYỄN VĂN AN',
+          GIOI_TINH: '1',
+          NGAY_SINH: '15/08/1988',
+          SO_CCCD: '064088001234',
+          NGAYCAP_CCCD: '20/05/2021',
+          NOICAP_CCCD: 'Cục Cảnh sát QLHC về TTXH',
+          MA_DAN_TOC: '01',
+          DOI_TUONG: '13',
+          NGUON_CHI_TRA: '9',
+          NHOM_MAU: 'O+',
+          DIEN_THOAI: '0912345678',
+          MATINH_CU_TRU: '11221',
+          MAXA_CU_TRU: '13338',
+          DIA_CHI: '123 Trần Phú, Tổ 2',
+          MA_NGHE_NGHIEP: '00',
+          NOI_LAM_VIEC_HOC_TAP: 'Công ty Cổ phần Công nghệ An Khê',
+          LY_DO_VV: 'Khám sức khỏe đi làm'
+        },
+        facility: {
+          ten_cskcb: 'BỆNH VIỆN BÌNH ĐỊNH',
+          ma_cskcb: '52208',
+          dia_danh: 'Gia Lai'
+        },
+        catalogs: {
+          dan_toc: [{ ma: '01', ten: 'Kinh' }],
+          doi_tuong: [{ ma: '13', ten: 'Người lao động' }],
+          nguon_chi_tra: [{ ma: '9', ten: 'Khác' }],
+          nghe_nghiep: [{ ma: '00', ten: 'Chưa có việc làm / Khác' }],
+          tinh: [{ ma: '11221', ten: 'Tỉnh Gia Lai' }],
+          xa: [{ ma: '13338', ten: 'Phường An Bình' }]
+        },
+        mockProvinceName: 'Tỉnh Gia Lai',
+        mockWardName: 'Phường An Bình',
+        autoReload: false,
+        reloadTimer: null,
+
+        async initData() {
+          // Tải nội dung tabs/print.html đưa vào khung trực tiếp từ đĩa
+          try {
+            const res = await fetch('/static/tabs/print.html?t=' + Date.now(), { cache: 'no-store' });
+            if (!res.ok) throw new Error('Cannot load tabs/print.html');
+            const html = await res.text();
+            document.getElementById('print-slot').innerHTML = html;
+            // Khởi tạo Barcode sau khi DOM đã render
+            this.$nextTick(() => {
+              this.renderBarcodes();
+            });
+          } catch (e) {
+            console.error('Lỗi nạp print.html:', e);
+            document.getElementById('print-slot').innerHTML = '<div style="color:red; padding:20px;">Không thể tải tabs/print.html: ' + e.message + '</div>';
+          }
+
+          if (!this.reloadTimer) {
+            this.reloadTimer = setInterval(() => {
+              if (this.autoReload) {
+                this.initData();
+              }
+            }, 2000);
+          }
+        },
+
+        getCatalogName(list, code, fieldName) {
+          if (fieldName === 'MATINH_CU_TRU') return this.mockProvinceName || '';
+          if (fieldName === 'MAXA_CU_TRU') return this.mockWardName || '';
+          if (Array.isArray(list)) {
+            const found = list.find(x => String(x.ma) === String(code) || String(x.code) === String(code));
+            if (found) return found.ten || found.name;
+          }
+          return code || '';
+        },
+
+        renderBarcodes() {
+          const code = this.form.MA_TIEP_NHAN || '0';
+          if (typeof JsBarcode !== 'undefined') {
+            ['p1', 'p2', 'p3', 'p4', 'p5'].forEach(p => {
+              const el = document.querySelector('#print_barcode_' + p);
+              if (el) {
+                JsBarcode('#print_barcode_' + p, code, {
+                  format: 'CODE128',
+                  displayValue: false,
+                  margin: 0,
+                  width: 1.4,
+                  height: 40
+                });
+              }
+            });
+          }
+        },
+
+        loadSampleData() {
+          this.form.MA_TIEP_NHAN = 'TN.' + Math.floor(1000 + Math.random() * 9000);
+          this.form.HO_TEN = 'TRẦN THỊ BÍCH NGỌC';
+          this.form.GIOI_TINH = '2';
+          this.form.NGAY_SINH = '24/11/1995';
+          this.renderBarcodes();
+        },
+
+        async triggerPrint() {
+          this.renderBarcodes();
+          this.$nextTick(() => {
+            window.print();
+          });
+        }
+      };
+    }
+  </script>
+</body>
+</html>
+

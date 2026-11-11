@@ -39,11 +39,30 @@ async fn index_ui_handler() -> Html<&'static str> {
 async fn static_file_handler(
     axum::extract::Path(path): axum::extract::Path<String>,
 ) -> impl IntoResponse {
+    // Ưu tiên đọc trực tiếp từ thư mục ui/ trên ổ đĩa nếu tồn tại (hỗ trợ LIVE EDIT sửa file ăn ngay)
+    let disk_path = std::path::Path::new("ui").join(&path);
+    if disk_path.exists() && disk_path.is_file() {
+        if let Ok(data) = tokio::fs::read(&disk_path).await {
+            let mime = mime_guess::from_path(&disk_path).first_or_octet_stream();
+            return (
+                [
+                    (axum::http::header::CONTENT_TYPE, mime.as_ref()),
+                    (axum::http::header::CACHE_CONTROL, "no-cache, no-store, must-revalidate"),
+                ],
+                data,
+            )
+                .into_response();
+        }
+    }
+
     match WebAssets::get(&path) {
         Some(content) => {
             let mime = mime_guess::from_path(&path).first_or_octet_stream();
             (
-                [(axum::http::header::CONTENT_TYPE, mime.as_ref())],
+                [
+                    (axum::http::header::CONTENT_TYPE, mime.as_ref()),
+                    (axum::http::header::CACHE_CONTROL, "no-cache, no-store, must-revalidate"),
+                ],
                 content.data,
             )
                 .into_response()
@@ -140,3 +159,5 @@ async fn main() {
         .await
         .expect("Lỗi vận hành Axum Web Server");
 }
+
+// touch
