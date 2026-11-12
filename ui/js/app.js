@@ -73,7 +73,7 @@ function kskApp() {
     recordsSearchQ: '',
     recordsDateFrom: '',
     recordsDateTo: '',
-    sidebarOpen: true,
+    sidebarOpen: typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
 
     // Mô-đun Xuất CSV chuẩn QĐ 3176 (123 chỉ tiêu)
     exportFilters: {
@@ -1256,6 +1256,9 @@ function kskApp() {
     selectRecord(rec) {
       this.loadRecordIntoForm(rec);
       this.searchMaTn = rec.ma_tiep_nhan;
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        this.sidebarOpen = false;
+      }
       // Chạy thẳng tới vị trí chuyên khoa được phân công để nhập liệu ngay
       this.navigateToUserDefaultTab();
       this.toast(`Đã chọn bệnh nhân ${rec.ho_ten} (${rec.ma_tiep_nhan})`);
@@ -1383,6 +1386,9 @@ function kskApp() {
       this.updatedAt = '';
       this.searchMaTn = '';
       this.editingSections = {}; // Reset trạng thái sửa
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        this.sidebarOpen = false;
+      }
       // Quay về tab chuyên khoa được phân công thay vì cố định về reception
       this.navigateToUserDefaultTab();
 
