@@ -558,13 +558,13 @@ pub fn execute_mock_his(ma_tn: &str) -> Response {
             ngay_sinh: "31/01/2000".to_string(),
             so_cccd: "026099997785".to_string(),
             ngaycap_cccd: "13/10/2021".to_string(),
-            noicap_cccd: "Cục Cảnh sát QLHC về TTXH".to_string(),
+            noicap_cccd: "Cục Cảnh sát Quản lý hành chính về trật tự xã hội".to_string(),
             ma_dan_toc: "01".to_string(),
             ma_nghe_nghiep: "00".to_string(),
             so_dien_thoai: "0977889123".to_string(),
             dia_chi: "Số 123 Đường B".to_string(),
-            matinh_cu_tru: "11221".to_string(),
-            maxa_cu_tru: "13338".to_string(),
+            matinh_cu_tru: "52".to_string(),
+            maxa_cu_tru: "21907".to_string(),
             ngay_vao: "09/11/2026".to_string(),
         },
         "TN.2611.0004019" => HisPatientData {
@@ -575,13 +575,13 @@ pub fn execute_mock_his(ma_tn: &str) -> Response {
             ngay_sinh: "15/08/1995".to_string(),
             so_cccd: "052195004321".to_string(),
             ngaycap_cccd: "20/05/2022".to_string(),
-            noicap_cccd: "Cục Cảnh sát QLHC về TTXH".to_string(),
+            noicap_cccd: "Cục Cảnh sát Quản lý hành chính về trật tự xã hội".to_string(),
             ma_dan_toc: "01".to_string(),
             ma_nghe_nghiep: "00".to_string(),
             so_dien_thoai: "0912345678".to_string(),
             dia_chi: "Số 45 Nguyễn Tất Thành".to_string(),
-            matinh_cu_tru: "11221".to_string(),
-            maxa_cu_tru: "13339".to_string(),
+            matinh_cu_tru: "52".to_string(),
+            maxa_cu_tru: "21592".to_string(),
             ngay_vao: today,
         },
         other => HisPatientData {
@@ -592,13 +592,13 @@ pub fn execute_mock_his(ma_tn: &str) -> Response {
             ngay_sinh: "10/05/1992".to_string(),
             so_cccd: "052092008899".to_string(),
             ngaycap_cccd: "12/12/2021".to_string(),
-            noicap_cccd: "Cục Cảnh sát QLHC VTTXH".to_string(),
+            noicap_cccd: "Cục Cảnh sát Quản lý hành chính về trật tự xã hội".to_string(),
             ma_dan_toc: "01".to_string(),
             ma_nghe_nghiep: "00".to_string(),
             so_dien_thoai: "0988776655".to_string(),
             dia_chi: "Khu phố 3, Phường An Bình".to_string(),
-            matinh_cu_tru: "11221".to_string(),
-            maxa_cu_tru: "13338".to_string(),
+            matinh_cu_tru: "52".to_string(),
+            maxa_cu_tru: "23614".to_string(),
             ngay_vao: today,
         },
     };
@@ -1972,6 +1972,17 @@ pub async fn export_csv_handler(
     )
     .await;
 
+    let default_rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT cat_type, code FROM catalogs WHERE is_default = 1 AND is_active = 1",
+    )
+    .fetch_all(&*db)
+    .await
+    .unwrap_or_default();
+    let mut default_codes: HashMap<String, String> = HashMap::new();
+    for (ct, code) in default_rows {
+        default_codes.entry(ct).or_insert(code);
+    }
+
     let mut output: Vec<u8> = vec![0xEF, 0xBB, 0xBF];
     {
         let mut wtr = csv::WriterBuilder::new()
@@ -2009,7 +2020,11 @@ pub async fn export_csv_handler(
                     }
                     "MA_DAN_TOC" => {
                         let v = extract_map_str(&map, "MA_DAN_TOC");
-                        if v.is_empty() { "01".to_string() } else { v }
+                        if v.is_empty() {
+                            default_codes.get("DAN_TOC").cloned().unwrap_or_default()
+                        } else {
+                            v
+                        }
                     }
                     "SO_CCCD" => {
                         let v = extract_map_str(&map, "SO_CCCD");
@@ -2017,7 +2032,11 @@ pub async fn export_csv_handler(
                     }
                     "MA_NGHE_NGHIEP" => {
                         let v = extract_map_str(&map, "MA_NGHE_NGHIEP");
-                        if v.is_empty() { "00".to_string() } else { v }
+                        if v.is_empty() {
+                            default_codes.get("NGHE_NGHIEP").cloned().unwrap_or_default()
+                        } else {
+                            v
+                        }
                     }
                     "LY_DO_VV" => {
                         let v = extract_map_str(&map, "LY_DO_VV");
@@ -2037,11 +2056,19 @@ pub async fn export_csv_handler(
                     }
                     "DOI_TUONG" => {
                         let v = extract_map_str(&map, "DOI_TUONG");
-                        if v.is_empty() { "13".to_string() } else { v }
+                        if v.is_empty() {
+                            default_codes.get("DOI_TUONG").cloned().unwrap_or_default()
+                        } else {
+                            v
+                        }
                     }
                     "NGUON_CHI_TRA" => {
                         let v = extract_map_str(&map, "NGUON_CHI_TRA");
-                        if v.is_empty() { "9".to_string() } else { v }
+                        if v.is_empty() {
+                            default_codes.get("NGUON_CHI_TRA").cloned().unwrap_or_default()
+                        } else {
+                            v
+                        }
                     }
                     "MA_LOAI_KCB" => {
                         let v = extract_map_str(&map, "MA_LOAI_KCB");
@@ -2216,7 +2243,7 @@ pub async fn list_catalogs_handler(
 
     let items: Vec<CatalogItem> = if !cat_type.is_empty() && !parent_code.is_empty() {
         sqlx::query_as(
-            "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type = ? AND parent_code = ? ORDER BY code ASC LIMIT ?",
+            "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type = ? AND parent_code = ? ORDER BY is_default DESC, code ASC LIMIT ?",
         )
         .bind(&cat_type)
         .bind(&parent_code)
@@ -2227,7 +2254,7 @@ pub async fn list_catalogs_handler(
     } else if !cat_type.is_empty() && !q.is_empty() {
         let like_q = format!("%{}%", q);
         sqlx::query_as(
-            "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type = ? AND (code LIKE ? OR name LIKE ?) ORDER BY code ASC LIMIT ?",
+            "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type = ? AND (code LIKE ? OR name LIKE ?) ORDER BY is_default DESC, code ASC LIMIT ?",
         )
         .bind(&cat_type)
         .bind(&like_q)
@@ -2238,7 +2265,7 @@ pub async fn list_catalogs_handler(
         .unwrap_or_default()
     } else if !cat_type.is_empty() {
         sqlx::query_as(
-            "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type = ? ORDER BY code ASC LIMIT ?",
+            "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type = ? ORDER BY is_default DESC, code ASC LIMIT ?",
         )
         .bind(&cat_type)
         .bind(limit)
@@ -2247,13 +2274,33 @@ pub async fn list_catalogs_handler(
         .unwrap_or_default()
     } else {
         sqlx::query_as(
-            "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type != 'ICD10' AND cat_type != 'TIEU_CHUAN_PL' ORDER BY cat_type ASC, code ASC LIMIT ?",
+            "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type != 'ICD10' AND cat_type != 'TIEU_CHUAN_PL' ORDER BY cat_type ASC, is_default DESC, code ASC LIMIT ?",
         )
         .bind(limit)
         .fetch_all(&*db)
         .await
         .unwrap_or_default()
     };
+
+    Json(items).into_response()
+}
+
+pub async fn get_default_catalogs_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+) -> Response {
+    let db = state.db.read().await;
+    let _user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+
+    let items: Vec<CatalogItem> = sqlx::query_as(
+        "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE is_default = 1 AND is_active = 1 ORDER BY cat_type ASC, parent_code ASC, code ASC",
+    )
+    .fetch_all(&*db)
+    .await
+    .unwrap_or_default();
 
     Json(items).into_response()
 }
@@ -2528,11 +2575,17 @@ pub async fn bulk_status_catalogs_handler(
     let new_status = if req.is_active == 0 { 0i64 } else { 1i64 };
     let mut updated_count = 0usize;
     for id in &req.ids {
-        let res = sqlx::query("UPDATE catalogs SET is_active = ? WHERE id = ?")
-            .bind(new_status)
-            .bind(id)
-            .execute(&mut *tx)
-            .await;
+        let res = if new_status == 0 {
+            sqlx::query("UPDATE catalogs SET is_active = 0, is_default = 0 WHERE id = ?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+        } else {
+            sqlx::query("UPDATE catalogs SET is_active = 1 WHERE id = ?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+        };
         if let Ok(r) = res {
             updated_count += r.rows_affected() as usize;
         }
@@ -2575,6 +2628,74 @@ pub async fn set_default_catalog_handler(
         return api_error(StatusCode::FORBIDDEN, "Chỉ Quản trị viên mới có quyền thiết lập mặc định");
     }
 
+    let item: Option<(String, String)> =
+        sqlx::query_as("SELECT cat_type, parent_code FROM catalogs WHERE id = ?")
+            .bind(cat_id)
+            .fetch_optional(&*db)
+            .await
+            .unwrap_or(None);
+
+    let (cat_type, parent_code) = match item {
+        Some(v) => v,
+        None => return api_error(StatusCode::NOT_FOUND, "Không tìm thấy mục danh mục"),
+    };
+
+    let mut tx = match db.begin().await {
+        Ok(t) => t,
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("Lỗi transaction: {}", e)),
+    };
+
+    // Reset default cho các mục cùng cat_type (riêng XA_PHUONG tách theo từng Tỉnh parent_code)
+    if cat_type == "XA_PHUONG" {
+        let _ = sqlx::query("UPDATE catalogs SET is_default = 0 WHERE cat_type = 'XA_PHUONG' AND parent_code = ?")
+            .bind(&parent_code)
+            .execute(&mut *tx)
+            .await;
+    } else {
+        let _ = sqlx::query("UPDATE catalogs SET is_default = 0 WHERE cat_type = ?")
+            .bind(&cat_type)
+            .execute(&mut *tx)
+            .await;
+    }
+
+    // Đặt mục này làm mặc định và kích hoạt
+    let res = sqlx::query("UPDATE catalogs SET is_default = 1, is_active = 1 WHERE id = ?")
+        .bind(cat_id)
+        .execute(&mut *tx)
+        .await;
+
+    // Cập nhật timestamp meta
+    let _ = sqlx::query(
+        "INSERT INTO catalog_meta (cat_type, updated_at) VALUES (?, datetime('now', 'localtime')) ON CONFLICT(cat_type) DO UPDATE SET updated_at = datetime('now', 'localtime')",
+    )
+    .bind(&cat_type)
+    .execute(&mut *tx)
+    .await;
+
+    if let Err(e) = tx.commit().await {
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("Lỗi lưu mặc định: {}", e));
+    }
+
+    match res {
+        Ok(_) => Json(json!({ "message": "Đã đặt mục làm mặc định thành công" })).into_response(),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("Lỗi: {}", e)),
+    }
+}
+
+pub async fn clear_default_catalog_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(cat_id): Path<i64>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_role("admin") {
+        return api_error(StatusCode::FORBIDDEN, "Chỉ Quản trị viên mới có quyền bỏ mặc định");
+    }
+
     let item: Option<(String,)> = sqlx::query_as("SELECT cat_type FROM catalogs WHERE id = ?")
         .bind(cat_id)
         .fetch_optional(&*db)
@@ -2586,35 +2707,20 @@ pub async fn set_default_catalog_handler(
         None => return api_error(StatusCode::NOT_FOUND, "Không tìm thấy mục danh mục"),
     };
 
-    let mut tx = match db.begin().await {
-        Ok(t) => t,
-        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("Lỗi transaction: {}", e)),
-    };
-
-    // Reset default cho các mục cùng cat_type
-    let _ = sqlx::query("UPDATE catalogs SET is_default = 0 WHERE cat_type = ?")
-        .bind(&cat_type)
-        .execute(&mut *tx)
-        .await;
-
-    // Đặt mục này làm mặc định và kích hoạt
-    let res = sqlx::query("UPDATE catalogs SET is_default = 1, is_active = 1 WHERE id = ?")
+    let res = sqlx::query("UPDATE catalogs SET is_default = 0 WHERE id = ?")
         .bind(cat_id)
-        .execute(&mut *tx)
+        .execute(&*db)
         .await;
 
-    // Cập nhật timestamp meta
-    let _ = sqlx::query("UPDATE catalog_meta SET updated_at = datetime('now', 'localtime') WHERE cat_type = ?")
-        .bind(&cat_type)
-        .execute(&mut *tx)
-        .await;
-
-    if let Err(e) = tx.commit().await {
-        return api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("Lỗi lưu mặc định: {}", e));
-    }
+    let _ = sqlx::query(
+        "INSERT INTO catalog_meta (cat_type, updated_at) VALUES (?, datetime('now', 'localtime')) ON CONFLICT(cat_type) DO UPDATE SET updated_at = datetime('now', 'localtime')",
+    )
+    .bind(&cat_type)
+    .execute(&*db)
+    .await;
 
     match res {
-        Ok(_) => Json(json!({ "message": "Đã đặt mục làm mặc định thành công" })).into_response(),
+        Ok(_) => Json(json!({ "message": "Đã bỏ thiết lập mặc định" })).into_response(),
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("Lỗi: {}", e)),
     }
 }
@@ -2634,7 +2740,7 @@ pub async fn toggle_active_catalog_handler(
     }
 
     let res = sqlx::query(
-        "UPDATE catalogs SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?"
+        "UPDATE catalogs SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END, is_default = CASE WHEN is_active = 1 THEN 0 ELSE is_default END WHERE id = ?"
     )
     .bind(cat_id)
     .execute(&*db)

@@ -165,17 +165,17 @@ function kskApp() {
       HO_TEN: '',
       GIOI_TINH: '1',
       NGAY_SINH: '',
-      MA_DAN_TOC: '01',
+      MA_DAN_TOC: '',
       SO_CCCD: '',
       NGAYCAP_CCCD: '',
-      NOICAP_CCCD: 'Cục Cảnh sát Quản lý hành chính về trật tự xã hội',
-      MATINH_CU_TRU: '11221',
+      NOICAP_CCCD: '',
+      MATINH_CU_TRU: '',
       MAXA_CU_TRU: '',
       DIA_CHI: '',
-      MA_NGHE_NGHIEP: '00',
+      MA_NGHE_NGHIEP: '',
       NHOM_MAU: '',
-      DOI_TUONG: '13',
-      NGUON_CHI_TRA: '9',
+      DOI_TUONG: '',
+      NGUON_CHI_TRA: '',
       NOI_LAM_VIEC_HOC_TAP: '',
       DIEN_THOAI: '',
       LY_DO_VV: 'Khám sức khỏe',
@@ -316,6 +316,7 @@ function kskApp() {
     adminUsers: [],
     adminSubTab: 'users', // 'users', 'his', 'database', 'catalogs'
     adminCatalogItems: [],
+    adminCatalogDefaults: [],
     adminCatalogCatType: 'ICD10',
     adminCatalogSearchQ: '',
     adminCatalogLimit: 100,
@@ -828,17 +829,81 @@ function kskApp() {
       }
     },
 
+    // Lấy giá trị mặc định từ danh mục đang được cấu hình is_default = 1 (không set cứng)
+    getCatalogDefaultValue(catalogList, isFreeText = false, parentCode = null) {
+      const items = (catalogList || []).filter(c => c.is_active !== 0 && c.is_default === 1);
+      const match = parentCode !== null && parentCode !== undefined && parentCode !== ''
+        ? items.find(c => String(c.parent_code || '') === String(parentCode))
+        : items[0];
+      if (!match) return '';
+      return isFreeText ? String(match.name || match.code || '') : String(match.code || '');
+    },
+
+    // Áp dụng các giá trị mặc định từ danh mục vào form (dùng cho hồ sơ mới)
+    applyCatalogDefaultsToForm(overwrite = false) {
+      const mappings = [
+        { field: 'NOICAP_CCCD', list: this.catalogs.noi_cap, freeText: true },
+        { field: 'NHOM_MAU', list: this.catalogs.nhom_mau, freeText: true },
+        { field: 'MA_DAN_TOC', list: this.catalogs.dan_toc, freeText: false },
+        { field: 'MA_NGHE_NGHIEP', list: this.catalogs.nghe_nghiep, freeText: false },
+        { field: 'MATINH_CU_TRU', list: this.catalogs.tinh, freeText: false },
+        { field: 'DOI_TUONG', list: this.catalogs.doi_tuong, freeText: false },
+        { field: 'NGUON_CHI_TRA', list: this.catalogs.nguon_chi_tra, freeText: false }
+      ];
+      for (const m of mappings) {
+        if (overwrite || !this.form[m.field]) {
+          this.form[m.field] = this.getCatalogDefaultValue(m.list, m.freeText);
+        }
+      }
+      if (overwrite || !this.form.MAXA_CU_TRU) {
+        if (this.form.MATINH_CU_TRU && this.catalogs.xa && this.catalogs.xa.length) {
+          this.form.MAXA_CU_TRU = this.getCatalogDefaultValue(this.catalogs.xa, false, this.form.MATINH_CU_TRU);
+        } else if (overwrite) {
+          this.form.MAXA_CU_TRU = '';
+        }
+      }
+    },
+
+    // Xóa cache danh mục cục bộ khi Admin thay đổi cấu hình danh mục
+    clearCatalogCache() {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('ksk_cat_') || k === 'ksk_catalog_versions')) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+
+      const sessionKeysToRemove = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && k.startsWith('ksk_wards_')) {
+          sessionKeysToRemove.push(k);
+        }
+      }
+      sessionKeysToRemove.forEach(k => sessionStorage.removeItem(k));
+    },
+
     // Khởi tạo tất cả Searchable Select ở Tiếp nhận
     initAllSearchableSelects() {
-      this.updateSearchableSelect('select_noicap_cccd', 'NOICAP_CCCD', this.catalogs.noi_cap, 'Cục Cảnh sát QLHC về TTXH', true);
-      this.updateSearchableSelect('select_nhom_mau', 'NHOM_MAU', this.catalogs.nhom_mau && this.catalogs.nhom_mau.length ? this.catalogs.nhom_mau : [{ name: 'A' }, { name: 'B' }, { name: 'AB' }, { name: 'O' }], '', true);
-      this.updateSearchableSelect('select_ma_dan_toc', 'MA_DAN_TOC', this.catalogs.dan_toc, '01');
-      this.updateSearchableSelect('select_ma_nghe_nghiep', 'MA_NGHE_NGHIEP', this.catalogs.nghe_nghiep, '00');
-      this.updateSearchableSelect('select_matinh_cu_tru', 'MATINH_CU_TRU', this.catalogs.tinh, '11221');
-      this.updateSearchableSelect('select_doi_tuong', 'DOI_TUONG', this.catalogs.doi_tuong, '13');
-      this.updateSearchableSelect('select_nguon_chi_tra', 'NGUON_CHI_TRA', this.catalogs.nguon_chi_tra, '9');
+      const useDefaults = !this.recordId;
+      const nhomMauList = this.catalogs.nhom_mau && this.catalogs.nhom_mau.length
+        ? this.catalogs.nhom_mau
+        : [{ name: 'A' }, { name: 'B' }, { name: 'AB' }, { name: 'O' }];
+
+      this.updateSearchableSelect('select_noicap_cccd', 'NOICAP_CCCD', this.catalogs.noi_cap, useDefaults ? this.getCatalogDefaultValue(this.catalogs.noi_cap, true) : '', true);
+      this.updateSearchableSelect('select_nhom_mau', 'NHOM_MAU', nhomMauList, useDefaults ? this.getCatalogDefaultValue(this.catalogs.nhom_mau, true) : '', true);
+      this.updateSearchableSelect('select_ma_dan_toc', 'MA_DAN_TOC', this.catalogs.dan_toc, useDefaults ? this.getCatalogDefaultValue(this.catalogs.dan_toc) : '');
+      this.updateSearchableSelect('select_ma_nghe_nghiep', 'MA_NGHE_NGHIEP', this.catalogs.nghe_nghiep, useDefaults ? this.getCatalogDefaultValue(this.catalogs.nghe_nghiep) : '');
+      this.updateSearchableSelect('select_matinh_cu_tru', 'MATINH_CU_TRU', this.catalogs.tinh, useDefaults ? this.getCatalogDefaultValue(this.catalogs.tinh) : '');
+      this.updateSearchableSelect('select_doi_tuong', 'DOI_TUONG', this.catalogs.doi_tuong, useDefaults ? this.getCatalogDefaultValue(this.catalogs.doi_tuong) : '');
+      this.updateSearchableSelect('select_nguon_chi_tra', 'NGUON_CHI_TRA', this.catalogs.nguon_chi_tra, useDefaults ? this.getCatalogDefaultValue(this.catalogs.nguon_chi_tra) : '');
       if (this.catalogs.xa && this.catalogs.xa.length) {
-        this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', this.catalogs.xa, this.form.MAXA_CU_TRU);
+        const defaultWard = useDefaults ? this.getCatalogDefaultValue(this.catalogs.xa, false, this.form.MATINH_CU_TRU) : '';
+        this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', this.catalogs.xa, this.form.MAXA_CU_TRU || defaultWard);
+      } else {
+        this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', [], '');
       }
     },
 
@@ -923,6 +988,7 @@ function kskApp() {
             await this.loadAdminUsers();
             await this.loadAdminSettings();
             await this.fetchAdminCatalogItems();
+            await this.loadCatalogDefaultsSummary();
           }
         } else {
           this.logout();
@@ -959,6 +1025,7 @@ function kskApp() {
             await this.loadAdminUsers();
             await this.loadAdminSettings();
             await this.fetchAdminCatalogItems();
+            await this.loadCatalogDefaultsSummary();
           }
         } else {
           this.toast(data.error || 'Đăng nhập không thành công', 'error');
@@ -1035,13 +1102,22 @@ function kskApp() {
         }
 
         localStorage.setItem('ksk_catalog_versions', JSON.stringify(localVersions));
+        this.catalogXaVersion = serverVersions['XA_PHUONG'] || '';
 
-        // 2. Khởi tạo tất cả Searchable Select ở Tiếp nhận
+        // 2. Nếu đang tạo hồ sơ mới, áp dụng giá trị mặc định từ danh mục (không set cứng)
+        if (!this.recordId) {
+          this.applyCatalogDefaultsToForm(false);
+        }
+
+        // 3. Khởi tạo tất cả Searchable Select ở Tiếp nhận
         this.initAllSearchableSelects();
 
-        // 3. Tải danh mục Xã/Phường theo Tỉnh hiện tại (On-demand/Lazy)
+        // 4. Tải danh mục Xã/Phường theo Tỉnh hiện tại (On-demand/Lazy)
         if (this.form.MATINH_CU_TRU) {
           await this.loadWardsForProvince(this.form.MATINH_CU_TRU);
+        } else {
+          this.catalogs.xa = [];
+          this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', [], '');
         }
       } catch (err) {
         console.error('Lỗi kiểm tra danh mục:', err);
@@ -1069,10 +1145,12 @@ function kskApp() {
       }
       const cacheKey = `ksk_wards_${matinh}`;
       const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
+      const cachedVer = sessionStorage.getItem('ksk_wards_ver');
+      if (cached && (!this.catalogXaVersion || cachedVer === this.catalogXaVersion)) {
         try {
           this.catalogs.xa = JSON.parse(cached);
-          this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', this.catalogs.xa, this.form.MAXA_CU_TRU);
+          const defaultWard = !this.recordId ? this.getCatalogDefaultValue(this.catalogs.xa, false, matinh) : '';
+          this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', this.catalogs.xa, this.form.MAXA_CU_TRU || defaultWard);
           return;
         } catch (e) { }
       }
@@ -1084,8 +1162,14 @@ function kskApp() {
         if (res.ok) {
           const list = await res.json();
           this.catalogs.xa = list;
-          try { sessionStorage.setItem(cacheKey, JSON.stringify(list)); } catch (e) { }
-          this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', this.catalogs.xa, this.form.MAXA_CU_TRU);
+          try {
+            sessionStorage.setItem(cacheKey, JSON.stringify(list));
+            if (this.catalogXaVersion) {
+              sessionStorage.setItem('ksk_wards_ver', this.catalogXaVersion);
+            }
+          } catch (e) { }
+          const defaultWard = !this.recordId ? this.getCatalogDefaultValue(this.catalogs.xa, false, matinh) : '';
+          this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', this.catalogs.xa, this.form.MAXA_CU_TRU || defaultWard);
         }
       } catch (e) {
         console.error('Lỗi tải xã phường theo tỉnh:', e);
@@ -1221,17 +1305,20 @@ function kskApp() {
             this.form.NGAY_SINH = p.ngay_sinh || '';
             this.form.SO_CCCD = p.so_cccd || '';
             this.form.NGAYCAP_CCCD = p.ngaycap_cccd || '';
-            this.form.NOICAP_CCCD = p.noicap_cccd || 'Cục Cảnh sát QLHC về TTXH';
-            this.form.MA_DAN_TOC = p.ma_dan_toc || '01';
-            this.form.MA_NGHE_NGHIEP = p.ma_nghe_nghiep || '00';
+            this.form.NOICAP_CCCD = p.noicap_cccd || this.getCatalogDefaultValue(this.catalogs.noi_cap, true);
+            this.form.MA_DAN_TOC = p.ma_dan_toc || this.getCatalogDefaultValue(this.catalogs.dan_toc);
+            this.form.MA_NGHE_NGHIEP = p.ma_nghe_nghiep || this.getCatalogDefaultValue(this.catalogs.nghe_nghiep);
             this.form.DIEN_THOAI = p.so_dien_thoai || '';
             this.form.DIA_CHI = p.dia_chi || '';
-            this.form.MATINH_CU_TRU = p.matinh_cu_tru || '11221';
+            this.form.MATINH_CU_TRU = p.matinh_cu_tru || this.getCatalogDefaultValue(this.catalogs.tinh);
             this.form.MAXA_CU_TRU = p.maxa_cu_tru || '';
             this.form.NGAY_VAO = p.ngay_vao || this.todayFormatted();
 
             if (this.form.MATINH_CU_TRU) {
               await this.loadWardsForProvince(this.form.MATINH_CU_TRU);
+            } else {
+              this.catalogs.xa = [];
+              this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', [], '');
             }
             this.syncAllSelects();
             this.navigateToUserDefaultTab();
@@ -1262,13 +1349,15 @@ function kskApp() {
         ? rec.payload
         : (typeof rec.payload_json === 'string' ? JSON.parse(rec.payload_json || '{}') : (rec.payload_json || {}));
 
-      // Chuẩn hóa mã tỉnh/xã cũ (nếu có) sang mã mới trong danh mục
-      if (payload.MATINH_CU_TRU === '52' || payload.MATINH_CU_TRU === '64' || !payload.MATINH_CU_TRU) {
-        payload.MATINH_CU_TRU = '11221';
-      }
-      if (payload.MAXA_CU_TRU === '21907' || payload.MAXA_CU_TRU === '21592' || payload.MAXA_CU_TRU === '21562') {
-        payload.MAXA_CU_TRU = rec.ma_tiep_nhan === 'TN.2611.0004019' ? '13339' : '13338';
-      }
+      // Không để giá trị mặc định của form mới rò sang hồ sơ cũ
+      this.form.NOICAP_CCCD = '';
+      this.form.NHOM_MAU = '';
+      this.form.MA_DAN_TOC = '';
+      this.form.MA_NGHE_NGHIEP = '';
+      this.form.MATINH_CU_TRU = '';
+      this.form.MAXA_CU_TRU = '';
+      this.form.DOI_TUONG = '';
+      this.form.NGUON_CHI_TRA = '';
 
       this.form = { ...this.form, ...payload, id: rec.id };
       this.form.MA_TIEP_NHAN = rec.ma_tiep_nhan || this.form.MA_TIEP_NHAN;
@@ -1276,6 +1365,9 @@ function kskApp() {
       // Nạp xã phường của tỉnh tương ứng nếu có
       if (this.form.MATINH_CU_TRU) {
         await this.loadWardsForProvince(this.form.MATINH_CU_TRU);
+      } else {
+        this.catalogs.xa = [];
+        this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', [], '');
       }
 
       this.syncAllSelects();
@@ -1299,18 +1391,6 @@ function kskApp() {
           this.form[k] = (k === 'TSBT_MA_BENH_KHAC' || k === 'TSGD_MA_BENH' || k === 'TSBT_MA_BENH' || k === 'TSBT_TEN_THUOC_LIEU_LUONG' || k === 'TSBT_MA_BENH_THAI_SAN' || k === 'TSBT_TEN_THUOC_THAI_SAN') ? '' : '0';
         } else if (k === 'GIOI_TINH' || k === 'KHAM_THE_LUC_PL' || k === 'PHAN_LOAI_SK') {
           this.form[k] = '1';
-        } else if (k === 'MA_DAN_TOC') {
-          this.form[k] = '01';
-        } else if (k === 'MA_NGHE_NGHIEP') {
-          this.form[k] = '00';
-        } else if (k === 'DOI_TUONG') {
-          this.form[k] = '13';
-        } else if (k === 'NGUON_CHI_TRA') {
-          this.form[k] = '9';
-        } else if (k === 'MATINH_CU_TRU') {
-          this.form[k] = '11221';
-        } else if (k === 'MAXA_CU_TRU') {
-          this.form[k] = '';
         } else if (k === 'MA_LOAI_KCB') {
           this.form[k] = '15';
         } else if (k.endsWith('_PL')) {
@@ -1319,8 +1399,6 @@ function kskApp() {
           this.form[k] = this.facility.ma_cskcb || '52208';
         } else if (k === 'MA_GTIN_CSKCB') {
           this.form[k] = this.facility.ma_gtin_cskcb || '8930000522080';
-        } else if (k === 'NOICAP_CCCD') {
-          this.form[k] = 'Cục Cảnh sát QLHC về TTXH';
         } else if (k === 'LY_DO_VV') {
           this.form[k] = 'Khám sức khỏe';
         } else {
@@ -1329,9 +1407,15 @@ function kskApp() {
       }
       this.form.NGAY_VAO = this.todayFormatted();
 
-      // Nạp xã cho Gia Lai mặc định
+      // Áp dụng các giá trị mặc định được Admin chọn từ danh mục
+      this.applyCatalogDefaultsToForm(true);
+
+      // Nạp xã theo tỉnh mặc định (nếu có)
       if (this.form.MATINH_CU_TRU) {
         this.loadWardsForProvince(this.form.MATINH_CU_TRU);
+      } else {
+        this.catalogs.xa = [];
+        this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', [], '');
       }
       this.syncAllSelects();
       this.recalcVisionScore();
@@ -1842,8 +1926,11 @@ function kskApp() {
         if (res.ok) {
           this.toast(`Đã chuyển database thành công! Đường dẫn mới: ${data.current_database_path}`);
           this.newDbFilename = '';
+          this.clearCatalogCache();
           await this.loadAdminSettings();
           await this.loadCatalogs();
+          await this.loadCatalogDefaultsSummary();
+          await this.fetchAdminCatalogItems();
           await this.loadRecordsList();
           this.resetForm();
         } else {
@@ -1851,6 +1938,55 @@ function kskApp() {
         }
       } catch (e) {
         this.toast('Lỗi kết nối khi chuyển database', 'error');
+      }
+    },
+
+    getCatalogTypeLabel(catType) {
+      const map = {
+        'DOI_TUONG': 'Đối tượng KSK',
+        'NGUON_CHI_TRA': 'Nguồn chi trả',
+        'DAN_TOC': 'Dân tộc',
+        'NGHE_NGHIEP': 'Nghề nghiệp',
+        'TINH_TP': 'Tỉnh / Thành phố',
+        'XA_PHUONG': 'Xã / Phường',
+        'NOI_CAP': 'Nơi cấp CCCD',
+        'NHOM_MAU': 'Nhóm máu',
+        'ICD10': 'ICD-10',
+        'CHUYEN_KHOA': 'Chuyên khoa',
+        'BENH_TAT': 'Bệnh tật',
+        'TIEU_CHUAN_PL': 'Tiêu chuẩn PL'
+      };
+      return map[catType] || catType;
+    },
+
+    async loadCatalogDefaultsSummary() {
+      if (!this.token || !this.isAdmin) return;
+      try {
+        const res = await fetch('/api/catalogs/defaults', {
+          headers: { 'Authorization': `Bearer ${this.token}` }
+        });
+        if (res.ok) {
+          this.adminCatalogDefaults = await res.json();
+        }
+      } catch (e) {
+        console.error('Lỗi tải danh sách mặc định:', e);
+      }
+    },
+
+    async refreshAfterCatalogChange() {
+      this.clearCatalogCache();
+      await this.fetchAdminCatalogItems();
+      await this.loadCatalogDefaultsSummary();
+      await this.loadCatalogs();
+      if (!this.recordId && !this.form.HO_TEN && !this.form.MA_TIEP_NHAN) {
+        this.applyCatalogDefaultsToForm(true);
+        this.initAllSearchableSelects();
+        if (this.form.MATINH_CU_TRU) {
+          await this.loadWardsForProvince(this.form.MATINH_CU_TRU);
+        } else {
+          this.catalogs.xa = [];
+          this.updateSearchableSelect('select_maxa_cu_tru', 'MAXA_CU_TRU', [], '');
+        }
       }
     },
 
@@ -1873,9 +2009,8 @@ function kskApp() {
         if (res.ok) {
           this.toast(data.message || `Đã import thành công vào danh mục [${this.bulkCatType}]!`);
           this.bulkCatalogText = '';
-          await this.loadCatalogs();
           await this.loadAdminSettings();
-          await this.fetchAdminCatalogItems();
+          await this.refreshAfterCatalogChange();
         } else {
           this.toast(data.error || 'Lỗi import danh mục', 'error');
         }
@@ -1914,8 +2049,8 @@ function kskApp() {
         });
         if (res.ok) {
           this.toast('Đã xóa mục danh mục!');
-          await this.fetchAdminCatalogItems();
           await this.loadAdminSettings();
+          await this.refreshAfterCatalogChange();
         } else {
           const data = await res.json();
           this.toast(data.error || 'Không thể xóa', 'error');
@@ -1952,8 +2087,8 @@ function kskApp() {
         if (res.ok) {
           this.toast(data.message || `Đã xóa thành công ${data.deleted_count} mục danh mục!`);
           this.selectedCatalogIds = [];
-          await this.fetchAdminCatalogItems();
           await this.loadAdminSettings();
+          await this.refreshAfterCatalogChange();
         } else {
           this.toast(data.error || 'Lỗi khi xóa nhiều danh mục', 'error');
         }
@@ -1982,9 +2117,7 @@ function kskApp() {
         if (res.ok) {
           this.toast(data.message || `Đã ${actionName} thành công!`);
           this.selectedCatalogIds = [];
-          localStorage.removeItem(`ksk_cat_${this.adminCatalogCatType}`);
-          await this.fetchAdminCatalogItems();
-          await this.loadCatalogs();
+          await this.refreshAfterCatalogChange();
         } else {
           this.toast(data.error || `Lỗi khi ${actionName} danh mục`, 'error');
         }
@@ -2003,14 +2136,31 @@ function kskApp() {
         const data = await res.json();
         if (res.ok) {
           this.toast(data.message || 'Đã đặt làm mặc định thành công!');
-          localStorage.removeItem(`ksk_cat_${this.adminCatalogCatType}`);
-          await this.fetchAdminCatalogItems();
-          await this.loadCatalogs();
+          await this.refreshAfterCatalogChange();
         } else {
           this.toast(data.error || 'Lỗi đặt mặc định', 'error');
         }
       } catch (e) {
         this.toast('Lỗi kết nối khi đặt mặc định', 'error');
+      }
+    },
+
+    // Bỏ thiết lập mặc định cho 1 mục
+    async clearDefaultCatalog(catId) {
+      try {
+        const res = await fetch(`/api/catalogs/${catId}/clear-default`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${this.token}` }
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this.toast(data.message || 'Đã bỏ thiết lập mặc định!');
+          await this.refreshAfterCatalogChange();
+        } else {
+          this.toast(data.error || 'Lỗi bỏ mặc định', 'error');
+        }
+      } catch (e) {
+        this.toast('Lỗi kết nối khi bỏ mặc định', 'error');
       }
     },
 
@@ -2024,9 +2174,7 @@ function kskApp() {
         const data = await res.json();
         if (res.ok) {
           this.toast(data.message || 'Đã thay đổi trạng thái thành công!');
-          localStorage.removeItem(`ksk_cat_${this.adminCatalogCatType}`);
-          await this.fetchAdminCatalogItems();
-          await this.loadCatalogs();
+          await this.refreshAfterCatalogChange();
         } else {
           this.toast(data.error || 'Lỗi đổi trạng thái', 'error');
         }
@@ -2070,8 +2218,7 @@ function kskApp() {
         if (res.ok) {
           this.toast(data.message || 'Cập nhật mục danh mục thành công!');
           this.showCatalogModal = false;
-          await this.fetchAdminCatalogItems();
-          await this.loadCatalogs();
+          await this.refreshAfterCatalogChange();
         } else {
           this.toast(data.error || 'Lỗi khi cập nhật danh mục', 'error');
         }
@@ -2083,7 +2230,7 @@ function kskApp() {
     },
 
     async reloadCatalogsFromAsset() {
-      if (!confirm('Nạp lại toàn bộ danh mục chuẩn từ file seed_catalogs.tsv vào CSDL (sẽ làm mới và đồng bộ lại danh mục)?')) return;
+      if (!confirm('Nạp lại toàn bộ danh mục chuẩn từ file seed_catalogs.tsv vào CSDL (vẫn giữ nguyên các mục đã chọn mặc định)?')) return;
       this.adminCatalogLoading = true;
       try {
         const res = await fetch('/api/admin/catalogs/reload-asset', {
@@ -2093,9 +2240,8 @@ function kskApp() {
         const data = await res.json();
         if (res.ok) {
           this.toast(data.message || 'Đã nạp toàn bộ danh mục từ seed_catalogs.tsv!');
-          await this.fetchAdminCatalogItems();
-          await this.loadCatalogs();
           await this.loadAdminSettings();
+          await this.refreshAfterCatalogChange();
         } else {
           this.toast(data.error || 'Lỗi nạp danh mục từ seed_catalogs.tsv', 'error');
         }

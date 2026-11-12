@@ -135,10 +135,12 @@ async fn main() {
         // Quản lý Danh mục
         .route("/api/catalogs", get(list_catalogs_handler))
         .route("/api/catalogs/versions", get(get_catalog_versions_handler))
+        .route("/api/catalogs/defaults", get(get_default_catalogs_handler))
         .route("/api/catalogs/bulk", post(bulk_import_catalogs_handler))
         .route("/api/catalogs/bulk-delete", post(bulk_delete_catalogs_handler))
         .route("/api/catalogs/bulk-status", post(bulk_status_catalogs_handler))
         .route("/api/catalogs/:id/set-default", post(set_default_catalog_handler))
+        .route("/api/catalogs/:id/clear-default", post(clear_default_catalog_handler))
         .route("/api/catalogs/:id/toggle-active", post(toggle_active_catalog_handler))
         .route("/api/catalogs/:id", delete(delete_catalog_handler).put(update_catalog_handler))
         // Admin Settings & DB Management

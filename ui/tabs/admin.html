@@ -285,6 +285,7 @@
           <option value="TINH_TP">Tỉnh / Thành phố (35 tỉnh)</option>
           <option value="XA_PHUONG">Xã / Phường (3,318 xã/phường)</option>
           <option value="NOI_CAP">Nơi cấp CCCD (Cục Cảnh sát, Công an các tỉnh)</option>
+          <option value="NHOM_MAU">Nhóm máu (A, B, AB, O)</option>
         </select>
       </div>
       <div>
@@ -336,6 +337,34 @@
       </div>
     </div>
 
+    <!-- Tóm tắt các giá trị mặc định đang áp dụng -->
+    <div class="p-3 bg-amber-50/70 rounded-lg border border-amber-200/80 space-y-2">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <span class="text-xs font-semibold text-amber-900 flex items-center gap-1.5">
+          <span>★</span>
+          <span>Giá trị mặc định đang chọn (áp dụng khi tạo hồ sơ mới):</span>
+        </span>
+        <span class="text-[11px] text-amber-700">Bấm "Đặt mặc định" ở bảng dưới để chọn, hoặc bấm × để bỏ mặc định</span>
+      </div>
+      <div class="flex flex-wrap gap-1.5" x-show="adminCatalogDefaults.length > 0">
+        <template x-for="def in adminCatalogDefaults" :key="def.id">
+          <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-amber-300 text-[11px] text-slate-800 shadow-2xs">
+            <button type="button" @click="adminCatalogCatType = def.cat_type; adminCatalogSearchQ = ''; fetchAdminCatalogItems()" class="hover:text-sky-700 font-semibold cursor-pointer" :title="'Xem danh mục ' + getCatalogTypeLabel(def.cat_type)">
+              <span class="text-amber-700" x-text="getCatalogTypeLabel(def.cat_type) + ':'"></span>
+              <span class="font-mono text-sky-800" x-text="def.code"></span>
+              <span>-</span>
+              <span x-text="def.name"></span>
+              <span x-show="def.parent_code" class="text-slate-400" x-text="'(Cha: ' + def.parent_code + ')'"></span>
+            </button>
+            <button type="button" @click="clearDefaultCatalog(def.id)" class="text-slate-400 hover:text-red-600 font-bold px-0.5 cursor-pointer" title="Bỏ mặc định mục này">×</button>
+          </div>
+        </template>
+      </div>
+      <div x-show="adminCatalogDefaults.length === 0" class="text-[11px] text-amber-800/80 italic">
+        Chưa có danh mục nào được chọn làm mặc định. Form Tiếp nhận mới sẽ để trống để người dùng tự chọn.
+      </div>
+    </div>
+
     <!-- Bảng xem danh mục -->
     <div class="overflow-x-auto border border-slate-200 rounded-lg max-h-96 overflow-y-auto">
       <table class="w-full text-left border-collapse text-xs">
@@ -377,13 +406,20 @@
               </td>
               <td class="py-2 px-3 text-center">
                 <template x-if="item.is_default === 1">
-                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-bold text-[11px]">
-                    ★ Mặc định
-                  </span>
+                  <div class="inline-flex items-center gap-1">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-bold text-[11px]">
+                      ★ Mặc định
+                    </span>
+                    <button type="button" @click="clearDefaultCatalog(item.id)"
+                            class="text-[11px] text-slate-400 hover:text-red-600 hover:underline cursor-pointer"
+                            title="Bỏ thiết lập mặc định">
+                      Bỏ
+                    </button>
+                  </div>
                 </template>
                 <template x-if="item.is_default !== 1">
                   <button type="button" @click="setDefaultCatalog(item.id)"
-                          class="text-slate-400 hover:text-amber-700 text-[11px] hover:underline"
+                          class="text-slate-400 hover:text-amber-700 text-[11px] hover:underline cursor-pointer"
                           title="Đặt làm giá trị mặc định cho danh mục này">
                     Đặt mặc định
                   </button>
@@ -426,6 +462,7 @@
             <option value="TINH_TP">Tỉnh / Thành phố</option>
             <option value="XA_PHUONG">Phường / Xã</option>
             <option value="NOI_CAP">Nơi cấp CCCD</option>
+            <option value="NHOM_MAU">Nhóm máu</option>
           </select>
         </div>
       </div>

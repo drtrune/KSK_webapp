@@ -155,7 +155,12 @@ pub async fn init_db(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
     .await;
 
     // Seed danh mục chuẩn từ SEED_CATALOGS_TSV nếu bảng catalogs đang trống
-    seed_catalogs_from_asset(&pool).await?;
+    let (catalog_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM catalogs")
+        .fetch_one(&pool)
+        .await?;
+    if catalog_count == 0 {
+        seed_catalogs_from_asset(&pool).await?;
+    }
 
     Ok(pool)
 }
@@ -166,6 +171,14 @@ pub async fn seed_catalogs_from_asset(pool: &SqlitePool) -> Result<usize, sqlx::
     let content = std::fs::read_to_string("asset/seed_catalogs.tsv")
         .or_else(|_| std::fs::read_to_string("../asset/seed_catalogs.tsv"))
         .unwrap_or_else(|_| SEED_CATALOGS_TSV.to_string());
+
+    // Lưu lại các thiết lập mặc định / tạm ngưng hiện có để khôi phục sau khi nạp lại từ asset
+    let preserved_flags: Vec<(String, String, String, i64, i64)> = sqlx::query_as(
+        "SELECT cat_type, code, parent_code, is_active, is_default FROM catalogs WHERE is_default = 1 OR is_active = 0",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
 
     let mut tx = pool.begin().await?;
 
@@ -205,6 +218,21 @@ pub async fn seed_catalogs_from_asset(pool: &SqlitePool) -> Result<usize, sqlx::
             }
         }
     }
+
+    // Khôi phục lại lựa chọn mặc định và trạng thái tạm ngưng của người dùng
+    for (cat_type, code, parent_code, is_active, is_default) in preserved_flags {
+        let _ = sqlx::query(
+            "UPDATE catalogs SET is_active = ?, is_default = ? WHERE cat_type = ? AND code = ? AND parent_code = ?",
+        )
+        .bind(is_active)
+        .bind(is_default)
+        .bind(cat_type)
+        .bind(code)
+        .bind(parent_code)
+        .execute(&mut *tx)
+        .await;
+    }
+
     tx.commit().await?;
 
     // Cập nhật timestamp cho toàn bộ cat_type trong catalog_meta
@@ -217,13 +245,6 @@ pub async fn seed_catalogs_from_asset(pool: &SqlitePool) -> Result<usize, sqlx::
     )
     .execute(pool)
     .await;
-
-    // Đảm bảo thiết lập sẵn các giá trị mặc định ban đầu
-    let _ = sqlx::query("UPDATE catalogs SET is_default = 1 WHERE cat_type = 'TINH_TP' AND code = '11221'").execute(pool).await;
-    let _ = sqlx::query("UPDATE catalogs SET is_default = 1 WHERE cat_type = 'NGHE_NGHIEP' AND code = '00'").execute(pool).await;
-    let _ = sqlx::query("UPDATE catalogs SET is_default = 1 WHERE cat_type = 'DOI_TUONG' AND code = '13'").execute(pool).await;
-    let _ = sqlx::query("UPDATE catalogs SET is_default = 1 WHERE cat_type = 'NGUON_CHI_TRA' AND code = '9'").execute(pool).await;
-    let _ = sqlx::query("UPDATE catalogs SET is_default = 1 WHERE cat_type = 'NOI_CAP' AND code = '00'").execute(pool).await;
 
     Ok(count)
 }
