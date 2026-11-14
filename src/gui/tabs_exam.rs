@@ -20,27 +20,27 @@ use super::{
 };
 
 const TIEN_SU_21_ITEMS: &[(&str, &str)] = &[
-    ("TSBT_BENH_TRONG_5_NAM_QUA", "1. Bệnh trong 5 năm qua"),
-    ("TSBT_BENH_THAN_KINH", "2. Bệnh thần kinh"),
-    ("TSBT_BENH_MAT", "3. Bệnh mắt"),
-    ("TSBT_BENH_TAI", "4. Bệnh tai"),
-    ("TSBT_BENH_TIM", "5. Bệnh tim mạch"),
-    ("TSBT_PHAU_THUAT_TIM", "6. Phẫu thuật tim"),
+    ("TSBT_BENH_TRONG_5_NAM_QUA", "1. Có bệnh hay bị thương trong 5 năm qua"),
+    ("TSBT_BENH_THAN_KINH", "2. Có bệnh thần kinh hay bị thương ở đầu"),
+    ("TSBT_BENH_MAT", "3. Bệnh mắt hoặc giảm thị lực (trừ đeo kính thuốc)"),
+    ("TSBT_BENH_TAI", "4. Bệnh ở tai, giảm sức nghe hoặc thăng bằng"),
+    ("TSBT_BENH_TIM", "5. Bệnh ở tim, hoặc nhồi máu cơ tim, bệnh tim mạch khác"),
+    ("TSBT_PHAU_THUAT_TIM", "6. Phẫu thuật can thiệp tim - mạch (thay van, bắc cầu nối, tạo hình mạch, máy tạo nhịp, đặt stent mạch, ghép tim)"),
     ("TSBT_TANG_HUYET_AP", "7. Tăng huyết áp"),
     ("TSBT_KHO_THO", "8. Khó thở"),
-    ("TSBT_BENH_PHOI", "9. Bệnh phổi / hen"),
-    ("TSBT_BENH_THAN", "10. Bệnh thận"),
-    ("TSBT_NGHIEN_RUOU", "11. Nghiện rượu"),
-    ("TSBT_DAI_THAO_DUONG", "12. Đái tháo đường"),
+    ("TSBT_BENH_PHOI", "9. Bệnh phổi, hen, khí phế thũng, viêm phế quản mạn tính"),
+    ("TSBT_BENH_THAN", "10. Bệnh thận, lọc máu"),
+    ("TSBT_NGHIEN_RUOU", "11. Nghiện rượu, bia"),
+    ("TSBT_DAI_THAO_DUONG", "12. Đái tháo đường hoặc kiểm soát tăng đường huyết"),
     ("TSBT_BENH_TAM_THAN", "13. Bệnh tâm thần"),
-    ("TSBT_MAT_Y_THUC", "14. Mất ý thức / động kinh"),
-    ("TSBT_NGAT", "15. Ngất"),
+    ("TSBT_MAT_Y_THUC", "14. Mất ý thức, rối loạn ý thức"),
+    ("TSBT_NGAT", "15. Ngất, chóng mặt"),
     ("TSBT_BENH_TIEU_HOA", "16. Bệnh tiêu hóa"),
-    ("TSBT_ROI_LOAN_GIAC_NGU", "17. Rối loạn giấc ngủ"),
-    ("TSBT_TAI_BIEN", "18. Tai biến mạch máu não"),
-    ("TSBT_BENH_COT_SONG", "19. Bệnh cột sống"),
-    ("TSBT_RUOU_THUONG_XUYEN", "20. Uống rượu thường xuyên"),
-    ("TSBT_MA_TUY", "21. Sử dụng ma túy"),
+    ("TSBT_ROI_LOAN_GIAC_NGU", "17. Rối loạn giấc ngủ, ngừng thở khi ngủ, ngủ rũ ban ngày, ngáy to"),
+    ("TSBT_TAI_BIEN", "18. Tai biến mạch máu não hoặc liệt"),
+    ("TSBT_BENH_COT_SONG", "19. Bệnh hoặc tổn thương cột sống"),
+    ("TSBT_RUOU_THUONG_XUYEN", "20. Sử dụng rượu thường xuyên, liên tục"),
+    ("TSBT_MA_TUY", "21. Sử dụng ma túy và chất gây nghiện"),
 ];
 
 impl KskGpuiApp {
@@ -479,7 +479,7 @@ impl KskGpuiApp {
                                 let checked = self.get_form_val(key) == "1";
                                 let k = key.to_string();
                                 div()
-                                    .w(px(280.0))
+                                    .w(px(380.0))
                                     .p(px(6.0))
                                     .rounded(px(6.0))
                                     .bg(rgb(if checked { WARN_BG } else { bg_subtle() }))
@@ -500,13 +500,13 @@ impl KskGpuiApp {
                             .child({
                                 let checked = ts_benh_khac == "1";
                                 div()
-                                    .w(px(280.0))
+                                    .w(px(380.0))
                                     .p(px(6.0))
                                     .rounded(px(6.0))
                                     .bg(rgb(if checked { WARN_BG } else { bg_subtle() }))
                                     .child(
                                         Checkbox::new("chk-TSBT_BENH_KHAC")
-                                            .label("22. Bệnh khác")
+                                            .label("22. Bệnh khác (ghi rõ)")
                                             .checked(checked)
                                             .disabled(!editable)
                                             .on_change(cx.listener(|this, val, _, cx| {
