@@ -275,7 +275,7 @@ impl KskGpuiApp {
 
         let content = match sub.as_str() {
             "users" => self.render_admin_users(window, cx),
-            "catalogs" => self.render_admin_catalogs(window, cx),
+            "catalogs" => self.render_catalogs_manager(false, window, cx),
             _ => self.render_admin_config(window, cx),
         };
 
@@ -630,115 +630,6 @@ impl KskGpuiApp {
             .into_any_element()
     }
 
-    fn render_admin_catalogs(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let cat_type = self.adm_cat_type.clone();
-        let items: Vec<_> = self
-            .catalogs
-            .iter()
-            .filter(|c| c.cat_type == cat_type)
-            .cloned()
-            .collect();
-
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(14.0))
-            .child(
-                card_box()
-                    .child(
-                        div()
-                            .text_base()
-                            .font_weight(gpui::FontWeight::BOLD)
-                            .child("Quản lý Danh mục dùng chung"),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_row()
-                            .flex_wrap()
-                            .items_end()
-                            .gap(px(10.0))
-                            .child(self.render_select_dropdown(
-                                "adm-cat-type",
-                                "Loại danh mục",
-                                &cat_type,
-                                vec![
-                                    ("icd10".to_string(), "Mã bệnh ICD-10".to_string()),
-                                    ("workplace".to_string(), "Đơn vị / Công ty".to_string()),
-                                    ("occupation".to_string(), "Nghề nghiệp".to_string()),
-                                ],
-                                true,
-                                |this, val, _, _| {
-                                    this.adm_cat_type = val;
-                                },
-                                cx,
-                            ))
-                            .child(
-                                div()
-                                    .w(px(140.0))
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(4.0))
-                                    .child(field_label("Mã", true))
-                                    .child(Input::new(&self.adm_cat_code).small()),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(4.0))
-                                    .child(field_label("Tên hiển thị", true))
-                                    .child(Input::new(&self.adm_cat_name).small()),
-                            )
-                            .child(
-                                Button::new("btn-adm-add-cat")
-                                    .label("+ Thêm")
-                                    .small()
-                                    .primary()
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.add_catalog_item(window, cx);
-                                    })),
-                            ),
-                    ),
-            )
-            .child(
-                card_box()
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child(format!("Danh sách ({} mục)", items.len())),
-                    )
-                    .children(items.into_iter().take(100).map(|c| {
-                        let cid = c.id;
-                        div()
-                            .py(px(6.0))
-                            .px(px(10.0))
-                            .rounded(px(6.0))
-                            .bg(rgb(BG_SUBTLE))
-                            .flex()
-                            .flex_row()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .child(format!("{} — {}", c.code, c.name)),
-                            )
-                            .child(
-                                Button::new(SharedString::from(format!("btn-del-cat-{}", cid)))
-                                    .label("Xóa")
-                                    .small()
-                                    .secondary()
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.delete_catalog_item(cid, cx);
-                                    })),
-                            )
-                    })),
-            )
-            .into_any_element()
-    }
 }
 
 fn kpi_card(title: &str, value: &str, color_hex: u32) -> AnyElement {

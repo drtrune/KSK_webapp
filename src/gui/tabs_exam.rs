@@ -209,6 +209,11 @@ impl KskGpuiApp {
         let can_role = self.has_any_role(&["admin", "reception"]);
         let editable = !is_locked && can_role && self.editing_section.as_deref() == Some("reception");
         let gioi_tinh = self.get_form_val("GIOI_TINH");
+        let ma_tinh = self.get_form_val("MATINH_CU_TRU");
+        let ma_xa = self.get_form_val("MAXA_CU_TRU");
+        let ma_dantoc = self.get_form_val("MA_DAN_TOC");
+        let ma_nghe = self.get_form_val("MA_NGHE_NGHIEP");
+        let nhom_mau = self.get_form_val("NHOM_MAU");
         let kcb = self.get_form_val("MA_LOAI_KCB");
 
         let gender_opts = vec![
@@ -216,11 +221,23 @@ impl KskGpuiApp {
             ("2".to_string(), "2 - Nữ".to_string()),
             ("3".to_string(), "3 - Khác".to_string()),
         ];
-        let kcb_opts = vec![
-            ("1".to_string(), "1 - Khám sức khỏe định kỳ".to_string()),
-            ("2".to_string(), "2 - Khám sức khỏe tuyển dụng".to_string()),
-            ("3".to_string(), "3 - Khám sức khỏe lái xe".to_string()),
-        ];
+        let tinh_opts = self.query_catalog_options("TINH_TP", None);
+        let xa_opts = if ma_tinh.is_empty() {
+            vec![("".to_string(), "-- Chọn Tỉnh/TP trước --".to_string())]
+        } else {
+            self.query_catalog_options("XA_PHUONG", Some(&ma_tinh))
+        };
+        let dantoc_opts = self.query_catalog_options("DAN_TOC", None);
+        let nghe_opts = self.query_catalog_options("NGHE_NGHIEP", None);
+        let nhommau_opts = self.query_catalog_options("NHOM_MAU", None);
+        let mut kcb_opts = self.query_catalog_options("LOAI_KCB", None);
+        if kcb_opts.is_empty() {
+            kcb_opts = vec![
+                ("1".to_string(), "1 - Khám sức khỏe định kỳ".to_string()),
+                ("2".to_string(), "2 - Khám sức khỏe tuyển dụng".to_string()),
+                ("3".to_string(), "3 - Khám sức khỏe lái xe".to_string()),
+            ];
+        }
 
         div()
             .flex()
@@ -274,7 +291,60 @@ impl KskGpuiApp {
                             .flex_wrap()
                             .gap(px(12.0))
                             .child(self.render_form_input("DIEN_THOAI", "Số điện thoại", "09...", false, editable, window, cx))
-                            .child(self.render_form_input("DIA_CHI", "Địa chỉ thường trú", "Số nhà, đường...", false, editable, window, cx))
+                            .child(self.render_select_dropdown(
+                                "rec-tinh",
+                                "Tỉnh / Thành phố cư trú",
+                                &ma_tinh,
+                                tinh_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("MATINH_CU_TRU".into(), val.clone());
+                                    let def_xa = this.get_default_catalog_code("XA_PHUONG", Some(&val));
+                                    this.form_values.insert("MAXA_CU_TRU".into(), def_xa);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_select_dropdown(
+                                "rec-xa",
+                                "Phường / Xã cư trú",
+                                &ma_xa,
+                                xa_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("MAXA_CU_TRU".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_form_input("DIA_CHI", "Địa chỉ chi tiết (Số nhà, thôn/tổ)", "Số nhà, đường...", false, editable, window, cx)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_select_dropdown(
+                                "rec-dantoc",
+                                "Dân tộc",
+                                &ma_dantoc,
+                                dantoc_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("MA_DAN_TOC".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_select_dropdown(
+                                "rec-nghe",
+                                "Nghề nghiệp",
+                                &ma_nghe,
+                                nghe_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("MA_NGHE_NGHIEP".into(), val);
+                                },
+                                cx,
+                            ))
                             .child(self.render_form_input("NOI_LAM_VIEC_HOC_TAP", "Nơi làm việc / Học tập", "Công ty / Đơn vị...", false, editable, window, cx)),
                     )
                     .child(
@@ -295,7 +365,17 @@ impl KskGpuiApp {
                                 cx,
                             ))
                             .child(self.render_form_input("NGAY_VAO", "Ngày vào khám (YYYYMMDDHHMM)", "", false, editable, window, cx))
-                            .child(self.render_form_input("NHOM_MAU", "Nhóm máu", "O / A / B / AB", false, editable, window, cx))
+                            .child(self.render_select_dropdown(
+                                "rec-nhom-mau",
+                                "Nhóm máu",
+                                &nhom_mau,
+                                nhommau_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("NHOM_MAU".into(), val);
+                                },
+                                cx,
+                            ))
                             .child(self.render_form_input("LY_DO_VV", "Lý do khám", "Khám sức khỏe", false, editable, window, cx)),
                     )
                     .when(!self.is_creating_new && self.selected_record_id.is_some(), |el| {
@@ -334,11 +414,7 @@ impl KskGpuiApp {
         let icd_val = self.get_form_val("TSBT_MA_BENH");
 
         let mut icd_opts = vec![("".to_string(), "-- Chọn nhanh ICD-10 --".to_string())];
-        for c in &self.catalogs {
-            if c.cat_type == "icd10" {
-                icd_opts.push((c.code.clone(), format!("{} - {}", c.code, c.name)));
-            }
-        }
+        icd_opts.extend(self.query_catalog_options("ICD10", None));
 
         div()
             .flex()
@@ -732,24 +808,78 @@ impl KskGpuiApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let cfg = phan_loai_config();
         let search_q = self.disease_search_input.read(cx).value().to_lowercase();
         let sel_spec = self.selected_specialty_filter.clone();
 
+        let db_specs = self.query_catalog_items("CHUYEN_KHOA", None);
+        let db_diseases = self.query_catalog_items("BENH_TAT", None);
+        let db_classes = self.query_catalog_items("TIEU_CHUAN_PL", None);
+
+        let use_db = !db_diseases.is_empty();
+        let cfg = phan_loai_config();
+
         let mut spec_opts = vec![("".to_string(), "Tất cả chuyên khoa".to_string())];
-        for s in &cfg.specialties {
-            spec_opts.push((s.id.clone(), s.name.clone()));
+        if use_db && !db_specs.is_empty() {
+            for s in &db_specs {
+                spec_opts.push((s.code.clone(), s.name.clone()));
+            }
+        } else {
+            for s in &cfg.specialties {
+                spec_opts.push((s.id.clone(), s.name.clone()));
+            }
         }
 
-        let matching_diseases: Vec<_> = cfg
-            .diseases
-            .iter()
-            .filter(|d| {
-                (sel_spec.is_empty() || d.specialty_id == sel_spec)
-                    && (search_q.is_empty() || d.name.to_lowercase().contains(&search_q))
-            })
-            .take(50)
-            .collect();
+        // Tuples of (disease_id, disease_name, Vec<(cls_id, label, append_text)>)
+        let matching_items: Vec<(String, String, Vec<(String, String, String)>)> = if use_db {
+            db_diseases
+                .iter()
+                .filter(|d| {
+                    (sel_spec.is_empty() || d.parent_code == sel_spec)
+                        && (search_q.is_empty()
+                            || d.name.to_lowercase().contains(&search_q)
+                            || d.code.to_lowercase().contains(&search_q))
+                })
+                .take(50)
+                .map(|d| {
+                    let classes = db_classes
+                        .iter()
+                        .filter(|c| c.parent_code == d.code)
+                        .map(|c| {
+                            let label = c.name.clone();
+                            let append_text = format!("{} ({})", d.name, c.name);
+                            (format!("db-{}", c.id), label, append_text)
+                        })
+                        .collect();
+                    (d.code.clone(), d.name.clone(), classes)
+                })
+                .collect()
+        } else {
+            cfg.diseases
+                .iter()
+                .filter(|d| {
+                    (sel_spec.is_empty() || d.specialty_id == sel_spec)
+                        && (search_q.is_empty() || d.name.to_lowercase().contains(&search_q))
+                })
+                .take(50)
+                .map(|d| {
+                    let classes = cfg
+                        .classifications
+                        .iter()
+                        .filter(|c| c.disease_id == d.id)
+                        .map(|c| {
+                            let score_str = c
+                                .score
+                                .map(|s| format!("Loại {}", s))
+                                .unwrap_or_else(|| "Ghi chú".into());
+                            let label = format!("{}: {}", score_str, c.name);
+                            let append_text = format!("{} ({})", d.name, score_str);
+                            (c.id.clone(), label, append_text)
+                        })
+                        .collect();
+                    (d.id.clone(), d.name.clone(), classes)
+                })
+                .collect()
+        };
 
         card_box()
             .child(
@@ -774,15 +904,12 @@ impl KskGpuiApp {
                 div()
                     .text_xs()
                     .text_color(rgb(TEXT_MUTED))
-                    .child(format!("Hiển thị {} mặt bệnh (tối đa 50 dòng/lượt lọc). Nhấn vào mức phân loại để ghi vào kết luận bệnh:", matching_diseases.len())),
+                    .child(format!(
+                        "Hiển thị {} mặt bệnh (tối đa 50 dòng/lượt lọc). Nhấn vào mức phân loại để ghi vào kết luận bệnh:",
+                        matching_items.len()
+                    )),
             )
-            .children(matching_diseases.into_iter().map(|d| {
-                let classes: Vec<_> = cfg
-                    .classifications
-                    .iter()
-                    .filter(|c| c.disease_id == d.id)
-                    .collect();
-                let d_name = d.name.clone();
+            .children(matching_items.into_iter().map(|(_did, d_name, classes)| {
                 div()
                     .p(px(10.0))
                     .rounded(px(6.0))
@@ -797,7 +924,7 @@ impl KskGpuiApp {
                             .text_sm()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(rgb(TEXT_MAIN))
-                            .child(d.name.clone()),
+                            .child(d_name),
                     )
                     .child(
                         div()
@@ -805,11 +932,7 @@ impl KskGpuiApp {
                             .flex_row()
                             .flex_wrap()
                             .gap(px(6.0))
-                            .children(classes.into_iter().map(|c| {
-                                let score_str = c.score.map(|s| format!("Loại {}", s)).unwrap_or_else(|| "Ghi chú".into());
-                                let label = format!("{}: {}", score_str, c.name);
-                                let append_text = format!("{} ({})", d_name, score_str);
-                                let cid = c.id.clone();
+                            .children(classes.into_iter().map(|(cid, label, append_text)| {
                                 Button::new(SharedString::from(format!("cls-btn-{}", cid)))
                                     .label(label)
                                     .small()

@@ -305,46 +305,46 @@ impl KskGpuiApp {
                     .child(div().text_xs().text_color(rgb(TEXT_MUTED)).child("▾")),
             )
             .when(is_open && editable, |el| {
-                el.child(
-                    div()
-                        .id(SharedString::from(format!("dd-menu-{}", id_owned)))
-                        .absolute()
-                        .top(px(if label.is_empty() { 34.0 } else { 54.0 }))
-                        .left_0()
-                        .right_0()
-                        .max_h(px(220.0))
-                        .overflow_y_scroll()
-                        .bg(rgb(BG_CARD))
-                        .border_1()
-                        .border_color(rgb(BORDER_COL))
-                        .rounded(px(6.0))
-                        .shadow_lg()
-                        .p(px(4.0))
-                        .flex()
-                        .flex_col()
-                        .gap(px(2.0))
-                        .children(options.into_iter().enumerate().map(|(idx, (val, lbl))| {
-                            let is_sel = val == current_val;
-                            let cb = on_select_rc.clone();
-                            let val_c = val.clone();
-                            div()
-                                .id(SharedString::from(format!("dd-opt-{}-{}", id_owned, idx)))
-                                .px(px(8.0))
-                                .py(px(6.0))
-                                .rounded(px(4.0))
-                                .text_sm()
-                                .cursor_pointer()
-                                .bg(rgb(if is_sel { PRIMARY_LIGHT } else { BG_CARD }))
-                                .text_color(rgb(if is_sel { PRIMARY_COL } else { TEXT_MAIN }))
-                                .hover(|s| s.bg(rgb(BG_SUBTLE)))
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.open_dropdown = None;
-                                    cb(this, val_c.clone(), window, cx);
-                                    cx.notify();
-                                }))
-                                .child(lbl)
-                        })),
-                )
+                let menu = div()
+                    .id(SharedString::from(format!("dd-menu-{}", id_owned)))
+                    .absolute()
+                    .top(px(if label.is_empty() { 34.0 } else { 54.0 }))
+                    .left_0()
+                    .min_w(px(240.0))
+                    .w_full()
+                    .max_h(px(260.0))
+                    .overflow_y_scroll()
+                    .bg(rgb(BG_CARD))
+                    .border_1()
+                    .border_color(rgb(PRIMARY_COL))
+                    .rounded(px(6.0))
+                    .shadow_lg()
+                    .p(px(4.0))
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.0))
+                    .children(options.into_iter().enumerate().map(|(idx, (val, lbl))| {
+                        let is_sel = val == current_val;
+                        let cb = on_select_rc.clone();
+                        let val_c = val.clone();
+                        div()
+                            .id(SharedString::from(format!("dd-opt-{}-{}", id_owned, idx)))
+                            .px(px(8.0))
+                            .py(px(6.0))
+                            .rounded(px(4.0))
+                            .text_sm()
+                            .cursor_pointer()
+                            .bg(rgb(if is_sel { PRIMARY_LIGHT } else { BG_CARD }))
+                            .text_color(rgb(if is_sel { PRIMARY_COL } else { TEXT_MAIN }))
+                            .hover(|s| s.bg(rgb(BG_SUBTLE)))
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.open_dropdown = None;
+                                cb(this, val_c.clone(), window, cx);
+                                cx.notify();
+                            }))
+                            .child(lbl)
+                    }));
+                el.child(gpui::deferred(menu).with_priority(100))
             })
             .into_any_element()
     }

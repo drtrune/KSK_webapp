@@ -1,4 +1,5 @@
 pub mod sidebar;
+pub mod tab_catalogs;
 pub mod tab_export_admin;
 pub mod tabs_exam;
 pub mod widgets;
@@ -124,6 +125,10 @@ pub struct KskGpuiApp {
     pub adm_cat_type: String,
     pub adm_cat_code: Entity<InputState>,
     pub adm_cat_name: Entity<InputState>,
+    pub adm_cat_parent: Entity<InputState>,
+    pub adm_cat_parent_filter: Entity<InputState>,
+    pub adm_cat_search: Entity<InputState>,
+    pub adm_cat_edit_id: Option<i64>,
 
     pub _ui_subs: Vec<Subscription>,
 }
@@ -216,8 +221,22 @@ impl KskGpuiApp {
         });
         let adm_new_fullname = cx.new(|cx| InputState::new(window, cx).placeholder("BS. Nguyễn Văn A"));
 
-        let adm_cat_code = cx.new(|cx| InputState::new(window, cx).placeholder("Mã (vd: I10)"));
+        let adm_cat_code = cx.new(|cx| InputState::new(window, cx).placeholder("Mã (vd: 11221, I10)"));
         let adm_cat_name = cx.new(|cx| InputState::new(window, cx).placeholder("Tên hiển thị"));
+        let adm_cat_parent = cx.new(|cx| InputState::new(window, cx).placeholder("Mã cha (vd: mã tỉnh, mã CK)"));
+        let adm_cat_parent_filter = cx.new(|cx| InputState::new(window, cx).placeholder("Lọc mã cha..."));
+        let adm_cat_search = cx.new(|cx| InputState::new(window, cx).placeholder("Tìm mã hoặc tên..."));
+
+        let sub_cat_search = cx.subscribe_in(&adm_cat_search, window, |this, _, ev, _window, cx| {
+            if matches!(ev, InputEvent::Change) {
+                this.refresh_catalogs(cx);
+            }
+        });
+        let sub_cat_parent_filter = cx.subscribe_in(&adm_cat_parent_filter, window, |this, _, ev, _window, cx| {
+            if matches!(ev, InputEvent::Change) {
+                this.refresh_catalogs(cx);
+            }
+        });
 
         let sub_search = cx.subscribe_in(&sidebar_search, window, |this, _, ev, window, cx| {
             if matches!(ev, InputEvent::Change) {
@@ -339,10 +358,14 @@ impl KskGpuiApp {
             adm_new_fullname,
             adm_new_roles: vec!["reception".into()],
             catalogs: Vec::new(),
-            adm_cat_type: "icd10".into(),
+            adm_cat_type: "TINH_TP".into(),
             adm_cat_code,
             adm_cat_name,
-            _ui_subs: vec![sub_search, sub_from, sub_to, sub_disease],
+            adm_cat_parent,
+            adm_cat_parent_filter,
+            adm_cat_search,
+            adm_cat_edit_id: None,
+            _ui_subs: vec![sub_search, sub_from, sub_to, sub_disease, sub_cat_search, sub_cat_parent_filter],
         }
     }
 
@@ -627,7 +650,29 @@ impl KskGpuiApp {
         self.form_values
             .insert("MA_CSKCB".into(), self.cfg.ma_cskcb.clone());
         self.form_values.insert("GIOI_TINH".into(), "1".into());
-        self.form_values.insert("MA_LOAI_KCB".into(), "1".into());
+
+        let def_tinh = self.get_default_catalog_code("TINH_TP", None);
+        if !def_tinh.is_empty() {
+            self.form_values.insert("MATINH_CU_TRU".into(), def_tinh.clone());
+            let def_xa = self.get_default_catalog_code("XA_PHUONG", Some(&def_tinh));
+            if !def_xa.is_empty() {
+                self.form_values.insert("MAXA_CU_TRU".into(), def_xa);
+            }
+        }
+        for (field, cat_type, fallback) in [
+            ("MA_DAN_TOC", "DAN_TOC", "01"),
+            ("MA_NGHE_NGHIEP", "NGHE_NGHIEP", "00"),
+            ("DOI_TUONG", "DOI_TUONG", "13"),
+            ("NGUON_CHI_TRA", "NGUON_CHI_TRA", "9"),
+            ("MA_LOAI_KCB", "LOAI_KCB", "1"),
+            ("NHOM_MAU", "NHOM_MAU", ""),
+        ] {
+            let def = self.get_default_catalog_code(cat_type, None);
+            let val = if !def.is_empty() { def } else { fallback.to_string() };
+            if !val.is_empty() {
+                self.form_values.insert(field.into(), val);
+            }
+        }
         cx.notify();
     }
 
@@ -1015,43 +1060,236 @@ impl KskGpuiApp {
         self.refresh_users(cx);
     }
 
+    pub fn query_catalog_items(
+        &self,
+        cat_type: &str,
+        parent_code: Option<&str>,
+    ) -> Vec<CatalogItem> {
+        let state = self.state.clone();
+        let ct = cat_type.to_string();
+        let pc = parent_code.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        self.run_sync(async move {
+            let pool = state.db.read().await;
+            if let Some(parent) = pc {
+                sqlx::query_as::<_, CatalogItem>(
+                    "SELECT id, cat_type, code, name, parent_code, is_active, is_default \
+                     FROM catalogs \
+                     WHERE cat_type = ? AND is_active = 1 AND (parent_code = ? OR parent_code = '') \
+                     ORDER BY is_default DESC, name ASC, id ASC",
+                )
+                .bind(&ct)
+                .bind(&parent)
+                .fetch_all(&*pool)
+                .await
+                .unwrap_or_default()
+            } else {
+                sqlx::query_as::<_, CatalogItem>(
+                    "SELECT id, cat_type, code, name, parent_code, is_active, is_default \
+                     FROM catalogs \
+                     WHERE cat_type = ? AND is_active = 1 \
+                     ORDER BY is_default DESC, name ASC, id ASC",
+                )
+                .bind(&ct)
+                .fetch_all(&*pool)
+                .await
+                .unwrap_or_default()
+            }
+        })
+    }
+
+    pub fn query_catalog_options(
+        &self,
+        cat_type: &str,
+        parent_code: Option<&str>,
+    ) -> Vec<(String, String)> {
+        self.query_catalog_items(cat_type, parent_code)
+            .into_iter()
+            .map(|item| {
+                let label = if item.name.trim().is_empty() {
+                    item.code.clone()
+                } else {
+                    format!("{} - {}", item.code, item.name)
+                };
+                (item.code, label)
+            })
+            .collect()
+    }
+
+    pub fn get_default_catalog_code(&self, cat_type: &str, parent_code: Option<&str>) -> String {
+        let state = self.state.clone();
+        let ct = cat_type.to_string();
+        let pc = parent_code.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        self.run_sync(async move {
+            let pool = state.db.read().await;
+            let row: Option<(String,)> = if let Some(parent) = pc {
+                sqlx::query_as(
+                    "SELECT code FROM catalogs \
+                     WHERE cat_type = ? AND is_active = 1 AND is_default = 1 AND (parent_code = ? OR parent_code = '') \
+                     ORDER BY id ASC LIMIT 1",
+                )
+                .bind(&ct)
+                .bind(&parent)
+                .fetch_optional(&*pool)
+                .await
+                .unwrap_or(None)
+            } else {
+                sqlx::query_as(
+                    "SELECT code FROM catalogs \
+                     WHERE cat_type = ? AND is_active = 1 AND is_default = 1 \
+                     ORDER BY id ASC LIMIT 1",
+                )
+                .bind(&ct)
+                .fetch_optional(&*pool)
+                .await
+                .unwrap_or(None)
+            };
+            row.map(|r| r.0).unwrap_or_default()
+        })
+    }
+
     pub fn refresh_catalogs(&mut self, cx: &mut Context<Self>) {
         let state = self.state.clone();
+        let ct = self.adm_cat_type.clone();
+        let search = self.adm_cat_search.read(cx).value().trim().to_lowercase();
+        let parent_filter = self.adm_cat_parent_filter.read(cx).value().trim().to_string();
         let list = self.run_sync(async move {
             let pool = state.db.read().await;
-            sqlx::query_as::<_, CatalogItem>(
-                "SELECT id, cat_type, code, name, extra FROM catalogs ORDER BY id ASC",
-            )
-            .fetch_all(&*pool)
-            .await
-            .unwrap_or_default()
+            let mut sql = String::from(
+                "SELECT id, cat_type, code, name, parent_code, is_active, is_default \
+                 FROM catalogs WHERE cat_type = ?",
+            );
+            if !parent_filter.is_empty() {
+                sql.push_str(" AND parent_code = ?");
+            }
+            if !search.is_empty() {
+                sql.push_str(" AND (LOWER(code) LIKE ? OR LOWER(name) LIKE ?)");
+            }
+            sql.push_str(" ORDER BY is_default DESC, is_active DESC, name ASC, id ASC LIMIT 200");
+
+            let mut q = sqlx::query_as::<_, CatalogItem>(&sql).bind(&ct);
+            if !parent_filter.is_empty() {
+                q = q.bind(&parent_filter);
+            }
+            if !search.is_empty() {
+                let pat = format!("%{}%", search);
+                q = q.bind(pat.clone()).bind(pat);
+            }
+            q.fetch_all(&*pool).await.unwrap_or_default()
         });
         self.catalogs = list;
         cx.notify();
     }
 
-    pub fn add_catalog_item(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn save_catalog_item(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let code = self.adm_cat_code.read(cx).value().trim().to_string();
         let name = self.adm_cat_name.read(cx).value().trim().to_string();
+        let parent_code = self.adm_cat_parent.read(cx).value().trim().to_string();
         let ct = self.adm_cat_type.clone();
         if code.is_empty() || name.is_empty() {
             self.show_toast("Vui lòng nhập Mã và Tên danh mục!", true, cx);
             return;
         }
         let state = self.state.clone();
-        let _ = self.run_sync(async move {
+        let edit_id = self.adm_cat_edit_id;
+        let res = self.run_sync(async move {
             let pool = state.db.read().await;
-            sqlx::query("INSERT INTO catalogs (cat_type, code, name, extra) VALUES (?, ?, ?, '')")
+            if let Some(id) = edit_id {
+                sqlx::query(
+                    "UPDATE catalogs SET code = ?, name = ?, parent_code = ? WHERE id = ?",
+                )
+                .bind(&code)
+                .bind(&name)
+                .bind(&parent_code)
+                .bind(id)
+                .execute(&*pool)
+                .await
+            } else {
+                sqlx::query(
+                    "INSERT INTO catalogs (cat_type, code, name, parent_code, is_active, is_default) \
+                     VALUES (?, ?, ?, ?, 1, 0) \
+                     ON CONFLICT(cat_type, code, parent_code) DO UPDATE SET name = excluded.name",
+                )
                 .bind(&ct)
                 .bind(&code)
                 .bind(&name)
+                .bind(&parent_code)
+                .execute(&*pool)
+                .await
+            }
+        });
+        if let Err(e) = res {
+            self.show_toast(&format!("Lỗi lưu danh mục: {}", e), true, cx);
+            return;
+        }
+        self.adm_cat_edit_id = None;
+        self.adm_cat_code.update(cx, |s, cx| s.set_value("", window, cx));
+        self.adm_cat_name.update(cx, |s, cx| s.set_value("", window, cx));
+        self.adm_cat_parent.update(cx, |s, cx| s.set_value("", window, cx));
+        self.refresh_catalogs(cx);
+        self.show_toast(
+            if edit_id.is_some() {
+                "Đã cập nhật danh mục!"
+            } else {
+                "Đã thêm danh mục!"
+            },
+            false,
+            cx,
+        );
+    }
+
+    pub fn start_edit_catalog_item(
+        &mut self,
+        item: &CatalogItem,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.adm_cat_edit_id = Some(item.id);
+        let code = item.code.clone();
+        let name = item.name.clone();
+        let parent = item.parent_code.clone();
+        self.adm_cat_code.update(cx, |s, cx| s.set_value(code, window, cx));
+        self.adm_cat_name.update(cx, |s, cx| s.set_value(name, window, cx));
+        self.adm_cat_parent.update(cx, |s, cx| s.set_value(parent, window, cx));
+        cx.notify();
+    }
+
+    pub fn cancel_edit_catalog_item(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.adm_cat_edit_id = None;
+        self.adm_cat_code.update(cx, |s, cx| s.set_value("", window, cx));
+        self.adm_cat_name.update(cx, |s, cx| s.set_value("", window, cx));
+        self.adm_cat_parent.update(cx, |s, cx| s.set_value("", window, cx));
+        cx.notify();
+    }
+
+    pub fn toggle_catalog_active(&mut self, id: i64, active: bool, cx: &mut Context<Self>) {
+        let state = self.state.clone();
+        let _ = self.run_sync(async move {
+            let pool = state.db.read().await;
+            sqlx::query("UPDATE catalogs SET is_active = ? WHERE id = ?")
+                .bind(if active { 1 } else { 0 })
+                .bind(id)
                 .execute(&*pool)
                 .await
         });
-        self.adm_cat_code.update(cx, |s, cx| s.set_value("", window, cx));
-        self.adm_cat_name.update(cx, |s, cx| s.set_value("", window, cx));
         self.refresh_catalogs(cx);
-        self.show_toast("Đã thêm danh mục!", false, cx);
+    }
+
+    pub fn set_catalog_default(&mut self, id: i64, cx: &mut Context<Self>) {
+        let state = self.state.clone();
+        let ct = self.adm_cat_type.clone();
+        let _ = self.run_sync(async move {
+            let pool = state.db.read().await;
+            let _ = sqlx::query("UPDATE catalogs SET is_default = 0 WHERE cat_type = ?")
+                .bind(&ct)
+                .execute(&*pool)
+                .await;
+            sqlx::query("UPDATE catalogs SET is_default = 1, is_active = 1 WHERE id = ?")
+                .bind(id)
+                .execute(&*pool)
+                .await
+        });
+        self.refresh_catalogs(cx);
+        self.show_toast("Đã đặt mặc định!", false, cx);
     }
 
     pub fn delete_catalog_item(&mut self, id: i64, cx: &mut Context<Self>) {
@@ -1063,7 +1301,112 @@ impl KskGpuiApp {
                 .execute(&*pool)
                 .await
         });
+        if self.adm_cat_edit_id == Some(id) {
+            self.adm_cat_edit_id = None;
+        }
         self.refresh_catalogs(cx);
+    }
+
+    pub fn import_catalogs_from_file(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("TSV / CSV", &["tsv", "csv", "txt"])
+            .pick_file()
+        else {
+            return;
+        };
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            self.show_toast("Không đọc được file danh mục!", true, cx);
+            return;
+        };
+        let default_ct = self.adm_cat_type.clone();
+        let state = self.state.clone();
+        let count = self.run_sync(async move {
+            let pool = state.db.read().await;
+            let mut tx = match pool.begin().await {
+                Ok(t) => t,
+                Err(_) => return 0usize,
+            };
+            let mut imported = 0usize;
+            for (idx, line) in content.lines().enumerate() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    continue;
+                }
+                let sep = if trimmed.contains('\t') { '\t' } else { ',' };
+                let cols: Vec<&str> = trimmed.split(sep).map(|s| s.trim()).collect();
+                if idx == 0
+                    && cols.first().map(|s| s.eq_ignore_ascii_case("cat_type") || s.eq_ignore_ascii_case("code")).unwrap_or(false)
+                {
+                    continue;
+                }
+                let (ct, code, name, parent) = if cols.len() >= 3 {
+                    let c0 = cols[0];
+                    if matches!(
+                        c0,
+                        "TINH_TP" | "XA_PHUONG" | "DAN_TOC" | "NGHE_NGHIEP" | "NHOM_MAU"
+                            | "DOI_TUONG" | "NGUON_CHI_TRA" | "LOAI_KCB" | "NOI_CAP"
+                            | "ICD10" | "CHUYEN_KHOA" | "BENH_TAT" | "TIEU_CHUAN_PL"
+                    ) {
+                        (
+                            c0.to_string(),
+                            cols.get(1).copied().unwrap_or("").to_string(),
+                            cols.get(2).copied().unwrap_or("").to_string(),
+                            cols.get(3).copied().unwrap_or("").to_string(),
+                        )
+                    } else {
+                        (
+                            default_ct.clone(),
+                            cols[0].to_string(),
+                            cols[1].to_string(),
+                            cols.get(2).copied().unwrap_or("").to_string(),
+                        )
+                    }
+                } else if cols.len() == 2 {
+                    (default_ct.clone(), cols[0].to_string(), cols[1].to_string(), String::new())
+                } else {
+                    continue;
+                };
+                if code.is_empty() || name.is_empty() {
+                    continue;
+                }
+                if sqlx::query(
+                    "INSERT INTO catalogs (cat_type, code, name, parent_code, is_active, is_default) \
+                     VALUES (?, ?, ?, ?, 1, 0) \
+                     ON CONFLICT(cat_type, code, parent_code) DO UPDATE SET name = excluded.name",
+                )
+                .bind(&ct)
+                .bind(&code)
+                .bind(&name)
+                .bind(&parent)
+                .execute(&mut *tx)
+                .await
+                .is_ok()
+                {
+                    imported += 1;
+                }
+            }
+            let _ = tx.commit().await;
+            imported
+        });
+        self.refresh_catalogs(cx);
+        self.show_toast(&format!("Đã import {} dòng danh mục!", count), false, cx);
+    }
+
+    pub fn reload_seed_catalogs(&mut self, cx: &mut Context<Self>) {
+        let state = self.state.clone();
+        let res = self.run_sync(async move {
+            let pool = state.db.read().await;
+            db::seed_catalogs_from_asset(&pool).await
+        });
+        match res {
+            Ok(n) => {
+                self.refresh_catalogs(cx);
+                self.show_toast(&format!("Đã nạp lại {} mục từ seed_catalogs.tsv!", n), false, cx);
+            }
+            Err(e) => {
+                self.show_toast(&format!("Lỗi nạp seed_catalogs.tsv: {}", e), true, cx);
+            }
+        }
     }
 
     pub fn do_login(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1343,6 +1686,7 @@ impl Render for KskGpuiApp {
         let active_nav = self.active_nav.clone();
         let main_body = match active_nav.as_str() {
             "export" => self.render_export_tab(window, cx),
+            "disease_catalog" => self.render_catalogs_manager(true, window, cx),
             "admin" => self.render_admin_tab(window, cx),
             _ => div()
                 .flex_1()
@@ -1414,6 +1758,23 @@ impl Render for KskGpuiApp {
                             })
                             .when(is_admin, |el| {
                                 el.child(
+                                    Button::new("nav-disease-catalog")
+                                        .label("Phân loại Bệnh tật")
+                                        .small()
+                                        .when(active_nav == "disease_catalog", |b| b.primary())
+                                        .when(active_nav != "disease_catalog", |b| b.secondary())
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.active_nav = "disease_catalog".into();
+                                            if !matches!(
+                                                this.adm_cat_type.as_str(),
+                                                "CHUYEN_KHOA" | "BENH_TAT" | "TIEU_CHUAN_PL"
+                                            ) {
+                                                this.adm_cat_type = "BENH_TAT".into();
+                                            }
+                                            this.refresh_catalogs(cx);
+                                        })),
+                                )
+                                .child(
                                     Button::new("nav-admin")
                                         .label("Quản trị")
                                         .small()
@@ -1421,6 +1782,12 @@ impl Render for KskGpuiApp {
                                         .when(active_nav != "admin", |b| b.secondary())
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.active_nav = "admin".into();
+                                            if matches!(
+                                                this.adm_cat_type.as_str(),
+                                                "CHUYEN_KHOA" | "BENH_TAT" | "TIEU_CHUAN_PL"
+                                            ) {
+                                                this.adm_cat_type = "TINH_TP".into();
+                                            }
                                             cx.notify();
                                         })),
                                 )
