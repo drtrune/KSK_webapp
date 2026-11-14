@@ -2028,7 +2028,7 @@ pub async fn generate_docx_bytes(
         if !get("CLS_ASAT_GOT").is_empty() || !get("CLS_ALAT_GPT").is_empty() {
             replacements.insert(271, format!("ASAT(GOT): {}     ALAT(GPT): {}", get("CLS_ASAT_GOT"), get("CLS_ALAT_GPT")));
         }
-        if !get("CLS_NUOC_TIEU").is_empty() { replacements.insert(275, format!("- Kết quả: {}", get("CLS_NUOC_TIEU"))); }
+        if !get("CLS_NUOC_TIEU").is_empty() { replacements.insert(275, format!("- Khác (nếu có): {}", get("CLS_NUOC_TIEU"))); }
         if !get("CLS_XQ_TIM_PHOI").is_empty() { replacements.insert(279, get("CLS_XQ_TIM_PHOI")); }
         if !get("BS_CLS").is_empty() { replacements.insert(272, get("BS_CLS")); }
 
@@ -2052,7 +2052,13 @@ pub async fn generate_docx_bytes(
     let template_bytes =
         fs::read(&cfg.template_docx_path).unwrap_or_else(|_| EMBEDDED_TEMPLATE_DOCX.to_vec());
 
-    match build_filled_docx(&template_bytes, &replacements) {
+    let ma_tn_header = if record.ma_tiep_nhan.trim().is_empty() {
+        get("MA_TIEP_NHAN")
+    } else {
+        record.ma_tiep_nhan.clone()
+    };
+
+    match build_filled_docx(&template_bytes, &replacements, &ma_tn_header) {
         Ok(docx_bytes) => {
             let safe_ma_tn = record
                 .ma_tiep_nhan
@@ -2070,6 +2076,7 @@ pub async fn generate_docx_bytes(
 fn build_filled_docx(
     template_bytes: &[u8],
     replacements: &HashMap<usize, String>,
+    ma_tiep_nhan: &str,
 ) -> Result<Vec<u8>, String> {
     let reader = Cursor::new(template_bytes);
     let mut archive = zip::ZipArchive::new(reader).map_err(|e| e.to_string())?;
@@ -2080,11 +2087,20 @@ fn build_filled_docx(
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated);
 
+        let mut has_header1 = false;
+
         for i in 0..archive.len() {
             let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
             let name = file.name().to_string();
+            if file.is_dir() {
+                continue;
+            }
             let mut content = Vec::new();
             file.read_to_end(&mut content).map_err(|e| e.to_string())?;
+
+            if name == "word/header1.xml" {
+                has_header1 = true;
+            }
 
             zip_writer
                 .start_file(&name, options)
@@ -2092,14 +2108,82 @@ fn build_filled_docx(
 
             if name == "word/document.xml" {
                 let xml_str = String::from_utf8(content).map_err(|e| e.to_string())?;
-                let modified_xml = replace_docx_paragraphs(&xml_str, replacements)?;
+                let mut modified_xml = replace_docx_paragraphs(&xml_str, replacements)?;
+                if !modified_xml.contains("rIdKskHeader1") {
+                    if let Some(pos) = modified_xml.rfind("<w:sectPr") {
+                        if let Some(gt_offset) = modified_xml[pos..].find('>') {
+                            let insert_at = pos + gt_offset + 1;
+                            modified_xml.insert_str(
+                                insert_at,
+                                r#"<w:headerReference w:type="default" r:id="rIdKskHeader1"/>"#,
+                            );
+                        }
+                    }
+                }
                 zip_writer
                     .write_all(modified_xml.as_bytes())
+                    .map_err(|e| e.to_string())?;
+            } else if name == "word/_rels/document.xml.rels" {
+                let mut rels_str = String::from_utf8(content).map_err(|e| e.to_string())?;
+                if !rels_str.contains("rIdKskHeader1") {
+                    if let Some(pos) = rels_str.rfind("</Relationships>") {
+                        rels_str.insert_str(
+                            pos,
+                            r#"<Relationship Id="rIdKskHeader1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>"#,
+                        );
+                    }
+                }
+                zip_writer
+                    .write_all(rels_str.as_bytes())
+                    .map_err(|e| e.to_string())?;
+            } else if name == "[Content_Types].xml" {
+                let mut ct_str = String::from_utf8(content).map_err(|e| e.to_string())?;
+                if !ct_str.contains("/word/header1.xml") {
+                    if let Some(pos) = ct_str.rfind("</Types>") {
+                        ct_str.insert_str(
+                            pos,
+                            r#"<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>"#,
+                        );
+                    }
+                }
+                zip_writer
+                    .write_all(ct_str.as_bytes())
                     .map_err(|e| e.to_string())?;
             } else {
                 zip_writer.write_all(&content).map_err(|e| e.to_string())?;
             }
         }
+
+        if !has_header1 {
+            let escaped_tn = quick_xml::escape::escape(ma_tiep_nhan);
+            let header_xml = format!(
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p>
+    <w:pPr>
+      <w:jc w:val="right"/>
+    </w:pPr>
+    <w:r>
+      <w:rPr>
+        <w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/>
+        <w:b/>
+        <w:sz w:val="20"/>
+        <w:szCs w:val="20"/>
+      </w:rPr>
+      <w:t xml:space="preserve">Số tiếp nhận: {}</w:t>
+    </w:r>
+  </w:p>
+</w:hdr>"#,
+                escaped_tn
+            );
+            zip_writer
+                .start_file("word/header1.xml", options)
+                .map_err(|e| e.to_string())?;
+            zip_writer
+                .write_all(header_xml.as_bytes())
+                .map_err(|e| e.to_string())?;
+        }
+
         zip_writer.finish().map_err(|e| e.to_string())?;
     }
 
@@ -2123,12 +2207,12 @@ fn replace_docx_paragraphs(
         match reader.read_event() {
             Ok(Event::Start(e)) => {
                 let name_bytes = e.name().as_ref().to_vec();
-                if name_bytes == b"w:p" || name_bytes.ends_with(b":p") {
+                if name_bytes == b"w:p" {
                     current_p_idx = Some(p_counter);
                     p_counter += 1;
                     wt_index_in_p = 0;
                     has_replaced_in_current_p = false;
-                } else if name_bytes == b"w:t" || name_bytes.ends_with(b":t") {
+                } else if name_bytes == b"w:t" {
                     inside_wt = true;
                 }
                 writer
@@ -2137,7 +2221,7 @@ fn replace_docx_paragraphs(
             }
             Ok(Event::End(e)) => {
                 let name_bytes = e.name().as_ref().to_vec();
-                if name_bytes == b"w:p" || name_bytes.ends_with(b":p") {
+                if name_bytes == b"w:p" {
                     if let Some(p_idx) = current_p_idx {
                         if !has_replaced_in_current_p {
                             if let Some(new_val) = replacements.get(&p_idx) {
@@ -2153,7 +2237,7 @@ fn replace_docx_paragraphs(
                         }
                     }
                     current_p_idx = None;
-                } else if name_bytes == b"w:t" || name_bytes.ends_with(b":t") {
+                } else if name_bytes == b"w:t" {
                     inside_wt = false;
                     wt_index_in_p += 1;
                 }
@@ -3162,5 +3246,48 @@ pub async fn reload_asset_catalogs_handler(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Lỗi khi nạp danh mục từ asset: {}", e),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_filled_docx_and_header_injection() {
+        let mut reps = HashMap::new();
+        reps.insert(6, "1. Họ và tên (viết chữ in hoa): NGUYỄN VĂN A".to_string());
+        reps.insert(275, "- Khác (nếu có): Bình thường".to_string());
+        let bytes = build_filled_docx(EMBEDDED_TEMPLATE_DOCX, &reps, "TN20260001").unwrap();
+
+        let mut arch = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+        let mut hdr = String::new();
+        arch.by_name("word/header1.xml")
+            .unwrap()
+            .read_to_string(&mut hdr)
+            .unwrap();
+        assert!(hdr.contains("Số tiếp nhận: TN20260001"));
+
+        let mut doc = String::new();
+        arch.by_name("word/document.xml")
+            .unwrap()
+            .read_to_string(&mut doc)
+            .unwrap();
+        assert!(doc.contains("rIdKskHeader1"));
+        assert!(doc.contains("NGUYỄN VĂN A"));
+
+        let mut rels = String::new();
+        arch.by_name("word/_rels/document.xml.rels")
+            .unwrap()
+            .read_to_string(&mut rels)
+            .unwrap();
+        assert!(rels.contains("header1.xml"));
+
+        let mut ct = String::new();
+        arch.by_name("[Content_Types].xml")
+            .unwrap()
+            .read_to_string(&mut ct)
+            .unwrap();
+        assert!(ct.contains("/word/header1.xml"));
     }
 }
