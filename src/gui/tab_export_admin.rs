@@ -14,8 +14,8 @@ use crate::models::VALID_ROLES;
 use super::{
     KskGpuiApp,
     widgets::{
-        BG_CARD, BG_SUBTLE, BORDER_COL, DANGER_BG, DANGER_COL, PRIMARY_COL, PRIMARY_LIGHT,
-        SUCCESS_BG, SUCCESS_COL, TEXT_MAIN, TEXT_MUTED, WARN_BG, WARN_COL, badge, card_box,
+        bg_card, bg_subtle, border_col, DANGER_BG, DANGER_COL, PRIMARY_COL, primary_light,
+        SUCCESS_BG, SUCCESS_COL, text_main, text_muted, WARN_BG, WARN_COL, badge, card_box,
         field_label, role_label_vi,
     },
 };
@@ -54,7 +54,7 @@ impl KskGpuiApp {
                                 div()
                                     .text_base()
                                     .font_weight(gpui::FontWeight::BOLD)
-                                    .text_color(rgb(TEXT_MAIN))
+                                    .text_color(rgb(text_main()))
                                     .child("Xuất dữ liệu CSV chuẩn 123 cột (QĐ 3176/BYT)"),
                             )
                             .child(
@@ -154,7 +154,7 @@ impl KskGpuiApp {
                         &(total.saturating_sub(locked_cnt)).to_string(),
                         WARN_COL,
                     ))
-                    .child(kpi_card("Đang tích chọn", &selected_cnt.to_string(), TEXT_MAIN)),
+                    .child(kpi_card("Đang tích chọn", &selected_cnt.to_string(), text_main())),
             )
             .child(
                 card_box()
@@ -166,7 +166,7 @@ impl KskGpuiApp {
                             .gap(px(10.0))
                             .pb(px(8.0))
                             .border_b_1()
-                            .border_color(rgb(BORDER_COL))
+                            .border_color(rgb(border_col()))
                             .child(
                                 Checkbox::new("exp-select-all")
                                     .label("Chọn tất cả")
@@ -188,7 +188,7 @@ impl KskGpuiApp {
                             div()
                                 .p(px(16.0))
                                 .text_sm()
-                                .text_color(rgb(TEXT_MUTED))
+                                .text_color(rgb(text_muted()))
                                 .child("Không có dữ liệu phù hợp bộ lọc."),
                         )
                     })
@@ -204,7 +204,7 @@ impl KskGpuiApp {
                             .py(px(6.0))
                             .px(px(8.0))
                             .rounded(px(6.0))
-                            .bg(rgb(if checked { PRIMARY_LIGHT } else { BG_SUBTLE }))
+                            .bg(rgb(if checked { primary_light() } else { bg_subtle() }))
                             .flex()
                             .flex_row()
                             .items_center()
@@ -239,14 +239,14 @@ impl KskGpuiApp {
                                 div()
                                     .w(px(110.0))
                                     .text_xs()
-                                    .text_color(rgb(TEXT_MUTED))
+                                    .text_color(rgb(text_muted()))
                                     .child(r.ngay_vao.clone()),
                             )
                             .child(
                                 div()
                                     .w(px(180.0))
                                     .text_xs()
-                                    .text_color(rgb(TEXT_MUTED))
+                                    .text_color(rgb(text_muted()))
                                     .truncate()
                                     .child(super::payload_field(&r, "NOI_LAM_VIEC_HOC_TAP")),
                             )
@@ -270,12 +270,14 @@ impl KskGpuiApp {
         let tabs = [
             ("config", "Cấu hình DB & Cập nhật"),
             ("users", "Quản lý Người dùng"),
-            ("catalogs", "Danh mục (ICD-10 / Đơn vị)"),
+            ("catalogs", "Danh mục (ICD-10 / Hành chính)"),
+            ("disease_catalog", "Phân loại Bệnh tật (Cây)"),
         ];
 
         let content = match sub.as_str() {
             "users" => self.render_admin_users(window, cx),
             "catalogs" => self.render_catalogs_manager(false, window, cx),
+            "disease_catalog" => self.render_disease_tree_manager(window, cx),
             _ => self.render_admin_config(window, cx),
         };
 
@@ -306,7 +308,20 @@ impl KskGpuiApp {
                                 if key_s == "users" {
                                     this.refresh_users(cx);
                                 } else if key_s == "catalogs" {
+                                    if matches!(
+                                        this.adm_cat_type.as_str(),
+                                        "CHUYEN_KHOA" | "BENH_TAT" | "TIEU_CHUAN_PL"
+                                    ) {
+                                        this.adm_cat_type = "TINH_TP".into();
+                                    }
                                     this.refresh_catalogs(cx);
+                                } else if key_s == "disease_catalog" {
+                                    if !matches!(
+                                        this.adm_cat_type.as_str(),
+                                        "CHUYEN_KHOA" | "BENH_TAT" | "TIEU_CHUAN_PL"
+                                    ) {
+                                        this.adm_cat_type = "BENH_TAT".into();
+                                    }
                                 }
                                 cx.notify();
                             }))
@@ -580,7 +595,7 @@ impl KskGpuiApp {
                         div()
                             .p(px(10.0))
                             .rounded(px(6.0))
-                            .bg(rgb(BG_SUBTLE))
+                            .bg(rgb(bg_subtle()))
                             .flex()
                             .flex_row()
                             .items_center()
@@ -600,7 +615,7 @@ impl KskGpuiApp {
                                     .child(
                                         div()
                                             .text_xs()
-                                            .text_color(rgb(TEXT_MUTED))
+                                            .text_color(rgb(text_muted()))
                                             .child(format!("Quyền: {}", u.roles().join(", "))),
                                     ),
                             )
@@ -635,9 +650,9 @@ impl KskGpuiApp {
 fn kpi_card(title: &str, value: &str, color_hex: u32) -> AnyElement {
     div()
         .flex_1()
-        .bg(rgb(BG_CARD))
+        .bg(rgb(bg_card()))
         .border_1()
-        .border_color(rgb(BORDER_COL))
+        .border_color(rgb(border_col()))
         .rounded(px(8.0))
         .p(px(12.0))
         .flex()
@@ -646,7 +661,7 @@ fn kpi_card(title: &str, value: &str, color_hex: u32) -> AnyElement {
         .child(
             div()
                 .text_xs()
-                .text_color(rgb(TEXT_MUTED))
+                .text_color(rgb(text_muted()))
                 .child(title.to_string()),
         )
         .child(

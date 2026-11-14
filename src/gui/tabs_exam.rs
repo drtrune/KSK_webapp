@@ -14,8 +14,8 @@ use crate::models::phan_loai_config;
 use super::{
     KskGpuiApp,
     widgets::{
-        BG_CARD, BG_SUBTLE, BORDER_COL, DANGER_BG, DANGER_COL, PRIMARY_COL, PRIMARY_LIGHT,
-        SUCCESS_BG, SUCCESS_COL, TEXT_MAIN, TEXT_MUTED, WARN_BG, WARN_COL, badge, card_box,
+        bg_card, bg_subtle, border_col, DANGER_BG, DANGER_COL, PRIMARY_COL, primary_light,
+        SUCCESS_BG, SUCCESS_COL, text_main, text_muted, WARN_BG, WARN_COL, badge, card_box,
     },
 };
 
@@ -64,13 +64,13 @@ impl KskGpuiApp {
                             div()
                                 .text_lg()
                                 .font_weight(gpui::FontWeight::BOLD)
-                                .text_color(rgb(TEXT_MAIN))
+                                .text_color(rgb(text_main()))
                                 .child("Chưa chọn hồ sơ bệnh nhân"),
                         )
                         .child(
                             div()
                                 .text_sm()
-                                .text_color(rgb(TEXT_MUTED))
+                                .text_color(rgb(text_muted()))
                                 .child("Chọn một hồ sơ ở danh sách bên trái, quét mã vạch, hoặc nhấn '+ Tiếp nhận hồ sơ mới'."),
                         ),
                 )
@@ -112,9 +112,9 @@ impl KskGpuiApp {
             .child(
                 // Patient banner + sub-tabs
                 div()
-                    .bg(rgb(BG_CARD))
+                    .bg(rgb(bg_card()))
                     .border_b_1()
-                    .border_color(rgb(BORDER_COL))
+                    .border_color(rgb(border_col()))
                     .px(px(16.0))
                     .pt(px(10.0))
                     .flex()
@@ -136,7 +136,7 @@ impl KskGpuiApp {
                                         div()
                                             .text_base()
                                             .font_weight(gpui::FontWeight::BOLD)
-                                            .text_color(rgb(TEXT_MAIN))
+                                            .text_color(rgb(text_main()))
                                             .child(if self.is_creating_new {
                                                 "Hồ sơ tiếp nhận mới".to_string()
                                             } else if ho_ten.is_empty() {
@@ -146,10 +146,10 @@ impl KskGpuiApp {
                                             }),
                                     )
                                     .when(!ma_bn.is_empty(), |el| {
-                                        el.child(badge(format!("Mã BN: {}", ma_bn), BG_SUBTLE, TEXT_MAIN))
+                                        el.child(badge(format!("Mã BN: {}", ma_bn), bg_subtle(), text_main()))
                                     })
                                     .when(!ma_tn.is_empty(), |el| {
-                                        el.child(badge(format!("Số TN: {}", ma_tn), PRIMARY_LIGHT, PRIMARY_COL))
+                                        el.child(badge(format!("Số TN: {}", ma_tn), primary_light(), PRIMARY_COL))
                                     }),
                             )
                             .child(match self.current_record_status {
@@ -172,14 +172,14 @@ impl KskGpuiApp {
                                     .py(px(8.0))
                                     .cursor_pointer()
                                     .border_b_2()
-                                    .border_color(rgb(if is_act { PRIMARY_COL } else { BG_CARD }))
+                                    .border_color(rgb(if is_act { PRIMARY_COL } else { bg_card() }))
                                     .text_sm()
                                     .font_weight(if is_act {
                                         gpui::FontWeight::SEMIBOLD
                                     } else {
                                         gpui::FontWeight::NORMAL
                                     })
-                                    .text_color(rgb(if is_act { PRIMARY_COL } else { TEXT_MUTED }))
+                                    .text_color(rgb(if is_act { PRIMARY_COL } else { text_muted() }))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.active_exam_tab = k.clone();
                                         this.open_dropdown = None;
@@ -383,7 +383,7 @@ impl KskGpuiApp {
                             div()
                                 .pt(px(8.0))
                                 .border_t_1()
-                                .border_color(rgb(BORDER_COL))
+                                .border_color(rgb(border_col()))
                                 .flex()
                                 .flex_row()
                                 .justify_end()
@@ -464,7 +464,7 @@ impl KskGpuiApp {
                                     .w(px(280.0))
                                     .p(px(6.0))
                                     .rounded(px(6.0))
-                                    .bg(rgb(if checked { WARN_BG } else { BG_SUBTLE }))
+                                    .bg(rgb(if checked { WARN_BG } else { bg_subtle() }))
                                     .child(
                                         Checkbox::new(SharedString::from(format!("chk-{}", key)))
                                             .label(*label)
@@ -589,9 +589,9 @@ impl KskGpuiApp {
         let active_sub = self.active_clinical_subtab.clone();
 
         let subtab_bar = div()
-            .bg(rgb(BG_CARD))
+            .bg(rgb(bg_card()))
             .border_1()
-            .border_color(rgb(BORDER_COL))
+            .border_color(rgb(border_col()))
             .rounded(px(8.0))
             .p(px(8.0))
             .flex()
@@ -680,7 +680,9 @@ impl KskGpuiApp {
                             .child(self.render_form_input("CO_KINH_MAT_PHAI", "Thị lực có kính MP", "10/10", false, edit_mat, window, cx))
                             .child(self.render_form_input("CO_KINH_MAT_TRAI", "Thị lực có kính MT", "10/10", false, edit_mat, window, cx)),
                     )
-                    .child(self.render_specialty_classification_block("CK_MAT", "Chuyên khoa Mắt", edit_mat, window, cx))
+                    .when(self.clinical_catalog_mode, |el| {
+                        el.child(self.render_specialty_classification_block("CK_MAT", "Chuyên khoa Mắt", edit_mat, window, cx))
+                    })
                     .child(self.render_form_textarea("BENH_KHAC_MAT", "Kết quả khám & Các bệnh về mắt", "Bình thường / Không có bệnh lý...", 3, edit_mat, window, cx))
                     .child(self.render_pl_radio_group("mat", "KHAM_MAT_PL", "Phân loại Mắt", edit_mat, cx))
                     .child(self.render_form_input("BS_MAT", "Bác sĩ khám Mắt", "", false, edit_mat, window, cx))
@@ -702,7 +704,9 @@ impl KskGpuiApp {
                             .child(self.render_form_input("TAI_TRAI_NOI_THUONG", "Tai trái nói thường (m)", "5m", false, edit_tmh, window, cx))
                             .child(self.render_form_input("TAI_TRAI_NOI_THAM", "Tai trái nói thầm (m)", "0.5m", false, edit_tmh, window, cx)),
                     )
-                    .child(self.render_specialty_classification_block("CK_TMH", "Tai - Mũi - Họng", edit_tmh, window, cx))
+                    .when(self.clinical_catalog_mode, |el| {
+                        el.child(self.render_specialty_classification_block("CK_TMH", "Tai - Mũi - Họng", edit_tmh, window, cx))
+                    })
                     .child(self.render_form_textarea("BENH_KHAC_TAI_MUI_HONG", "Kết quả khám & Bệnh Tai - Mũi - Họng", "Bình thường...", 3, edit_tmh, window, cx))
                     .child(self.render_pl_radio_group("tmh", "KHAM_TAI_MUI_HONG_PL", "Phân loại TMH", edit_tmh, cx))
                     .child(self.render_form_input("BS_TMH", "Bác sĩ khám TMH", "", false, edit_tmh, window, cx))
@@ -722,7 +726,9 @@ impl KskGpuiApp {
                             .child(self.render_form_textarea("HAM_TREN", "Hàm trên", "Bình thường", 2, edit_rhm, window, cx))
                             .child(self.render_form_textarea("HAM_DUOI", "Hàm dưới", "Bình thường", 2, edit_rhm, window, cx)),
                     )
-                    .child(self.render_specialty_classification_block("CK_RHM", "Răng - Hàm - Mặt", edit_rhm, window, cx))
+                    .when(self.clinical_catalog_mode, |el| {
+                        el.child(self.render_specialty_classification_block("CK_RHM", "Răng - Hàm - Mặt", edit_rhm, window, cx))
+                    })
                     .child(self.render_form_textarea("BENH_KHAC_RANG_HAM_MAT", "Kết quả khám & Bệnh Răng - Hàm - Mặt", "Bình thường...", 3, edit_rhm, window, cx))
                     .child(self.render_pl_radio_group("rhm", "KHAM_RANG_HAM_MAT_PL", "Phân loại RHM", edit_rhm, cx))
                     .child(self.render_form_input("BS_RHM", "Bác sĩ khám RHM", "", false, edit_rhm, window, cx))
@@ -783,13 +789,15 @@ impl KskGpuiApp {
                         cx,
                     ))
                     .child(noi_subtab_bar)
-                    .child(self.render_specialty_classification_block(
-                        current_noi.0,
-                        current_noi.3,
-                        edit_noi,
-                        window,
-                        cx,
-                    ))
+                    .when(self.clinical_catalog_mode, |el| {
+                        el.child(self.render_specialty_classification_block(
+                            current_noi.0,
+                            current_noi.3,
+                            edit_noi,
+                            window,
+                            cx,
+                        ))
+                    })
                     .child(self.render_form_textarea(
                         current_noi.1,
                         &format!("Kết quả {}", current_noi.3),
@@ -837,7 +845,9 @@ impl KskGpuiApp {
     ) -> AnyElement {
         card_box()
             .child(self.render_section_action_bar(sec_key, title, can_role, is_locked, cx))
-            .child(self.render_specialty_classification_block(spec_id, title, editable, window, cx))
+            .when(self.clinical_catalog_mode, |el| {
+                el.child(self.render_specialty_classification_block(spec_id, title, editable, window, cx))
+            })
             .child(self.render_form_textarea(
                 f_kq,
                 "Kết quả khám chuyên khoa",
@@ -1016,9 +1026,9 @@ impl KskGpuiApp {
                 div()
                     .p(px(12.0))
                     .rounded(px(8.0))
-                    .bg(rgb(BG_SUBTLE))
+                    .bg(rgb(bg_subtle()))
                     .border_1()
-                    .border_color(rgb(BORDER_COL))
+                    .border_color(rgb(border_col()))
                     .flex()
                     .flex_col()
                     .gap(px(8.0))
@@ -1040,7 +1050,7 @@ impl KskGpuiApp {
                                         div()
                                             .text_xs()
                                             .font_weight(gpui::FontWeight::BOLD)
-                                            .text_color(rgb(TEXT_MAIN))
+                                            .text_color(rgb(text_main()))
                                             .child(format!("Phân loại bệnh tật sẵn — {}", spec_title)),
                                     )
                                     .child(badge(&format!("Loại {}", max_score), max_bg, max_col)),
@@ -1097,9 +1107,9 @@ impl KskGpuiApp {
                                         .px(px(10.0))
                                         .py(px(6.0))
                                         .rounded(px(6.0))
-                                        .bg(rgb(BG_CARD))
+                                        .bg(rgb(bg_card()))
                                         .border_1()
-                                        .border_color(rgb(BORDER_COL))
+                                        .border_color(rgb(border_col()))
                                         .flex()
                                         .flex_row()
                                         .items_center()
@@ -1109,7 +1119,7 @@ impl KskGpuiApp {
                                             div()
                                                 .flex_1()
                                                 .text_xs()
-                                                .text_color(rgb(TEXT_MAIN))
+                                                .text_color(rgb(text_main()))
                                                 .child(format!("{} — {}", dn, cn)),
                                         )
                                         .child(badge(&format!("Loại {}", sc), bg, col))
@@ -1121,7 +1131,7 @@ impl KskGpuiApp {
                 el.child(
                     div()
                         .text_xs()
-                        .text_color(rgb(TEXT_MUTED))
+                        .text_color(rgb(text_muted()))
                         .child("Chưa có mục bệnh tật chi tiết cho chuyên khoa này trong danh mục."),
                 )
             })
@@ -1141,15 +1151,15 @@ impl KskGpuiApp {
                 div()
                     .rounded(px(8.0))
                     .border_1()
-                    .border_color(rgb(BORDER_COL))
-                    .bg(rgb(BG_CARD))
+                    .border_color(rgb(border_col()))
+                    .bg(rgb(bg_card()))
                     .overflow_hidden()
                     .child(
                         div()
                             .id(SharedString::from(format!("dis-hdr-{}", d_code)))
                             .px(px(12.0))
                             .py(px(8.0))
-                            .bg(rgb(BG_SUBTLE))
+                            .bg(rgb(bg_subtle()))
                             .cursor_pointer()
                             .flex()
                             .flex_row()
@@ -1175,13 +1185,13 @@ impl KskGpuiApp {
                                         div()
                                             .text_xs()
                                             .font_weight(gpui::FontWeight::BOLD)
-                                            .text_color(rgb(TEXT_MAIN))
+                                            .text_color(rgb(text_main()))
                                             .child(d_name),
                                     )
                                     .child(
                                         div()
                                             .text_xs()
-                                            .text_color(rgb(TEXT_MUTED))
+                                            .text_color(rgb(text_muted()))
                                             .child(cur_cls_name),
                                     ),
                             )
@@ -1195,7 +1205,7 @@ impl KskGpuiApp {
                                     .child(
                                         div()
                                             .text_xs()
-                                            .text_color(rgb(TEXT_MUTED))
+                                            .text_color(rgb(text_muted()))
                                             .child(if is_open { "▲" } else { "▼" }),
                                     ),
                             ),
@@ -1205,7 +1215,7 @@ impl KskGpuiApp {
                             div()
                                 .p(px(8.0))
                                 .border_t_1()
-                                .border_color(rgb(BORDER_COL))
+                                .border_color(rgb(border_col()))
                                 .flex()
                                 .flex_col()
                                 .gap(px(4.0))
@@ -1225,12 +1235,12 @@ impl KskGpuiApp {
                                         .border_color(if checked {
                                             rgb(PRIMARY_COL)
                                         } else {
-                                            rgb(BG_CARD)
+                                            rgb(bg_card())
                                         })
                                         .bg(if checked {
-                                            rgb(PRIMARY_LIGHT)
+                                            rgb(primary_light())
                                         } else {
-                                            rgb(BG_CARD)
+                                            rgb(bg_card())
                                         })
                                         .when(editable, |d| {
                                             d.cursor_pointer().on_click(cx.listener(move |this, _, window, cx| {
@@ -1260,7 +1270,7 @@ impl KskGpuiApp {
                                                         .border_color(if checked {
                                                             rgb(PRIMARY_COL)
                                                         } else {
-                                                            rgb(BORDER_COL)
+                                                            rgb(border_col())
                                                         })
                                                         .flex()
                                                         .items_center()
@@ -1279,7 +1289,7 @@ impl KskGpuiApp {
                                                     div()
                                                         .flex_1()
                                                         .text_xs()
-                                                        .text_color(rgb(TEXT_MAIN))
+                                                        .text_color(rgb(text_main()))
                                                         .child(c_name),
                                                 ),
                                         )
@@ -1391,7 +1401,7 @@ impl KskGpuiApp {
             .child(
                 div()
                     .text_xs()
-                    .text_color(rgb(TEXT_MUTED))
+                    .text_color(rgb(text_muted()))
                     .child(format!(
                         "Hiển thị {} mặt bệnh (tối đa 50 dòng/lượt lọc). Nhấn vào mức phân loại để ghi vào kết luận bệnh:",
                         matching_items.len()
@@ -1401,9 +1411,9 @@ impl KskGpuiApp {
                 div()
                     .p(px(10.0))
                     .rounded(px(6.0))
-                    .bg(rgb(BG_SUBTLE))
+                    .bg(rgb(bg_subtle()))
                     .border_1()
-                    .border_color(rgb(BORDER_COL))
+                    .border_color(rgb(border_col()))
                     .flex()
                     .flex_col()
                     .gap(px(6.0))
@@ -1411,7 +1421,7 @@ impl KskGpuiApp {
                         div()
                             .text_sm()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(rgb(TEXT_MAIN))
+                            .text_color(rgb(text_main()))
                             .child(d_name),
                     )
                     .child(
@@ -1555,7 +1565,7 @@ impl KskGpuiApp {
                 div()
                     .pt(px(10.0))
                     .border_t_1()
-                    .border_color(rgb(BORDER_COL))
+                    .border_color(rgb(border_col()))
                     .flex()
                     .flex_row()
                     .flex_wrap()

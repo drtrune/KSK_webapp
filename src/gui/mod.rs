@@ -32,8 +32,8 @@ use crate::{
 };
 
 use self::widgets::{
-    BG_APP, BG_CARD, BORDER_COL, DANGER_BG, DANGER_COL, PRIMARY_COL, PRIMARY_LIGHT,
-    SUCCESS_BG, SUCCESS_COL, TEXT_MAIN, TEXT_MUTED, WARN_BG, WARN_COL, badge, card_box,
+    bg_app, bg_card, bg_subtle, border_col, DANGER_BG, DANGER_COL, PRIMARY_COL,
+    SUCCESS_BG, SUCCESS_COL, text_main, text_muted, WARN_BG, WARN_COL, card_box,
     field_label, role_label_vi,
 };
 
@@ -67,6 +67,11 @@ pub struct KskGpuiApp {
     pub prof_full_name: Entity<InputState>,
     pub prof_old_pw: Entity<InputState>,
     pub prof_new_pw: Entity<InputState>,
+    pub prof_confirm_pw: Entity<InputState>,
+    pub dark_mode: bool,
+    pub clinical_catalog_mode: bool,
+    pub adm_tree_expanded: HashSet<String>,
+    pub adm_tree_expand_all: bool,
 
     // Navigation & Modals
     pub active_nav: String,       // "exam" | "export" | "admin"
@@ -167,6 +172,11 @@ impl KskGpuiApp {
         let prof_new_pw = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("Mật khẩu mới")
+                .masked(true)
+        });
+        let prof_confirm_pw = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Nhập lại mật khẩu mới")
                 .masked(true)
         });
 
@@ -320,6 +330,11 @@ impl KskGpuiApp {
             prof_full_name,
             prof_old_pw,
             prof_new_pw,
+            prof_confirm_pw,
+            dark_mode: false,
+            clinical_catalog_mode: true,
+            adm_tree_expanded: HashSet::new(),
+            adm_tree_expand_all: false,
             active_nav: "exam".into(),
             active_exam_tab: "reception".into(),
             open_dropdown: None,
@@ -1494,10 +1509,17 @@ impl KskGpuiApp {
         let new_name = self.prof_full_name.read(cx).value().trim().to_string();
         let old_pw = self.prof_old_pw.read(cx).value().to_string();
         let new_pw = self.prof_new_pw.read(cx).value().to_string();
+        let confirm_pw = self.prof_confirm_pw.read(cx).value().to_string();
 
-        if !new_pw.is_empty() && db::hash_password(&old_pw) != u.password_hash {
-            self.show_toast("Mật khẩu cũ không chính xác!", true, cx);
-            return;
+        if !new_pw.is_empty() {
+            if new_pw != confirm_pw {
+                self.show_toast("Mật khẩu mới và xác nhận mật khẩu không khớp!", true, cx);
+                return;
+            }
+            if db::hash_password(&old_pw) != u.password_hash {
+                self.show_toast("Mật khẩu cũ không chính xác!", true, cx);
+                return;
+            }
         }
 
         let state = self.state.clone();
@@ -1539,6 +1561,7 @@ impl KskGpuiApp {
         }
         self.prof_old_pw.update(cx, |s, cx| s.set_value("", window, cx));
         self.prof_new_pw.update(cx, |s, cx| s.set_value("", window, cx));
+        self.prof_confirm_pw.update(cx, |s, cx| s.set_value("", window, cx));
         self.show_profile_modal = false;
         self.show_toast("Đã cập nhật thông tin tài khoản!", false, cx);
     }
@@ -1554,7 +1577,7 @@ impl KskGpuiApp {
     fn render_login(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         div()
             .size_full()
-            .bg(rgb(BG_APP))
+            .bg(rgb(bg_app()))
             .flex()
             .flex_col()
             .items_center()
@@ -1580,7 +1603,7 @@ impl KskGpuiApp {
                             .child(
                                 div()
                                     .text_sm()
-                                    .text_color(rgb(TEXT_MUTED))
+                                    .text_color(rgb(text_muted()))
                                     .child(format!(
                                         "{} — Phiên bản v{}",
                                         self.cfg.ten_cskcb,
@@ -1703,7 +1726,6 @@ impl Render for KskGpuiApp {
         let active_nav = self.active_nav.clone();
         let main_body = match active_nav.as_str() {
             "export" => self.render_export_tab(window, cx),
-            "disease_catalog" => self.render_catalogs_manager(true, window, cx),
             "admin" => self.render_admin_tab(window, cx),
             _ => div()
                 .flex_1()
@@ -1719,8 +1741,8 @@ impl Render for KskGpuiApp {
         div()
             .relative()
             .size_full()
-            .bg(rgb(BG_APP))
-            .text_color(rgb(TEXT_MAIN))
+            .bg(rgb(bg_app()))
+            .text_color(rgb(text_main()))
             .flex()
             .flex_col()
             .overflow_hidden()
@@ -1729,9 +1751,9 @@ impl Render for KskGpuiApp {
                 div()
                     .h(px(52.0))
                     .px(px(16.0))
-                    .bg(rgb(BG_CARD))
+                    .bg(rgb(bg_card()))
                     .border_b_1()
-                    .border_color(rgb(BORDER_COL))
+                    .border_color(rgb(border_col()))
                     .flex()
                     .flex_row()
                     .items_center()
@@ -1775,23 +1797,6 @@ impl Render for KskGpuiApp {
                             })
                             .when(is_admin, |el| {
                                 el.child(
-                                    Button::new("nav-disease-catalog")
-                                        .label("Phân loại Bệnh tật")
-                                        .small()
-                                        .when(active_nav == "disease_catalog", |b| b.primary())
-                                        .when(active_nav != "disease_catalog", |b| b.secondary())
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.active_nav = "disease_catalog".into();
-                                            if !matches!(
-                                                this.adm_cat_type.as_str(),
-                                                "CHUYEN_KHOA" | "BENH_TAT" | "TIEU_CHUAN_PL"
-                                            ) {
-                                                this.adm_cat_type = "BENH_TAT".into();
-                                            }
-                                            this.refresh_catalogs(cx);
-                                        })),
-                                )
-                                .child(
                                     Button::new("nav-admin")
                                         .label("Quản trị")
                                         .small()
@@ -1799,12 +1804,6 @@ impl Render for KskGpuiApp {
                                         .when(active_nav != "admin", |b| b.secondary())
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.active_nav = "admin".into();
-                                            if matches!(
-                                                this.adm_cat_type.as_str(),
-                                                "CHUYEN_KHOA" | "BENH_TAT" | "TIEU_CHUAN_PL"
-                                            ) {
-                                                this.adm_cat_type = "TINH_TP".into();
-                                            }
                                             cx.notify();
                                         })),
                                 )
@@ -1827,22 +1826,17 @@ impl Render for KskGpuiApp {
                                         })),
                                 )
                             })
-                            .child(badge(
-                                format!(
-                                    "{} ({})",
-                                    user.full_name,
-                                    user.roles()
-                                        .into_iter()
-                                        .map(|r| role_label_vi(&r))
-                                        .collect::<Vec<_>>()
-                                        .join(", ")
-                                ),
-                                PRIMARY_LIGHT,
-                                PRIMARY_COL,
-                            ))
                             .child(
-                                Button::new("btn-profile")
-                                    .label("Tài khoản")
+                                Button::new("btn-account-settings")
+                                    .label(format!(
+                                        "⚙ {} ({})",
+                                        user.full_name,
+                                        user.roles()
+                                            .into_iter()
+                                            .map(|r| role_label_vi(&r))
+                                            .collect::<Vec<_>>()
+                                            .join(", ")
+                                    ))
                                     .small()
                                     .secondary()
                                     .on_click(cx.listener(|this, _, _, cx| {
@@ -1871,7 +1865,7 @@ impl Render for KskGpuiApp {
                         .py(px(8.0))
                         .bg(rgb(if is_err { DANGER_BG } else { SUCCESS_BG }))
                         .border_b_1()
-                        .border_color(rgb(BORDER_COL))
+                        .border_color(rgb(border_col()))
                         .flex()
                         .flex_row()
                         .items_center()
@@ -1907,12 +1901,107 @@ impl Render for KskGpuiApp {
                         .justify_center()
                         .child(
                             card_box()
-                                .w(px(400.0))
+                                .w(px(460.0))
                                 .child(
                                     div()
                                         .text_base()
                                         .font_weight(gpui::FontWeight::BOLD)
-                                        .child("Thông tin tài khoản"),
+                                        .child("Cài đặt & Tài khoản"),
+                                )
+                                .child(
+                                    div()
+                                        .p(px(10.0))
+                                        .rounded(px(6.0))
+                                        .bg(rgb(bg_subtle()))
+                                        .border_1()
+                                        .border_color(rgb(border_col()))
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(8.0))
+                                        .child(
+                                            div()
+                                                .flex()
+                                                .flex_row()
+                                                .items_center()
+                                                .justify_between()
+                                                .child(field_label("Chế độ giao diện", false))
+                                                .child(
+                                                    div()
+                                                        .flex()
+                                                        .flex_row()
+                                                        .gap(px(6.0))
+                                                        .child(
+                                                            Button::new("set-theme-light")
+                                                                .label("☀ Sáng")
+                                                                .small()
+                                                                .when(!self.dark_mode, |b| b.primary())
+                                                                .when(self.dark_mode, |b| b.secondary())
+                                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                                    this.dark_mode = false;
+                                                                    widgets::set_dark_mode(false);
+                                                                    gpui_component::Theme::change(
+                                                                        gpui_component::ThemeMode::Light,
+                                                                        Some(window),
+                                                                        cx,
+                                                                    );
+                                                                    cx.notify();
+                                                                })),
+                                                        )
+                                                        .child(
+                                                            Button::new("set-theme-dark")
+                                                                .label("🌙 Tối")
+                                                                .small()
+                                                                .when(self.dark_mode, |b| b.primary())
+                                                                .when(!self.dark_mode, |b| b.secondary())
+                                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                                    this.dark_mode = true;
+                                                                    widgets::set_dark_mode(true);
+                                                                    gpui_component::Theme::change(
+                                                                        gpui_component::ThemeMode::Dark,
+                                                                        Some(window),
+                                                                        cx,
+                                                                    );
+                                                                    cx.notify();
+                                                                })),
+                                                        ),
+                                                ),
+                                        )
+                                        .child(
+                                            div()
+                                                .flex()
+                                                .flex_row()
+                                                .items_center()
+                                                .justify_between()
+                                                .child(field_label("Kiểu khám lâm sàng", false))
+                                                .child(
+                                                    div()
+                                                        .flex()
+                                                        .flex_row()
+                                                        .gap(px(6.0))
+                                                        .child(
+                                                            Button::new("set-exam-catalog")
+                                                                .label("Theo danh mục")
+                                                                .small()
+                                                                .when(self.clinical_catalog_mode, |b| b.primary())
+                                                                .when(!self.clinical_catalog_mode, |b| b.secondary())
+                                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                                    this.clinical_catalog_mode = true;
+                                                                    cx.notify();
+                                                                })),
+                                                        )
+                                                        .child(
+                                                            Button::new("set-exam-normal")
+                                                                .label("Nhập thường")
+                                                                .small()
+                                                                .when(!self.clinical_catalog_mode, |b| b.primary())
+                                                                .when(self.clinical_catalog_mode, |b| b.secondary())
+                                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                                    this.clinical_catalog_mode = false;
+                                                                    cx.notify();
+                                                                })),
+                                                        ),
+                                                ),
+                                        ),
                                 )
                                 .child(
                                     div()
@@ -1948,6 +2037,14 @@ impl Render for KskGpuiApp {
                                         .gap(px(4.0))
                                         .child(field_label("Mật khẩu mới", false))
                                         .child(Input::new(&self.prof_new_pw).small()),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(4.0))
+                                        .child(field_label("Xác nhận mật khẩu mới", false))
+                                        .child(Input::new(&self.prof_confirm_pw).small()),
                                 )
                                 .child(
                                     div()

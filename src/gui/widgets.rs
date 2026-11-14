@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use gpui::{
     AnyElement, Context, InteractiveElement, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement, Styled, Window, div, px, rgb,
@@ -10,14 +12,45 @@ use gpui_component::{
 
 use super::KskGpuiApp;
 
-pub const BG_APP: u32 = 0xf1f5f9;
-pub const BG_CARD: u32 = 0xffffff;
-pub const BG_SUBTLE: u32 = 0xf8fafc;
-pub const BORDER_COL: u32 = 0xe2e8f0;
+static DARK_MODE: AtomicBool = AtomicBool::new(false);
+
+pub fn set_dark_mode(dark: bool) {
+    DARK_MODE.store(dark, Ordering::Relaxed);
+}
+
+pub fn is_dark_mode() -> bool {
+    DARK_MODE.load(Ordering::Relaxed)
+}
+
+pub fn bg_app() -> u32 {
+    if is_dark_mode() { 0x0f172a } else { 0xf1f5f9 }
+}
+
+pub fn bg_card() -> u32 {
+    if is_dark_mode() { 0x1e293b } else { 0xffffff }
+}
+
+pub fn bg_subtle() -> u32 {
+    if is_dark_mode() { 0x263244 } else { 0xf8fafc }
+}
+
+pub fn border_col() -> u32 {
+    if is_dark_mode() { 0x334155 } else { 0xe2e8f0 }
+}
+
+pub fn text_main() -> u32 {
+    if is_dark_mode() { 0xf1f5f9 } else { 0x0f172a }
+}
+
+pub fn text_muted() -> u32 {
+    if is_dark_mode() { 0x94a3b8 } else { 0x64748b }
+}
+
+pub fn primary_light() -> u32 {
+    if is_dark_mode() { 0x134e4a } else { 0xccfbf1 }
+}
+
 pub const PRIMARY_COL: u32 = 0x0f766e;
-pub const PRIMARY_LIGHT: u32 = 0xccfbf1;
-pub const TEXT_MAIN: u32 = 0x0f172a;
-pub const TEXT_MUTED: u32 = 0x64748b;
 pub const DANGER_COL: u32 = 0xbe123c;
 pub const DANGER_BG: u32 = 0xffe4e6;
 pub const SUCCESS_COL: u32 = 0x15803d;
@@ -27,9 +60,9 @@ pub const WARN_BG: u32 = 0xfef3c7;
 
 pub fn card_box() -> gpui::Div {
     div()
-        .bg(rgb(BG_CARD))
+        .bg(rgb(bg_card()))
         .border_1()
-        .border_color(rgb(BORDER_COL))
+        .border_color(rgb(border_col()))
         .rounded(px(8.0))
         .p(px(16.0))
         .flex()
@@ -78,7 +111,7 @@ pub fn field_label(text: impl Into<SharedString>, required: bool) -> AnyElement 
         .gap(px(3.0))
         .text_xs()
         .font_weight(gpui::FontWeight::MEDIUM)
-        .text_color(rgb(TEXT_MUTED))
+        .text_color(rgb(text_muted()))
         .child(label)
         .when(required, |el| {
             el.child(div().text_color(rgb(DANGER_COL)).child("*"))
@@ -178,13 +211,13 @@ impl KskGpuiApp {
                             .px(px(10.0))
                             .rounded(px(999.0))
                             .border_1()
-                            .border_color(rgb(if is_sel { PRIMARY_COL } else { BORDER_COL }))
+                            .border_color(rgb(if is_sel { PRIMARY_COL } else { border_col() }))
                             .bg(rgb(if is_sel {
-                                PRIMARY_LIGHT
+                                primary_light()
                             } else if editable {
-                                BG_CARD
+                                bg_card()
                             } else {
-                                BG_SUBTLE
+                                bg_subtle()
                             }))
                             .flex()
                             .flex_row()
@@ -199,9 +232,9 @@ impl KskGpuiApp {
                             .text_color(rgb(if is_sel {
                                 PRIMARY_COL
                             } else if editable {
-                                TEXT_MAIN
+                                text_main()
                             } else {
-                                TEXT_MUTED
+                                text_muted()
                             }))
                             .when(editable, |el| {
                                 el.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| {
@@ -219,7 +252,7 @@ impl KskGpuiApp {
                                     .h(px(12.0))
                                     .rounded(px(999.0))
                                     .border_1()
-                                    .border_color(rgb(if is_sel { PRIMARY_COL } else { TEXT_MUTED }))
+                                    .border_color(rgb(if is_sel { PRIMARY_COL } else { text_muted() }))
                                     .flex()
                                     .items_center()
                                     .justify_center()
@@ -282,14 +315,14 @@ impl KskGpuiApp {
                     .px(px(10.0))
                     .rounded(px(6.0))
                     .border_1()
-                    .border_color(rgb(if is_open { PRIMARY_COL } else { BORDER_COL }))
-                    .bg(rgb(if editable { BG_CARD } else { BG_SUBTLE }))
+                    .border_color(rgb(if is_open { PRIMARY_COL } else { border_col() }))
+                    .bg(rgb(if editable { bg_card() } else { bg_subtle() }))
                     .flex()
                     .flex_row()
                     .items_center()
                     .justify_between()
                     .text_sm()
-                    .text_color(rgb(if editable { TEXT_MAIN } else { TEXT_MUTED }))
+                    .text_color(rgb(if editable { text_main() } else { text_muted() }))
                     .when(editable, |el| {
                         let id_toggle = id_owned.clone();
                         el.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| {
@@ -302,7 +335,7 @@ impl KskGpuiApp {
                         }))
                     })
                     .child(div().truncate().child(display_text))
-                    .child(div().text_xs().text_color(rgb(TEXT_MUTED)).child("▾")),
+                    .child(div().text_xs().text_color(rgb(text_muted())).child("▾")),
             )
             .when(is_open && editable, |el| {
                 let menu = div()
@@ -314,7 +347,7 @@ impl KskGpuiApp {
                     .w_full()
                     .max_h(px(260.0))
                     .overflow_y_scroll()
-                    .bg(rgb(BG_CARD))
+                    .bg(rgb(bg_card()))
                     .border_1()
                     .border_color(rgb(PRIMARY_COL))
                     .rounded(px(6.0))
@@ -334,9 +367,9 @@ impl KskGpuiApp {
                             .rounded(px(4.0))
                             .text_sm()
                             .cursor_pointer()
-                            .bg(rgb(if is_sel { PRIMARY_LIGHT } else { BG_CARD }))
-                            .text_color(rgb(if is_sel { PRIMARY_COL } else { TEXT_MAIN }))
-                            .hover(|s| s.bg(rgb(BG_SUBTLE)))
+                            .bg(rgb(if is_sel { primary_light() } else { bg_card() }))
+                            .text_color(rgb(if is_sel { PRIMARY_COL } else { text_main() }))
+                            .hover(|s| s.bg(rgb(bg_subtle())))
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.open_dropdown = None;
                                 cb(this, val_c.clone(), window, cx);
@@ -368,7 +401,7 @@ impl KskGpuiApp {
             .justify_between()
             .pb(px(8.0))
             .border_b_1()
-            .border_color(rgb(BORDER_COL))
+            .border_color(rgb(border_col()))
             .child(
                 div()
                     .flex()
@@ -379,14 +412,14 @@ impl KskGpuiApp {
                         div()
                             .text_base()
                             .font_weight(gpui::FontWeight::BOLD)
-                            .text_color(rgb(TEXT_MAIN))
+                            .text_color(rgb(text_main()))
                             .child(title.to_string()),
                     )
                     .when(is_locked, |el| {
                         el.child(badge("Đã ký khóa", DANGER_BG, DANGER_COL))
                     })
                     .when(!is_locked && !can_edit_role, |el| {
-                        el.child(badge("Chỉ xem", BG_SUBTLE, TEXT_MUTED))
+                        el.child(badge("Chỉ xem", bg_subtle(), text_muted()))
                     }),
             )
             .child(

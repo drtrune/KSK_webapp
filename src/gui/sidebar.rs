@@ -11,8 +11,8 @@ use gpui_component::{
 use super::{
     KskGpuiApp,
     widgets::{
-        BG_CARD, BG_SUBTLE, BORDER_COL, DANGER_BG, DANGER_COL, PRIMARY_COL, PRIMARY_LIGHT,
-        SUCCESS_BG, SUCCESS_COL, TEXT_MAIN, TEXT_MUTED, WARN_BG, WARN_COL, badge,
+        bg_card, bg_subtle, border_col, DANGER_BG, DANGER_COL, PRIMARY_COL, primary_light,
+        SUCCESS_BG, SUCCESS_COL, text_main, text_muted, WARN_BG, WARN_COL, badge,
     },
 };
 
@@ -22,9 +22,9 @@ impl KskGpuiApp {
             return div()
                 .w(px(36.0))
                 .h_full()
-                .bg(rgb(BG_CARD))
+                .bg(rgb(bg_card()))
                 .border_r_1()
-                .border_color(rgb(BORDER_COL))
+                .border_color(rgb(border_col()))
                 .flex()
                 .flex_col()
                 .items_center()
@@ -61,9 +61,9 @@ impl KskGpuiApp {
         div()
             .w(px(310.0))
             .h_full()
-            .bg(rgb(BG_CARD))
+            .bg(rgb(bg_card()))
             .border_r_1()
-            .border_color(rgb(BORDER_COL))
+            .border_color(rgb(border_col()))
             .flex()
             .flex_col()
             .child(
@@ -72,7 +72,7 @@ impl KskGpuiApp {
                     .px(px(12.0))
                     .py(px(10.0))
                     .border_b_1()
-                    .border_color(rgb(BORDER_COL))
+                    .border_color(rgb(border_col()))
                     .flex()
                     .flex_row()
                     .items_center()
@@ -81,7 +81,7 @@ impl KskGpuiApp {
                         div()
                             .text_sm()
                             .font_weight(gpui::FontWeight::BOLD)
-                            .text_color(rgb(TEXT_MAIN))
+                            .text_color(rgb(text_main()))
                             .child(format!("Danh sách hồ sơ ({})", records.len())),
                     )
                     .child(
@@ -115,7 +115,7 @@ impl KskGpuiApp {
                 div()
                     .p(px(10.0))
                     .border_b_1()
-                    .border_color(rgb(BORDER_COL))
+                    .border_color(rgb(border_col()))
                     .flex()
                     .flex_col()
                     .gap(px(8.0))
@@ -195,7 +195,7 @@ impl KskGpuiApp {
                             div()
                                 .p(px(16.0))
                                 .text_sm()
-                                .text_color(rgb(TEXT_MUTED))
+                                .text_color(rgb(text_muted()))
                                 .child("Không có hồ sơ phù hợp bộ lọc."),
                         )
                     })
@@ -221,10 +221,10 @@ impl KskGpuiApp {
                             .p(px(10.0))
                             .rounded(px(6.0))
                             .border_1()
-                            .border_color(rgb(if is_sel { PRIMARY_COL } else { BORDER_COL }))
-                            .bg(rgb(if is_sel { PRIMARY_LIGHT } else { BG_CARD }))
+                            .border_color(rgb(if is_sel { PRIMARY_COL } else { border_col() }))
+                            .bg(rgb(if is_sel { primary_light() } else { bg_card() }))
                             .cursor_pointer()
-                            .hover(|s| s.bg(rgb(if is_sel { PRIMARY_LIGHT } else { BG_SUBTLE })))
+                            .hover(|s| s.bg(rgb(if is_sel { primary_light() } else { bg_subtle() })))
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.load_record_into_form(rec_id, window, cx);
                             }))
@@ -242,7 +242,7 @@ impl KskGpuiApp {
                                         div()
                                             .text_sm()
                                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                                            .text_color(rgb(TEXT_MAIN))
+                                            .text_color(rgb(text_main()))
                                             .truncate()
                                             .child(name),
                                     )
@@ -255,7 +255,7 @@ impl KskGpuiApp {
                                     .items_center()
                                     .justify_between()
                                     .text_xs()
-                                    .text_color(rgb(TEXT_MUTED))
+                                    .text_color(rgb(text_muted()))
                                     .child(format!("Mã: {}", ma_bn))
                                     .child(ngay),
                             )
@@ -263,7 +263,7 @@ impl KskGpuiApp {
                                 el.child(
                                     div()
                                         .text_xs()
-                                        .text_color(rgb(TEXT_MUTED))
+                                        .text_color(rgb(text_muted()))
                                         .truncate()
                                         .child(workplace),
                                 )
