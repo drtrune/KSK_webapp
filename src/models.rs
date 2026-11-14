@@ -919,7 +919,8 @@ pub struct ClassificationDef {
     pub score: Option<i64>,
     pub ref_rule: Option<String>,
     pub ref_disease_id: Option<String>,
-    pub adjust: Option<i64>,
+    #[serde(default)]
+    pub adjust: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -935,4 +936,17 @@ pub fn phan_loai_config() -> &'static PhanLoaiConfig {
         let raw = include_str!("../asset/phan_loai_config.json");
         serde_json::from_str(raw).expect("Invalid embedded asset/phan_loai_config.json")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_phan_loai_config_parses() {
+        let cfg = phan_loai_config();
+        assert!(!cfg.specialties.is_empty());
+        assert!(!cfg.diseases.is_empty());
+        assert!(!cfg.classifications.is_empty());
+    }
 }
