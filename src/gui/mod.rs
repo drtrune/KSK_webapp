@@ -164,6 +164,16 @@ impl KskGpuiApp {
                 .placeholder("Đường dẫn file SQLite (.db)")
                 .default_value(cfg.database_path.clone())
         });
+        let sub_login_user = cx.subscribe_in(&login_username, window, |this, _, ev, window, cx| {
+            if matches!(ev, InputEvent::PressEnter { .. }) {
+                this.do_login(window, cx);
+            }
+        });
+        let sub_login_pass = cx.subscribe_in(&login_password, window, |this, _, ev, window, cx| {
+            if matches!(ev, InputEvent::PressEnter { .. }) {
+                this.do_login(window, cx);
+            }
+        });
 
         let prof_full_name = cx.new(|cx| InputState::new(window, cx).placeholder("Họ tên"));
         let prof_old_pw = cx.new(|cx| {
@@ -404,7 +414,17 @@ impl KskGpuiApp {
             adm_cat_parent_filter,
             adm_cat_search,
             adm_cat_edit_id: None,
-            _ui_subs: vec![sub_search, sub_from, sub_to, sub_disease, sub_cat_search, sub_cat_parent_filter, sub_dd_search],
+            _ui_subs: vec![
+                sub_search,
+                sub_from,
+                sub_to,
+                sub_disease,
+                sub_cat_search,
+                sub_cat_parent_filter,
+                sub_dd_search,
+                sub_login_user,
+                sub_login_pass,
+            ],
         }
     }
 

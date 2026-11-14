@@ -2055,6 +2055,37 @@ pub async fn export_csv_handler(
         .into_response()
 }
 
+/// Chuẩn hóa chuỗi ngày (YYYYMMDD, YYYYMMDDHHMM, YYYY-MM-DD, DD/MM/YYYY) về `DD/MM/YYYY` theo CSV_export_docs.md.
+fn format_csv_ddmmyyyy(raw: &str) -> String {
+    let s = raw.trim();
+    if s.is_empty() {
+        return String::new();
+    }
+    if s.len() >= 10 && s.as_bytes().get(4) == Some(&b'-') && s.as_bytes().get(7) == Some(&b'-') {
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(&s[0..10], "%Y-%m-%d") {
+            return d.format("%d/%m/%Y").to_string();
+        }
+    }
+    if s.len() >= 8 && s.chars().take(8).all(|c| c.is_ascii_digit()) {
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(&s[0..8], "%Y%m%d") {
+            return d.format("%d/%m/%Y").to_string();
+        }
+    }
+    if let Ok(d) = chrono::NaiveDate::parse_from_str(s, "%d/%m/%Y") {
+        return d.format("%d/%m/%Y").to_string();
+    }
+    s.to_string()
+}
+
+/// Chuẩn hóa danh sách mã ICD-10 ngăn cách bằng dấu `;` (theo CSV_export_docs.md).
+fn normalize_csv_semicolon(raw: &str) -> String {
+    raw.split(|c| c == ',' || c == ';')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
 pub fn generate_csv_bytes(cfg: &AppConfig, rows: Vec<KskRecordRow>) -> Result<Vec<u8>, String> {
     let mut output: Vec<u8> = vec![0xEF, 0xBB, 0xBF];
     {
@@ -2085,7 +2116,12 @@ pub fn generate_csv_bytes(cfg: &AppConfig, rows: Vec<KskRecordRow>) -> Result<Ve
                     }
                     "NGAY_SINH" => {
                         let v = extract_map_str(&map, "NGAY_SINH");
-                        if v.is_empty() { row.ngay_sinh.clone() } else { v }
+                        let raw = if v.is_empty() { row.ngay_sinh.clone() } else { v };
+                        format_csv_ddmmyyyy(&raw)
+                    }
+                    "NGAYCAP_CCCD" => {
+                        let v = extract_map_str(&map, "NGAYCAP_CCCD");
+                        format_csv_ddmmyyyy(&v)
                     }
                     "MA_DAN_TOC" => {
                         let v = extract_map_str(&map, "MA_DAN_TOC");
@@ -2129,7 +2165,16 @@ pub fn generate_csv_bytes(cfg: &AppConfig, rows: Vec<KskRecordRow>) -> Result<Ve
                     }
                     "NGAY_VAO" => {
                         let v = extract_map_str(&map, "NGAY_VAO");
-                        if v.is_empty() { row.ngay_vao.clone() } else { v }
+                        let raw = if v.is_empty() { row.ngay_vao.clone() } else { v };
+                        format_csv_ddmmyyyy(&raw)
+                    }
+                    "TSGD_MA_BENH"
+                    | "TSBT_MA_BENH_KHAC"
+                    | "TSBT_MA_BENH"
+                    | "TSBT_MA_BENH_THAI_SAN"
+                    | "KET_LUAN_BENH" => {
+                        let v = extract_map_str(&map, col);
+                        normalize_csv_semicolon(&v)
                     }
                     "NOI_KHOA_THAN_TN_SD_PL" => {
                         let v = extract_map_str(&map, "NOI_KHOA_THAN_TN_SD_PL");

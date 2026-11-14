@@ -3,6 +3,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseConfig {
+    #[serde(default = "default_database_path")]
+    pub database_path: String,
+}
+
+impl Default for DatabaseConfig {
+    fn default() -> Self {
+        Self {
+            database_path: default_database_path(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(default = "default_database_path")]
     pub database_path: String,
@@ -140,9 +154,19 @@ impl AppConfig {
         cwd_cfg.to_path_buf()
     }
 
+    /// Đường dẫn file cấu hình database riêng (`database.toml` cùng thư mục với `config.toml`)
+    pub fn db_config_file_path() -> PathBuf {
+        let cfg_path = Self::config_file_path();
+        if let Some(parent) = cfg_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            parent.join("database.toml")
+        } else {
+            PathBuf::from("database.toml")
+        }
+    }
+
     pub fn load() -> Self {
         let config_path = Self::config_file_path();
-        if config_path.exists() {
+        let mut cfg = if config_path.exists() {
             match fs::read_to_string(&config_path) {
                 Ok(content) => toml::from_str(&content).unwrap_or_default(),
                 Err(_) => AppConfig::default(),
@@ -151,12 +175,36 @@ impl AppConfig {
             let default_cfg = AppConfig::default();
             let _ = default_cfg.save();
             default_cfg
+        };
+
+        let db_cfg_path = Self::db_config_file_path();
+        if db_cfg_path.exists() {
+            if let Ok(content) = fs::read_to_string(&db_cfg_path) {
+                if let Ok(db_cfg) = toml::from_str::<DatabaseConfig>(&content) {
+                    if !db_cfg.database_path.trim().is_empty() {
+                        cfg.database_path = db_cfg.database_path;
+                    }
+                }
+            }
+        } else {
+            let _ = Self::save_db_config(&cfg.database_path);
         }
+        cfg
+    }
+
+    pub fn save_db_config(database_path: &str) -> Result<(), String> {
+        let db_cfg_path = Self::db_config_file_path();
+        let db_cfg = DatabaseConfig {
+            database_path: database_path.trim().to_string(),
+        };
+        let toml_str = toml::to_string_pretty(&db_cfg).map_err(|e| e.to_string())?;
+        fs::write(db_cfg_path, toml_str).map_err(|e| e.to_string())
     }
 
     pub fn save(&self) -> Result<(), String> {
         let config_path = Self::config_file_path();
         let toml_str = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
-        fs::write(config_path, toml_str).map_err(|e| e.to_string())
+        fs::write(config_path, toml_str).map_err(|e| e.to_string())?;
+        Self::save_db_config(&self.database_path)
     }
 }

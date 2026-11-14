@@ -411,6 +411,8 @@ impl KskGpuiApp {
         let can_role = self.has_any_role(&["admin", "reception", "tiensu", "bs_noi"]);
         let editable = !is_locked && can_role && self.editing_section.as_deref() == Some("history");
         let ts_gd = self.get_form_val("TSGD_MAC_BENH");
+        let ts_benh_khac = self.get_form_val("TSBT_BENH_KHAC");
+        let ts_dang_dieu_tri = self.get_form_val("TSBT_DANG_DIEU_TRI_BENH");
         let gioi_tinh = self.get_form_val("GIOI_TINH");
         let ts_thai_san = self.get_form_val("TSBT_THAI_SAN");
 
@@ -422,7 +424,7 @@ impl KskGpuiApp {
                 card_box()
                     .child(self.render_section_action_bar(
                         "history",
-                        "Tiền sử bệnh tật (Gia đình & Bản thân - 21 mục)",
+                        "A. Tiền sử gia đình",
                         can_role,
                         is_locked,
                         cx,
@@ -435,7 +437,7 @@ impl KskGpuiApp {
                             .gap(px(12.0))
                             .child(self.render_select_dropdown(
                                 "hist-tsgd",
-                                "Tiền sử gia đình mắc bệnh?",
+                                "Có ai trong gia đình mắc bệnh không?",
                                 &ts_gd,
                                 vec![
                                     ("0".to_string(), "0 - Không".to_string()),
@@ -447,7 +449,25 @@ impl KskGpuiApp {
                                 },
                                 cx,
                             ))
-                            .child(self.render_form_input("TSGD_MA_BENH", "Mã bệnh gia đình (nếu có)", "", false, editable, window, cx)),
+                            .when(ts_gd == "1", |el| {
+                                el.child(self.render_icd_multi_select(
+                                    "hist-tsgd-icd",
+                                    "TSGD_MA_BENH",
+                                    "Mã bệnh tiền sử gia đình (ICD-10 - chọn nhiều)",
+                                    editable,
+                                    cx,
+                                ))
+                            }),
+                    ),
+            )
+            .child(
+                card_box()
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .text_color(rgb(text_main()))
+                            .child("B. Tiền sử bản thân (22 bệnh lý)"),
                     )
                     .child(
                         div()
@@ -476,32 +496,87 @@ impl KskGpuiApp {
                                                 cx.notify();
                                             })),
                                     )
-                            })),
+                            }))
+                            .child({
+                                let checked = ts_benh_khac == "1";
+                                div()
+                                    .w(px(280.0))
+                                    .p(px(6.0))
+                                    .rounded(px(6.0))
+                                    .bg(rgb(if checked { WARN_BG } else { bg_subtle() }))
+                                    .child(
+                                        Checkbox::new("chk-TSBT_BENH_KHAC")
+                                            .label("22. Bệnh khác")
+                                            .checked(checked)
+                                            .disabled(!editable)
+                                            .on_change(cx.listener(|this, val, _, cx| {
+                                                this.form_values.insert(
+                                                    "TSBT_BENH_KHAC".into(),
+                                                    if *val { "1".into() } else { "0".into() },
+                                                );
+                                                cx.notify();
+                                            })),
+                                    )
+                            }),
                     )
+                    .when(ts_benh_khac == "1", |el| {
+                        el.child(self.render_icd_multi_select(
+                            "hist-tsbt-khac-icd",
+                            "TSBT_MA_BENH_KHAC",
+                            "Mã bệnh khác (ICD-10 - chọn nhiều)",
+                            editable,
+                            cx,
+                        ))
+                    }),
+            )
+            .child(
+                card_box()
                     .child(
                         div()
-                            .flex()
-                            .flex_row()
-                            .flex_wrap()
-                            .gap(px(12.0))
-                            .child(self.render_form_input("TSBT_MA_BENH_KHAC", "Bệnh khác (nếu có)", "", false, editable, window, cx))
-                            .child(self.render_icd_multi_select(
-                                "hist-icd10",
-                                "TSBT_MA_BENH",
-                                "Mã bệnh đang điều trị (ICD-10 - chọn nhiều)",
-                                editable,
-                                cx,
-                            )),
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .text_color(rgb(text_main()))
+                            .child("C. Hiện tại có đang điều trị bệnh nào không?"),
                     )
-                    .child(self.render_form_textarea(
-                        "TSBT_TEN_THUOC_LIEU_LUONG",
-                        "Thuốc & liều lượng đang dùng",
-                        "Ghi chi tiết tên thuốc, liều lượng đang điều trị...",
-                        3,
+                    .child(self.render_select_dropdown(
+                        "hist-dang-dieu-tri",
+                        "Đang điều trị bệnh",
+                        &ts_dang_dieu_tri,
+                        vec![
+                            ("0".to_string(), "0 - Không".to_string()),
+                            ("1".to_string(), "1 - Có".to_string()),
+                        ],
                         editable,
-                        window,
+                        |this, val, _, _| {
+                            this.form_values.insert("TSBT_DANG_DIEU_TRI_BENH".into(), val);
+                        },
                         cx,
-                    )),
+                    ))
+                    .when(ts_dang_dieu_tri == "1", |el| {
+                        el.child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .flex_wrap()
+                                .gap(px(12.0))
+                                .child(self.render_icd_multi_select(
+                                    "hist-icd10",
+                                    "TSBT_MA_BENH",
+                                    "Mã bệnh đang điều trị (ICD-10 - chọn nhiều)",
+                                    editable,
+                                    cx,
+                                )),
+                        )
+                        .child(self.render_form_textarea(
+                            "TSBT_TEN_THUOC_LIEU_LUONG",
+                            "Thuốc & liều lượng đang dùng",
+                            "Ghi chi tiết tên thuốc, liều lượng đang điều trị...",
+                            3,
+                            editable,
+                            window,
+                            cx,
+                        ))
+                    }),
             )
             .when(gioi_tinh == "2", |el| {
                 el.child(
@@ -1216,6 +1291,7 @@ impl KskGpuiApp {
 
         let (max_bg, max_col) = Self::score_badge_colors(max_score);
         let expand_all = self.expand_all_diseases;
+        let has_collapsible = diseases.iter().any(|(_, _, cls)| cls.len() >= 4);
         let spec_own = spec_id.to_string();
 
         div()
@@ -1256,33 +1332,35 @@ impl KskGpuiApp {
                                     )
                                     .child(badge(&format!("Loại {}", max_score), max_bg, max_col)),
                             )
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_row()
-                                    .gap(px(6.0))
-                                    .child(
-                                        Button::new(SharedString::from(format!("exp-all-{}", spec_id)))
-                                            .label("Mở tất cả")
-                                            .xsmall()
-                                            .secondary()
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.expand_all_diseases = true;
-                                                cx.notify();
-                                            })),
-                                    )
-                                    .child(
-                                        Button::new(SharedString::from(format!("col-all-{}", spec_id)))
-                                            .label("Thu gọn tất cả")
-                                            .xsmall()
-                                            .secondary()
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.expand_all_diseases = false;
-                                                this.expanded_diseases.clear();
-                                                cx.notify();
-                                            })),
-                                    ),
-                            ),
+                            .when(has_collapsible, |el| {
+                                el.child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .gap(px(6.0))
+                                        .child(
+                                            Button::new(SharedString::from(format!("exp-all-{}", spec_id)))
+                                                .label("Mở tất cả")
+                                                .xsmall()
+                                                .secondary()
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.expand_all_diseases = true;
+                                                    cx.notify();
+                                                })),
+                                        )
+                                        .child(
+                                            Button::new(SharedString::from(format!("col-all-{}", spec_id)))
+                                                .label("Thu gọn tất cả")
+                                                .xsmall()
+                                                .secondary()
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.expand_all_diseases = false;
+                                                    this.expanded_diseases.clear();
+                                                    cx.notify();
+                                                })),
+                                        ),
+                                )
+                            }),
                     )
                     .when(abnormal_rows.is_empty(), |el| {
                         el.child(

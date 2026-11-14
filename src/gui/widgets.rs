@@ -477,6 +477,10 @@ impl KskGpuiApp {
                     .flex()
                     .flex_col()
                     .gap(px(4.0))
+                    .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                        this.open_dropdown = None;
+                        cx.notify();
+                    }))
                     .when(needs_search, |m| {
                         m.child(
                             div()
@@ -705,7 +709,7 @@ impl KskGpuiApp {
                                                     .map(|s| s.trim().to_string())
                                                     .filter(|s| !s.is_empty() && s != &code_rm)
                                                     .collect();
-                                                let joined = next.join(", ");
+                                                let joined = next.join(";");
                                                 this.form_values.insert(fk_c.clone(), joined.clone());
                                                 if let Some(inp) = this.form_inputs.get(&fk_c) {
                                                     inp.update(cx, |s, cx| s.set_value(joined, window, cx));
@@ -784,6 +788,10 @@ impl KskGpuiApp {
                     .flex()
                     .flex_col()
                     .gap(px(4.0))
+                    .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                        this.open_dropdown = None;
+                        cx.notify();
+                    }))
                     .child(
                         div()
                             .p(px(2.0))
@@ -837,7 +845,7 @@ impl KskGpuiApp {
                                         } else {
                                             list.push(val_c.clone());
                                         }
-                                        let joined = list.join(", ");
+                                        let joined = list.join(";");
                                         this.form_values.insert(fk_c.clone(), joined.clone());
                                         if let Some(inp) = this.form_inputs.get(&fk_c) {
                                             inp.update(cx, |s, cx| s.set_value(joined, window, cx));
@@ -1008,6 +1016,10 @@ impl KskGpuiApp {
                     .flex()
                     .flex_col()
                     .gap(px(6.0))
+                    .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                        this.open_dropdown = None;
+                        cx.notify();
+                    }))
                     .child(
                         div()
                             .flex()
