@@ -545,6 +545,150 @@ impl KskGpuiApp {
                         div()
                             .text_base()
                             .font_weight(gpui::FontWeight::BOLD)
+                            .child("Tạo Cơ sở dữ liệu mới & Chuyển sang DB mới"),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(text_muted()))
+                            .child("Khởi tạo một file SQLite mới hoàn toàn với Master Key, Recovery Key và tài khoản Admin mới, sau đó tự động chuyển kết nối sang DB này."),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_end()
+                            .gap(px(8.0))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(4.0))
+                                    .child(field_label("Đường dẫn file DB mới (.db)", true))
+                                    .child(Input::new(&self.adm_new_db_path).small()),
+                            )
+                            .child(
+                                Button::new("btn-adm-new-db-browse")
+                                    .label("Chọn nơi lưu .db")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        if let Some(p) = rfd::FileDialog::new()
+                                            .add_filter("SQLite DB", &["db", "sqlite"])
+                                            .set_file_name("ksk_moi.db")
+                                            .save_file()
+                                        {
+                                            let s = p.to_string_lossy().to_string();
+                                            this.adm_new_db_path.update(cx, |inp, cx| {
+                                                inp.set_value(s, window, cx);
+                                            });
+                                        }
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .gap(px(12.0))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(4.0))
+                                    .child(field_label("Mật khẩu Admin cho DB mới", true))
+                                    .child(Input::new(&self.adm_new_db_admin_pw).small()),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(4.0))
+                                    .child(field_label("Nhập lại mật khẩu Admin", true))
+                                    .child(Input::new(&self.adm_new_db_admin_pw_confirm).small()),
+                            ),
+                    )
+                    .when_some(self.adm_new_db_recovery_key.clone(), |el, rk| {
+                        let rk_copy = rk.clone();
+                        el.child(
+                            div()
+                                .p(px(10.0))
+                                .rounded(px(6.0))
+                                .bg(rgb(WARN_BG))
+                                .border_1()
+                                .border_color(rgb(WARN_COL))
+                                .flex()
+                                .flex_col()
+                                .gap(px(6.0))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .text_color(rgb(WARN_COL))
+                                        .child("Recovery Key của DB mới (hãy sao chép và cất giữ an toàn):"),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .gap(px(8.0))
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .p(px(6.0))
+                                                .rounded(px(4.0))
+                                                .bg(rgb(bg_subtle()))
+                                                .text_sm()
+                                                .font_weight(gpui::FontWeight::BOLD)
+                                                .child(rk),
+                                        )
+                                        .child(
+                                            Button::new("btn-adm-copy-new-db-rk")
+                                                .label("Sao chép")
+                                                .small()
+                                                .secondary()
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    cx.write_to_clipboard(
+                                                        gpui::ClipboardItem::new_string(
+                                                            rk_copy.clone(),
+                                                        ),
+                                                    );
+                                                    this.show_toast(
+                                                        "Đã sao chép Recovery Key vào clipboard!",
+                                                        false,
+                                                        cx,
+                                                    );
+                                                })),
+                                        ),
+                                ),
+                        )
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .justify_end()
+                            .child(
+                                Button::new("btn-adm-create-new-db")
+                                    .label("Tạo DB mới & Chuyển sang DB mới")
+                                    .small()
+                                    .primary()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.create_and_switch_new_db(window, cx);
+                                    })),
+                            ),
+                    ),
+            )
+            .child(
+                card_box()
+                    .child(
+                        div()
+                            .text_base()
+                            .font_weight(gpui::FontWeight::BOLD)
                             .child(format!(
                                 "Phát hành bản cập nhật (Phiên bản hiện tại: v{})",
                                 crate::updater::CURRENT_VERSION

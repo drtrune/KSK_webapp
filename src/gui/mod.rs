@@ -146,6 +146,10 @@ pub struct KskGpuiApp {
     pub adm_backup_dir: Entity<InputState>,
     pub adm_backup_interval: Entity<InputState>,
     pub last_backup_status: Option<String>,
+    pub adm_new_db_path: Entity<InputState>,
+    pub adm_new_db_admin_pw: Entity<InputState>,
+    pub adm_new_db_admin_pw_confirm: Entity<InputState>,
+    pub adm_new_db_recovery_key: Option<String>,
     pub users_list: Vec<User>,
     pub adm_new_user: Entity<InputState>,
     pub adm_new_pw: Entity<InputState>,
@@ -274,6 +278,19 @@ impl KskGpuiApp {
             InputState::new(window, cx)
                 .placeholder("Số phút")
                 .default_value(cfg.backup_interval_minutes.to_string())
+        });
+        let adm_new_db_path = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("VD: D:\\KSK\\ksk_moi.db")
+        });
+        let adm_new_db_admin_pw = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Mật khẩu Admin cho DB mới (>= 4 ký tự)")
+                .masked(true)
+        });
+        let adm_new_db_admin_pw_confirm = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Nhập lại mật khẩu Admin")
+                .masked(true)
         });
 
         let setup_db_path = cx.new(|cx| {
@@ -485,6 +502,10 @@ impl KskGpuiApp {
             adm_backup_dir,
             adm_backup_interval,
             last_backup_status: None,
+            adm_new_db_path,
+            adm_new_db_admin_pw,
+            adm_new_db_admin_pw_confirm,
+            adm_new_db_recovery_key: None,
             users_list: Vec::new(),
             adm_new_user,
             adm_new_pw,
@@ -1197,6 +1218,86 @@ impl KskGpuiApp {
                 self.show_toast("Đã lưu cấu hình và kết nối lại CSDL!", false, cx);
             }
             Err(e) => self.show_toast(&format!("Lỗi kết nối CSDL mới: {}", e), true, cx),
+        }
+    }
+
+    pub fn create_and_switch_new_db(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let db_path = self.adm_new_db_path.read(cx).value().trim().to_string();
+        let pw = self.adm_new_db_admin_pw.read(cx).value().to_string();
+        let pw2 = self.adm_new_db_admin_pw_confirm.read(cx).value().to_string();
+
+        if db_path.is_empty() {
+            self.show_toast("Vui lòng nhập hoặc chọn đường dẫn file DB mới!", true, cx);
+            return;
+        }
+        let path_obj = std::path::Path::new(&db_path);
+        if path_obj.exists()
+            && std::fs::metadata(path_obj).map(|m| m.len() > 0).unwrap_or(true)
+        {
+            self.show_toast(
+                "File DB đã tồn tại! Vui lòng đặt tên file mới hoặc dùng mục Kết nối lại DB ở trên.",
+                true,
+                cx,
+            );
+            return;
+        }
+        if pw.len() < 4 {
+            self.show_toast("Mật khẩu Admin cho DB mới phải có ít nhất 4 ký tự!", true, cx);
+            return;
+        }
+        if pw != pw2 {
+            self.show_toast("Mật khẩu xác nhận không khớp!", true, cx);
+            return;
+        }
+
+        let mut new_cfg = self.cfg.clone();
+        new_cfg.database_path = db_path.clone();
+        if let Err(e) = new_cfg.save() {
+            self.show_toast(&format!("Lỗi lưu cấu hình DB: {}", e), true, cx);
+            return;
+        }
+
+        let state = self.state.clone();
+        let cfg_clone = new_cfg.clone();
+        let res = self.run_sync(async move {
+            let pool = db::init_db(&db_path).await.map_err(|e| e.to_string())?;
+            let (mk, rk) = db::initialize_master_key_for_admin(&pool, &pw).await?;
+            *state.db.write().await = pool;
+            *state.config.write().await = cfg_clone;
+            *state.master_key.write().await = Some(mk);
+            Ok::<([u8; 32], String), String>((mk, rk))
+        });
+
+        match res {
+            Ok((mk, rk)) => {
+                self.cfg = new_cfg.clone();
+                self.master_key = Some(mk);
+                self.adm_new_db_recovery_key = Some(rk);
+                self.adm_new_db_admin_pw
+                    .update(cx, |s, cx| s.set_value("", window, cx));
+                self.adm_new_db_admin_pw_confirm
+                    .update(cx, |s, cx| s.set_value("", window, cx));
+                self.adm_db_path
+                    .update(cx, |s, cx| s.set_value(new_cfg.database_path.clone(), window, cx));
+                self.login_db_path
+                    .update(cx, |s, cx| s.set_value(new_cfg.database_path.clone(), window, cx));
+                self.setup_db_path
+                    .update(cx, |s, cx| s.set_value(new_cfg.database_path, window, cx));
+                self.selected_record_id = None;
+                self.current_record_status = 0;
+                self.form_values.clear();
+                self.export_rows.clear();
+                self.export_selected_ids.clear();
+                self.refresh_catalogs(cx);
+                self.refresh_users(cx);
+                self.refresh_records(window, cx);
+                self.show_toast(
+                    "Đã tạo DB mới và chuyển sang CSDL mới! Hãy lưu lại Recovery Key.",
+                    false,
+                    cx,
+                );
+            }
+            Err(e) => self.show_toast(&format!("Lỗi tạo DB mới: {}", e), true, cx),
         }
     }
 
