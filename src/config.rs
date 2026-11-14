@@ -54,6 +54,14 @@ pub struct AppConfig {
     pub his_timeout_seconds: u64,
     #[serde(default = "default_template_docx_path")]
     pub template_docx_path: String,
+    #[serde(default = "default_auto_backup_enabled")]
+    pub auto_backup_enabled: bool,
+    #[serde(default = "default_backup_dir_path")]
+    pub backup_dir_path: String,
+    #[serde(default = "default_backup_interval_minutes")]
+    pub backup_interval_minutes: u64,
+    #[serde(default = "default_backup_keep_count")]
+    pub backup_keep_count: usize,
 }
 
 fn default_database_path() -> String {
@@ -110,6 +118,18 @@ fn default_his_timeout_seconds() -> u64 {
 fn default_template_docx_path() -> String {
     "asset/template18.docx".to_string()
 }
+fn default_auto_backup_enabled() -> bool {
+    true
+}
+fn default_backup_dir_path() -> String {
+    "backups".to_string()
+}
+fn default_backup_interval_minutes() -> u64 {
+    60
+}
+fn default_backup_keep_count() -> usize {
+    10
+}
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -132,6 +152,10 @@ impl Default for AppConfig {
             his_payload_template: default_his_payload_template(),
             his_timeout_seconds: default_his_timeout_seconds(),
             template_docx_path: default_template_docx_path(),
+            auto_backup_enabled: default_auto_backup_enabled(),
+            backup_dir_path: default_backup_dir_path(),
+            backup_interval_minutes: default_backup_interval_minutes(),
+            backup_keep_count: default_backup_keep_count(),
         }
     }
 }

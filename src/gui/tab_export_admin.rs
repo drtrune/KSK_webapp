@@ -444,6 +444,87 @@ impl KskGpuiApp {
                     )
                     .child(
                         div()
+                            .pt(px(8.0))
+                            .border_t_1()
+                            .border_color(rgb(border_col()))
+                            .flex()
+                            .flex_col()
+                            .gap(px(8.0))
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(rgb(text_main()))
+                                    .child("Tự động sao lưu Database về máy (Auto-Backup)"),
+                            )
+                            .child(
+                                Checkbox::new("adm-auto-backup")
+                                    .label("Bật tự động tải/sao lưu bản sao database về máy định kỳ")
+                                    .checked(self.adm_auto_backup)
+                                    .on_change(cx.listener(|this, val, _, cx| {
+                                        this.adm_auto_backup = *val;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_end()
+                                    .gap(px(8.0))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.0))
+                                            .child(field_label("Thư mục lưu bản sao lưu trên máy", false))
+                                            .child(Input::new(&self.adm_backup_dir).small()),
+                                    )
+                                    .child(
+                                        Button::new("btn-adm-browse-bkp")
+                                            .label("Chọn thư mục")
+                                            .small()
+                                            .secondary()
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                                                    let s = p.to_string_lossy().to_string();
+                                                    this.adm_backup_dir.update(cx, |inp, cx| {
+                                                        inp.set_value(s, window, cx);
+                                                    });
+                                                }
+                                            })),
+                                    )
+                                    .child(
+                                        div()
+                                            .w(px(110.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.0))
+                                            .child(field_label("Chu kỳ (phút)", false))
+                                            .child(Input::new(&self.adm_backup_interval).small()),
+                                    )
+                                    .child(
+                                        Button::new("btn-adm-backup-now")
+                                            .label("Backup DB ngay")
+                                            .small()
+                                            .secondary()
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.trigger_manual_backup(cx);
+                                            })),
+                                    ),
+                            )
+                            .when_some(self.last_backup_status.clone(), |el, st| {
+                                el.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(SUCCESS_COL))
+                                        .child(st),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
                             .flex()
                             .flex_row()
                             .justify_end()

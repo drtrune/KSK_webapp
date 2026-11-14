@@ -32,6 +32,7 @@ const EMBEDDED_TEMPLATE_DOCX: &[u8] = include_bytes!("../asset/template18.docx")
 pub struct AppState {
     pub db: RwLock<SqlitePool>,
     pub config: RwLock<AppConfig>,
+    pub master_key: RwLock<Option<[u8; 32]>>,
     pub http_client: reqwest::Client,
     pub his_push_tx: Option<tokio::sync::broadcast::Sender<String>>,
 }
@@ -676,7 +677,8 @@ pub async fn push_his_patient_handler(
     }
 
     let db = state.db.read().await;
-    match upsert_patient_from_his(&*db, &cfg, &req).await {
+    let mk = *state.master_key.read().await;
+    match upsert_patient_from_his(&*db, &cfg, &req, mk.as_ref()).await {
         Ok((id, payload_val)) => {
             if let Some(ref tx) = state.his_push_tx {
                 let _ = tx.send(req.ma_tiep_nhan.trim().to_string());
@@ -796,6 +798,7 @@ pub async fn query_filtered_records(
     selected_ids: Option<&str>,
     limit: Option<i64>,
     order_asc: bool,
+    master_key: Option<&[u8; 32]>,
 ) -> Vec<KskRecordRow> {
     let q_str = q.unwrap_or_default().trim().to_string();
     let from_str = normalize_filter_date(from_date.unwrap_or_default());
@@ -833,10 +836,6 @@ pub async fn query_filtered_records(
         conditions.push("(CASE WHEN length(ngay_vao) = 10 AND substr(ngay_vao, 3, 1) = '/' AND substr(ngay_vao, 6, 1) = '/' THEN (substr(ngay_vao, 7, 4) || '-' || substr(ngay_vao, 4, 2) || '-' || substr(ngay_vao, 1, 2)) ELSE substr(created_at, 1, 10) END) <= ?".to_string());
     }
 
-    if !q_str.is_empty() {
-        conditions.push("(ma_tiep_nhan LIKE ? OR ho_ten LIKE ? OR so_cccd LIKE ? OR ma_y_te LIKE ?)".to_string());
-    }
-
     if let Some(ref ids) = parsed_ids {
         let placeholders = vec!["?"; ids.len()].join(", ");
         conditions.push(format!("id IN ({})", placeholders));
@@ -853,8 +852,9 @@ pub async fn query_filtered_records(
         sql.push_str(" ORDER BY updated_at DESC, id DESC");
     }
 
-    // Nếu không cần lọc JSON trên Rust và có limit thì đẩy LIMIT xuống SQL
-    let has_rust_filter = !workplace_str.is_empty() || !class_str.is_empty();
+    // Nếu không cần lọc JSON/tìm kiếm giải mã trên Rust và có limit thì đẩy LIMIT xuống SQL
+    let q_lower = q_str.to_lowercase();
+    let has_rust_filter = !q_lower.is_empty() || !workplace_str.is_empty() || !class_str.is_empty();
     if !has_rust_filter {
         if let Some(lim) = limit {
             let safe_lim = lim.clamp(1, 5000);
@@ -873,14 +873,6 @@ pub async fn query_filtered_records(
     if !to_str.is_empty() {
         query = query.bind(to_str);
     }
-    if !q_str.is_empty() {
-        let like_q = format!("%{}%", q_str);
-        query = query
-            .bind(like_q.clone())
-            .bind(like_q.clone())
-            .bind(like_q.clone())
-            .bind(like_q);
-    }
     if let Some(ref ids) = parsed_ids {
         for id_val in ids {
             query = query.bind(*id_val);
@@ -888,9 +880,21 @@ pub async fn query_filtered_records(
     }
 
     let mut rows: Vec<KskRecordRow> = query.fetch_all(db).await.unwrap_or_default();
+    for r in &mut rows {
+        crate::crypto::decrypt_record_row(master_key, r);
+    }
 
     if has_rust_filter {
         rows.retain(|r| {
+            if !q_lower.is_empty() {
+                let hit = r.ma_tiep_nhan.to_lowercase().contains(&q_lower)
+                    || r.ma_y_te.to_lowercase().contains(&q_lower)
+                    || r.ho_ten.to_lowercase().contains(&q_lower)
+                    || r.so_cccd.to_lowercase().contains(&q_lower);
+                if !hit {
+                    return false;
+                }
+            }
             let map: Map<String, Value> = serde_json::from_str(&r.payload_json).unwrap_or_default();
             if !workplace_str.is_empty() {
                 let wp = map
@@ -933,6 +937,7 @@ pub async fn list_records_handler(
         Err(resp) => return resp,
     };
 
+    let mk = *state.master_key.read().await;
     let rows = query_filtered_records(
         &*db,
         filter.from_date.as_deref(),
@@ -944,6 +949,7 @@ pub async fn list_records_handler(
         None,
         Some(filter.limit.unwrap_or(200)),
         false,
+        mk.as_ref(),
     )
     .await;
 
@@ -968,8 +974,12 @@ pub async fn get_record_handler(
         .await
         .unwrap_or(None);
 
+    let mk = *state.master_key.read().await;
     match row {
-        Some(r) => Json(KskRecordDto::from(r)).into_response(),
+        Some(mut r) => {
+            crate::crypto::decrypt_record_row(mk.as_ref(), &mut r);
+            Json(KskRecordDto::from(r)).into_response()
+        }
         None => api_error(StatusCode::NOT_FOUND, "Không tìm thấy hồ sơ KSK"),
     }
 }
@@ -992,8 +1002,12 @@ pub async fn get_record_by_ma_tn_handler(
             .await
             .unwrap_or(None);
 
+    let mk = *state.master_key.read().await;
     match row {
-        Some(r) => Json(KskRecordDto::from(r)).into_response(),
+        Some(mut r) => {
+            crate::crypto::decrypt_record_row(mk.as_ref(), &mut r);
+            Json(KskRecordDto::from(r)).into_response()
+        }
         None => api_error(StatusCode::NOT_FOUND, "Chưa có hồ sơ với Mã tiếp nhận này"),
     }
 }
@@ -1213,6 +1227,15 @@ pub async fn save_record_handler(
     };
 
     let payload_json = serde_json::to_string(&merged).unwrap_or_else(|_| "{}".to_string());
+    let mk = *state.master_key.read().await;
+    let (enc_ho_ten, enc_ngay_sinh, enc_so_cccd, enc_payload_json) =
+        crate::crypto::encrypt_record_fields(
+            mk.as_ref(),
+            &ho_ten,
+            &ngay_sinh,
+            &so_cccd,
+            &payload_json,
+        );
 
     let record_id = if let Some(rec) = existing {
         if let Err(e) = sqlx::query(
@@ -1226,12 +1249,12 @@ pub async fn save_record_handler(
         )
         .bind(&ma_tn)
         .bind(&ma_y_te)
-        .bind(&ho_ten)
+        .bind(&enc_ho_ten)
         .bind(&gioi_tinh)
-        .bind(&ngay_sinh)
-        .bind(&so_cccd)
+        .bind(&enc_ngay_sinh)
+        .bind(&enc_so_cccd)
         .bind(&ngay_vao)
-        .bind(&payload_json)
+        .bind(&enc_payload_json)
         .bind(&user.full_name)
         .bind(rec.id)
         .execute(&*db)
@@ -1254,12 +1277,12 @@ pub async fn save_record_handler(
         )
         .bind(&ma_tn)
         .bind(&ma_y_te)
-        .bind(&ho_ten)
+        .bind(&enc_ho_ten)
         .bind(&gioi_tinh)
-        .bind(&ngay_sinh)
-        .bind(&so_cccd)
+        .bind(&enc_ngay_sinh)
+        .bind(&enc_so_cccd)
         .bind(&ngay_vao)
-        .bind(&payload_json)
+        .bind(&enc_payload_json)
         .bind(&user.full_name)
         .execute(&*db)
         .await
@@ -1274,11 +1297,15 @@ pub async fn save_record_handler(
         }
     };
 
-    let saved: Option<KskRecordRow> = sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
+    let mut saved: Option<KskRecordRow> = sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
         .bind(record_id)
         .fetch_optional(&*db)
         .await
         .unwrap_or(None);
+
+    if let Some(ref mut r) = saved {
+        crate::crypto::decrypt_record_row(mk.as_ref(), r);
+    }
 
     match saved {
         Some(r) => Json(KskRecordDto::from(r)).into_response(),
@@ -1401,7 +1428,8 @@ pub async fn export_record_docx_handler(
     let cfg = state.config.read().await.clone();
     let is_reception_print = query.mode.as_deref() == Some("reception");
 
-    match generate_docx_bytes(&*db, &cfg, record_id, is_reception_print).await {
+    let mk = *state.master_key.read().await;
+    match generate_docx_bytes(&*db, &cfg, record_id, is_reception_print, mk.as_ref()).await {
         Ok((filename, docx_bytes)) => (
             StatusCode::OK,
             [
@@ -1427,6 +1455,7 @@ pub async fn generate_docx_bytes(
     cfg: &AppConfig,
     record_id: i64,
     is_reception_print: bool,
+    master_key: Option<&[u8; 32]>,
 ) -> Result<(String, Vec<u8>), String> {
     let row: Option<KskRecordRow> = sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
         .bind(record_id)
@@ -1434,9 +1463,10 @@ pub async fn generate_docx_bytes(
         .await
         .unwrap_or(None);
 
-    let Some(record) = row else {
+    let Some(mut record) = row else {
         return Err("Không tìm thấy hồ sơ KSK".to_string());
     };
+    crate::crypto::decrypt_record_row(master_key, &mut record);
 
     let payload: Map<String, Value> =
         serde_json::from_str(&record.payload_json).unwrap_or_default();
@@ -2021,6 +2051,7 @@ pub async fn export_csv_handler(
     };
     let cfg = state.config.read().await.clone();
 
+    let mk = *state.master_key.read().await;
     let rows = query_filtered_records(
         &*db,
         query.from_date.as_deref(),
@@ -2032,6 +2063,7 @@ pub async fn export_csv_handler(
         query.selected_ids.as_deref(),
         None,
         true,
+        mk.as_ref(),
     )
     .await;
 

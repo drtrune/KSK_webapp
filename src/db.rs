@@ -49,7 +49,22 @@ pub async fn init_db(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
             full_name TEXT NOT NULL,
             role TEXT NOT NULL,
             is_locked INTEGER NOT NULL DEFAULT 0,
+            wrapped_mk TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN wrapped_mk TEXT NOT NULL DEFAULT ''")
+        .execute(&pool)
+        .await;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT ''
         );
         "#,
     )
@@ -360,11 +375,179 @@ async fn find_catalog_code_by_name(
     None
 }
 
+pub async fn has_master_key_setup(pool: &SqlitePool) -> bool {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT value FROM app_settings WHERE key = 'recovery_wrapped_mk'")
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
+    row.map(|(v,)| !v.trim().is_empty()).unwrap_or(false)
+}
+
+/// Khởi tạo Master Key + Recovery Key lần đầu cho Admin và mã hóa dữ liệu cũ (nếu có).
+pub async fn initialize_master_key_for_admin(
+    pool: &SqlitePool,
+    admin_password: &str,
+) -> Result<([u8; 32], String), String> {
+    if admin_password.trim().is_empty() {
+        return Err("Mật khẩu Admin không được để trống".into());
+    }
+    let mk = crate::crypto::generate_master_key();
+    let recovery_key = crate::crypto::generate_recovery_key();
+    let admin_wrapped = crate::crypto::wrap_master_key(&mk, admin_password)?;
+    let recovery_wrapped = crate::crypto::wrap_master_key(&mk, &recovery_key)?;
+    let admin_hash = hash_password(admin_password);
+
+    sqlx::query("UPDATE users SET password_hash = ?, wrapped_mk = ? WHERE username = 'admin'")
+        .bind(&admin_hash)
+        .bind(&admin_wrapped)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Bọc MK cho các tài khoản mặc định khác nếu đang dùng mật khẩu mặc định 123456
+    let def_hash = hash_password("123456");
+    if let Ok(def_wrapped) = crate::crypto::wrap_master_key(&mk, "123456") {
+        let _ = sqlx::query(
+            "UPDATE users SET wrapped_mk = ? WHERE username != 'admin' AND password_hash = ? AND wrapped_mk = ''",
+        )
+        .bind(&def_wrapped)
+        .bind(&def_hash)
+        .execute(pool)
+        .await;
+    }
+
+    sqlx::query(
+        "INSERT INTO app_settings (key, value) VALUES ('recovery_wrapped_mk', ?) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(&recovery_wrapped)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Mã hóa các hồ sơ plaintext hiện có (nếu có)
+    if let Ok(rows) = sqlx::query_as::<_, (i64, String, String, String, String)>(
+        "SELECT id, ho_ten, ngay_sinh, so_cccd, payload_json FROM ksk_records",
+    )
+    .fetch_all(pool)
+    .await
+    {
+        for (id, ht, ns, cccd, pj) in rows {
+            if !pj.starts_with("ENC1:") || !ht.starts_with("ENC1:") {
+                let (e_ht, e_ns, e_cccd, e_pj) = crate::crypto::encrypt_record_fields(
+                    Some(&mk),
+                    if ht.starts_with("ENC1:") { "" } else { &ht },
+                    if ns.starts_with("ENC1:") { "" } else { &ns },
+                    if cccd.starts_with("ENC1:") { "" } else { &cccd },
+                    if pj.starts_with("ENC1:") { "{}" } else { &pj },
+                );
+                let _ = sqlx::query(
+                    "UPDATE ksk_records SET ho_ten = ?, ngay_sinh = ?, so_cccd = ?, payload_json = ? WHERE id = ?",
+                )
+                .bind(&e_ht)
+                .bind(&e_ns)
+                .bind(&e_cccd)
+                .bind(&e_pj)
+                .bind(id)
+                .execute(pool)
+                .await;
+            }
+        }
+    }
+
+    Ok((mk, recovery_key))
+}
+
+/// Khôi phục tài khoản Admin bằng Recovery Key và đặt mật khẩu mới.
+pub async fn recover_admin_with_key(
+    pool: &SqlitePool,
+    recovery_key: &str,
+    new_admin_password: &str,
+) -> Result<[u8; 32], String> {
+    if new_admin_password.trim().len() < 4 {
+        return Err("Mật khẩu mới phải có ít nhất 4 ký tự".into());
+    }
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT value FROM app_settings WHERE key = 'recovery_wrapped_mk'")
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    let wrapped = row
+        .map(|(v,)| v)
+        .filter(|v| !v.trim().is_empty())
+        .ok_or_else(|| "Hệ thống chưa thiết lập Recovery Key".to_string())?;
+
+    let mk = crate::crypto::unwrap_master_key(&wrapped, recovery_key)?;
+    let new_wrapped = crate::crypto::wrap_master_key(&mk, new_admin_password)?;
+    let new_hash = hash_password(new_admin_password);
+
+    sqlx::query("UPDATE users SET password_hash = ?, wrapped_mk = ?, is_locked = 0 WHERE username = 'admin'")
+        .bind(&new_hash)
+        .bind(&new_wrapped)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(mk)
+}
+
+/// Tự động backup database SQLite về thư mục local (tải bản sao về máy) và dọn các bản cũ.
+pub async fn backup_database(
+    pool: &SqlitePool,
+    db_path: &str,
+    backup_dir: &str,
+    keep_count: usize,
+) -> Result<String, String> {
+    let dir = if backup_dir.trim().is_empty() {
+        "backups"
+    } else {
+        backup_dir.trim()
+    };
+    fs::create_dir_all(dir).map_err(|e| format!("Không thể tạo thư mục backup: {}", e))?;
+
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let target_path = std::path::Path::new(dir).join(format!("ksk_backup_{}.db", ts));
+    let target_str = target_path.to_string_lossy().to_string();
+    let escaped = target_str.replace('\'', "''");
+
+    let vacuum_sql = format!("VACUUM INTO '{}'", escaped);
+    if let Err(e) = sqlx::query(&vacuum_sql).execute(pool).await {
+        tracing::warn!("VACUUM INTO that bai ({}), thu copy truc tiep...", e);
+        fs::copy(db_path, &target_path)
+            .map_err(|ce| format!("Lỗi copy database backup: {}", ce))?;
+    }
+
+    // Dọn bớt các file backup cũ nếu vượt quá keep_count
+    if keep_count > 0 {
+        if let Ok(entries) = fs::read_dir(dir) {
+            let mut files: Vec<(String, std::path::PathBuf)> = entries
+                .flatten()
+                .filter_map(|e| {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    if name.starts_with("ksk_backup_") && name.ends_with(".db") {
+                        Some((name, e.path()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            files.sort_by(|a, b| b.0.cmp(&a.0));
+            for (_, old_path) in files.into_iter().skip(keep_count) {
+                let _ = fs::remove_file(old_path);
+            }
+        }
+    }
+
+    Ok(target_str)
+}
+
 /// Upsert thông tin hành chính từ HIS (hoặc AutoHotkey v2 UIA Bridge) vào bảng ksk_records
 pub async fn upsert_patient_from_his(
     pool: &SqlitePool,
     cfg: &AppConfig,
     req: &HisPushRequest,
+    master_key: Option<&[u8; 32]>,
 ) -> Result<(i64, Value), String> {
     let ma_tn = req.ma_tiep_nhan.trim().to_string();
     if ma_tn.is_empty() {
@@ -381,7 +564,8 @@ pub async fn upsert_patient_from_his(
     .map_err(|e| e.to_string())?;
 
     let mut payload_map: Map<String, Value> = if let Some((_, ref raw_json, _)) = existing {
-        serde_json::from_str(raw_json).unwrap_or_default()
+        let dec_json = crate::crypto::decrypt_field(master_key, raw_json);
+        serde_json::from_str(&dec_json).unwrap_or_default()
     } else {
         Map::new()
     };
@@ -496,6 +680,14 @@ pub async fn upsert_patient_from_his(
 
     let payload_val = Value::Object(payload_map);
     let payload_str = serde_json::to_string(&payload_val).map_err(|e| e.to_string())?;
+    let (enc_ho_ten, enc_ngay_sinh, enc_so_cccd, enc_payload_str) =
+        crate::crypto::encrypt_record_fields(
+            master_key,
+            &ho_ten,
+            &ngay_sinh,
+            &so_cccd,
+            &payload_str,
+        );
 
     sqlx::query(
         r#"
@@ -518,12 +710,12 @@ pub async fn upsert_patient_from_his(
     )
     .bind(&ma_tn)
     .bind(&ma_y_te)
-    .bind(&ho_ten)
+    .bind(&enc_ho_ten)
     .bind(&gioi_tinh)
-    .bind(&ngay_sinh)
-    .bind(&so_cccd)
+    .bind(&enc_ngay_sinh)
+    .bind(&enc_so_cccd)
     .bind(&ngay_vao)
-    .bind(&payload_str)
+    .bind(&enc_payload_str)
     .execute(pool)
     .await
     .map_err(|e| e.to_string())?;

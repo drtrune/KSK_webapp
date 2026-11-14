@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod config;
+mod crypto;
 mod db;
 mod gui;
 mod handlers;
@@ -113,6 +114,7 @@ fn main() {
     let state = Arc::new(AppState {
         db: RwLock::new(pool),
         config: RwLock::new(cfg.clone()),
+        master_key: RwLock::new(None),
         http_client,
         his_push_tx: Some(his_tx.clone()),
     });

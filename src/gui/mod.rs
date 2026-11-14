@@ -57,6 +57,20 @@ pub struct KskGpuiApp {
     pub state: Arc<AppState>,
     pub cfg: AppConfig,
     pub app_logo: Arc<gpui::Image>,
+    pub master_key: Option<[u8; 32]>,
+
+    // First-time setup & Recovery Key
+    pub needs_first_setup: bool,
+    pub setup_db_path: Entity<InputState>,
+    pub setup_admin_pw: Entity<InputState>,
+    pub setup_admin_pw_confirm: Entity<InputState>,
+    pub setup_generated_recovery_key: Option<String>,
+    pub setup_recovery_saved_ack: bool,
+    pub setup_error: Option<String>,
+    pub show_recovery_panel: bool,
+    pub recov_key_input: Entity<InputState>,
+    pub recov_new_pw: Entity<InputState>,
+    pub recov_confirm_pw: Entity<InputState>,
 
     // Auth & Profile
     pub current_user: Option<User>,
@@ -128,6 +142,10 @@ pub struct KskGpuiApp {
     pub adm_update_dir: Entity<InputState>,
     pub adm_auto_check_update: bool,
     pub adm_changelog: Entity<InputState>,
+    pub adm_auto_backup: bool,
+    pub adm_backup_dir: Entity<InputState>,
+    pub adm_backup_interval: Entity<InputState>,
+    pub last_backup_status: Option<String>,
     pub users_list: Vec<User>,
     pub adm_new_user: Entity<InputState>,
     pub adm_new_pw: Entity<InputState>,
@@ -247,6 +265,51 @@ impl KskGpuiApp {
         let adm_changelog = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Nội dung cập nhật phiên bản mới...")
         });
+        let adm_backup_dir = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Thư mục lưu bản sao lưu (.db)")
+                .default_value(cfg.backup_dir_path.clone())
+        });
+        let adm_backup_interval = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Số phút")
+                .default_value(cfg.backup_interval_minutes.to_string())
+        });
+
+        let setup_db_path = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Đường dẫn file SQLite (.db)")
+                .default_value(cfg.database_path.clone())
+        });
+        let setup_admin_pw = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Mật khẩu Admin mới")
+                .masked(true)
+        });
+        let setup_admin_pw_confirm = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Nhập lại mật khẩu Admin")
+                .masked(true)
+        });
+        let recov_key_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("KSK-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX")
+        });
+        let recov_new_pw = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Mật khẩu Admin mới")
+                .masked(true)
+        });
+        let recov_confirm_pw = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Nhập lại mật khẩu mới")
+                .masked(true)
+        });
+
+        let st_check = launch_ctx.state.clone();
+        let needs_first_setup = launch_ctx.rt.block_on(async move {
+            let pool = st_check.db.read().await;
+            !db::has_master_key_setup(&pool).await
+        });
 
         let adm_new_user = cx.new(|cx| InputState::new(window, cx).placeholder("username"));
         let adm_new_pw = cx.new(|cx| {
@@ -346,6 +409,18 @@ impl KskGpuiApp {
                 gpui::ImageFormat::Png,
                 include_bytes!("../../asset/logo.png").to_vec(),
             )),
+            master_key: None,
+            needs_first_setup,
+            setup_db_path,
+            setup_admin_pw,
+            setup_admin_pw_confirm,
+            setup_generated_recovery_key: None,
+            setup_recovery_saved_ack: false,
+            setup_error: None,
+            show_recovery_panel: false,
+            recov_key_input,
+            recov_new_pw,
+            recov_confirm_pw,
             current_user: None,
             login_username,
             login_password,
@@ -406,6 +481,10 @@ impl KskGpuiApp {
             adm_db_path,
             adm_update_dir,
             adm_changelog,
+            adm_auto_backup: launch_ctx.initial_cfg.auto_backup_enabled,
+            adm_backup_dir,
+            adm_backup_interval,
+            last_backup_status: None,
             users_list: Vec::new(),
             adm_new_user,
             adm_new_pw,
@@ -605,10 +684,23 @@ impl KskGpuiApp {
     pub fn handle_his_push_event(&mut self, ma_bn: &str, cx: &mut Context<Self>) {
         tracing::info!("GUI nhan su kien HIS Push cho ma_bn={}", ma_bn);
         let state = self.state.clone();
+        let mk = self.master_key;
         let rows = self.run_sync(async move {
             let pool = state.db.read().await;
-            query_filtered_records(&pool, None, None, None, None, None, None, None, Some(200), true)
-                .await
+            query_filtered_records(
+                &pool,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(200),
+                true,
+                mk.as_ref(),
+            )
+            .await
         });
         self.records = rows;
         if let Some(rec) = self
@@ -668,6 +760,7 @@ impl KskGpuiApp {
         let st = self.sidebar_status_filter;
         let state = self.state.clone();
 
+        let mk = self.master_key;
         let rows = self.run_sync(async move {
             let pool = state.db.read().await;
             query_filtered_records(
@@ -681,6 +774,7 @@ impl KskGpuiApp {
                 None,
                 Some(200),
                 false,
+                mk.as_ref(),
             )
             .await
         });
@@ -695,16 +789,21 @@ impl KskGpuiApp {
         cx: &mut Context<Self>,
     ) {
         let state = self.state.clone();
+        let mk = self.master_key;
         let rec_opt = self.run_sync(async move {
             let pool = state.db.read().await;
-            sqlx::query_as::<_, KskRecordRow>(
+            let mut r = sqlx::query_as::<_, KskRecordRow>(
                 "SELECT id, ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, payload_json, updated_by, created_at, updated_at FROM ksk_records WHERE id = ?",
             )
             .bind(record_id)
             .fetch_optional(&*pool)
             .await
             .ok()
-            .flatten()
+            .flatten();
+            if let Some(ref mut row) = r {
+                crate::crypto::decrypt_record_row(mk.as_ref(), row);
+            }
+            r
         });
 
         if let Some(rec) = rec_opt {
@@ -801,6 +900,7 @@ impl KskGpuiApp {
         let sec_owned = section.to_string();
 
         let updated_by = user.username.clone();
+        let mk = self.master_key;
         let res: Result<i64, String> = self.run_sync(async move {
             let pool = state.db.read().await;
             if let Some(rid) = rec_id_opt {
@@ -811,10 +911,11 @@ impl KskGpuiApp {
                 .fetch_optional(&*pool)
                 .await
                 .map_err(|e| e.to_string())?;
-                let (ext_json, st) = existing.ok_or("Không tìm thấy hồ sơ")?;
+                let (ext_json_raw, st) = existing.ok_or("Không tìm thấy hồ sơ")?;
                 if st == 2 {
                     return Err("Hồ sơ đã ký khóa, không thể chỉnh sửa".into());
                 }
+                let ext_json = crate::crypto::decrypt_field(mk.as_ref(), &ext_json_raw);
                 let merged = merge_payload_by_roles(
                     Some(&ext_json),
                     &incoming,
@@ -831,17 +932,25 @@ impl KskGpuiApp {
                 let so_cccd = merged.get("SO_CCCD").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let ngay_vao = merged.get("NGAY_VAO").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let json_str = serde_json::to_string(&merged).map_err(|e| e.to_string())?;
+                let (enc_ho_ten, enc_ngay_sinh, enc_so_cccd, enc_json_str) =
+                    crate::crypto::encrypt_record_fields(
+                        mk.as_ref(),
+                        &ho_ten,
+                        &ngay_sinh,
+                        &so_cccd,
+                        &json_str,
+                    );
                 sqlx::query(
                     "UPDATE ksk_records SET ma_tiep_nhan = ?, ma_y_te = ?, ho_ten = ?, gioi_tinh = ?, ngay_sinh = ?, so_cccd = ?, ngay_vao = ?, payload_json = ?, updated_by = ?, updated_at = datetime('now','localtime') WHERE id = ?",
                 )
                 .bind(&ma_tn)
                 .bind(&ma_y_te)
-                .bind(&ho_ten)
+                .bind(&enc_ho_ten)
                 .bind(&gioi_tinh)
-                .bind(&ngay_sinh)
-                .bind(&so_cccd)
+                .bind(&enc_ngay_sinh)
+                .bind(&enc_so_cccd)
                 .bind(&ngay_vao)
-                .bind(&json_str)
+                .bind(&enc_json_str)
                 .bind(&updated_by)
                 .bind(rid)
                 .execute(&*pool)
@@ -865,17 +974,25 @@ impl KskGpuiApp {
                 let so_cccd = merged.get("SO_CCCD").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let ngay_vao = merged.get("NGAY_VAO").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let json_str = serde_json::to_string(&merged).map_err(|e| e.to_string())?;
+                let (enc_ho_ten, enc_ngay_sinh, enc_so_cccd, enc_json_str) =
+                    crate::crypto::encrypt_record_fields(
+                        mk.as_ref(),
+                        &ho_ten,
+                        &ngay_sinh,
+                        &so_cccd,
+                        &json_str,
+                    );
                 let r = sqlx::query(
                     "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
                 )
                 .bind(&ma_tn)
                 .bind(&ma_y_te)
-                .bind(&ho_ten)
+                .bind(&enc_ho_ten)
                 .bind(&gioi_tinh)
-                .bind(&ngay_sinh)
-                .bind(&so_cccd)
+                .bind(&enc_ngay_sinh)
+                .bind(&enc_so_cccd)
                 .bind(&ngay_vao)
-                .bind(&json_str)
+                .bind(&enc_json_str)
                 .bind(&updated_by)
                 .execute(&*pool)
                 .await
@@ -942,9 +1059,10 @@ impl KskGpuiApp {
         };
         let state = self.state.clone();
         let cfg = self.cfg.clone();
+        let mk = self.master_key;
         let res = self.run_sync(async move {
             let pool = state.db.read().await;
-            generate_docx_bytes(&pool, &cfg, rid, is_reception).await
+            generate_docx_bytes(&pool, &cfg, rid, is_reception, mk.as_ref()).await
         });
         match res {
             Ok((filename, bytes)) => {
@@ -976,6 +1094,7 @@ impl KskGpuiApp {
         let st = self.exp_status_filter;
         let state = self.state.clone();
 
+        let mk = self.master_key;
         let rows = self.run_sync(async move {
             let pool = state.db.read().await;
             query_filtered_records(
@@ -989,6 +1108,7 @@ impl KskGpuiApp {
                 None,
                 Some(2000),
                 false,
+                mk.as_ref(),
             )
             .await
         });
@@ -1044,6 +1164,16 @@ impl KskGpuiApp {
         new_cfg.database_path = self.adm_db_path.read(cx).value().trim().to_string();
         new_cfg.update_dir_path = self.adm_update_dir.read(cx).value().trim().to_string();
         new_cfg.auto_check_update = self.adm_auto_check_update;
+        new_cfg.auto_backup_enabled = self.adm_auto_backup;
+        new_cfg.backup_dir_path = self.adm_backup_dir.read(cx).value().trim().to_string();
+        new_cfg.backup_interval_minutes = self
+            .adm_backup_interval
+            .read(cx)
+            .value()
+            .trim()
+            .parse::<u64>()
+            .unwrap_or(60)
+            .max(5);
 
         if let Err(e) = new_cfg.save() {
             self.show_toast(&format!("Lỗi lưu config.toml: {}", e), true, cx);
@@ -1116,16 +1246,27 @@ impl KskGpuiApp {
             self.adm_new_roles.join(",")
         };
         let hash = db::hash_password(&pw);
+        let wrapped_mk = match self.master_key {
+            Some(ref mk) => match crate::crypto::wrap_master_key(mk, &pw) {
+                Ok(w) => w,
+                Err(e) => {
+                    self.show_toast(&format!("Lỗi bọc Master Key: {}", e), true, cx);
+                    return;
+                }
+            },
+            None => String::new(),
+        };
         let state = self.state.clone();
         let res = self.run_sync(async move {
             let pool = state.db.read().await;
             sqlx::query(
-                "INSERT INTO users (username, password_hash, full_name, role, is_locked) VALUES (?, ?, ?, ?, 0)",
+                "INSERT INTO users (username, password_hash, full_name, role, is_locked, wrapped_mk) VALUES (?, ?, ?, ?, 0, ?)",
             )
             .bind(&username)
             .bind(&hash)
             .bind(&full_name)
             .bind(&roles_csv)
+            .bind(&wrapped_mk)
             .execute(&*pool)
             .await
             .map_err(|e| e.to_string())
@@ -1591,22 +1732,57 @@ impl KskGpuiApp {
 
         let hash = db::hash_password(&password);
         let state = self.state.clone();
-        let user_opt = self.run_sync(async move {
+        let (user_opt, wrapped_mk) = self.run_sync(async move {
             let pool = state.db.read().await;
-            sqlx::query_as::<_, User>(
+            let u = sqlx::query_as::<_, User>(
                 "SELECT id, username, password_hash, full_name, role, is_locked, created_at FROM users WHERE username = ?",
             )
             .bind(&username)
             .fetch_optional(&*pool)
             .await
             .ok()
-            .flatten()
+            .flatten();
+            let wmk = if let Some(ref usr) = u {
+                sqlx::query_as::<_, (String,)>("SELECT wrapped_mk FROM users WHERE id = ?")
+                    .bind(usr.id)
+                    .fetch_optional(&*pool)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|(s,)| s)
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
+            (u, wmk)
         });
 
         match user_opt {
             Some(u) if u.password_hash == hash => {
                 if u.is_locked != 0 {
                     self.login_error = Some("Tài khoản đã bị khóa!".into());
+                    cx.notify();
+                    return;
+                }
+                if !wrapped_mk.trim().is_empty() {
+                    match crate::crypto::unwrap_master_key(&wrapped_mk, &password) {
+                        Ok(mk) => {
+                            self.master_key = Some(mk);
+                            let st_mk = self.state.clone();
+                            self.run_sync(async move {
+                                *st_mk.master_key.write().await = Some(mk);
+                            });
+                        }
+                        Err(e) => {
+                            self.login_error = Some(format!("Không thể giải mã Master Key: {}", e));
+                            cx.notify();
+                            return;
+                        }
+                    }
+                } else {
+                    self.login_error = Some(
+                        "Tài khoản chưa được cấp Master Key. Vui lòng dùng Admin hoặc Recovery Key để khôi phục.".into(),
+                    );
                     cx.notify();
                     return;
                 }
@@ -1617,6 +1793,7 @@ impl KskGpuiApp {
                 self.current_user = Some(u);
                 self.refresh_catalogs(cx);
                 self.refresh_records(window, cx);
+                self.start_auto_backup_loop(cx);
                 cx.notify();
             }
             _ => {
@@ -1659,9 +1836,17 @@ impl KskGpuiApp {
         } else {
             None
         };
+        let new_wrapped_mk = if !new_pw.is_empty() {
+            self.master_key
+                .as_ref()
+                .and_then(|mk| crate::crypto::wrap_master_key(mk, &new_pw).ok())
+        } else {
+            None
+        };
 
         let name_c = final_name.clone();
         let hash_c = new_hash.clone();
+        let wmk_c = new_wrapped_mk;
         let _ = self.run_sync(async move {
             let pool = state.db.read().await;
             let _ = sqlx::query("UPDATE users SET full_name = ? WHERE id = ?")
@@ -1670,11 +1855,20 @@ impl KskGpuiApp {
                 .execute(&*pool)
                 .await;
             if let Some(h) = hash_c {
-                let _ = sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
-                    .bind(&h)
-                    .bind(uid)
-                    .execute(&*pool)
-                    .await;
+                if let Some(wmk) = wmk_c {
+                    let _ = sqlx::query("UPDATE users SET password_hash = ?, wrapped_mk = ? WHERE id = ?")
+                        .bind(&h)
+                        .bind(&wmk)
+                        .bind(uid)
+                        .execute(&*pool)
+                        .await;
+                } else {
+                    let _ = sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
+                        .bind(&h)
+                        .bind(uid)
+                        .execute(&*pool)
+                        .await;
+                }
             }
         });
 
@@ -1836,7 +2030,429 @@ impl KskGpuiApp {
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.do_login(window, cx);
                             })),
-                    ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .justify_between()
+                            .items_center()
+                            .child(
+                                Button::new("btn-toggle-recovery")
+                                    .label(if self.show_recovery_panel {
+                                        "Ẩn khôi phục mật khẩu"
+                                    } else {
+                                        "Quên mật khẩu Admin? Khôi phục bằng Recovery Key"
+                                    })
+                                    .xsmall()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.show_recovery_panel = !this.show_recovery_panel;
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .when(self.show_recovery_panel, |el| {
+                        el.child(
+                            div()
+                                .p(px(10.0))
+                                .rounded(px(8.0))
+                                .bg(rgb(bg_subtle()))
+                                .border_1()
+                                .border_color(rgb(border_col()))
+                                .flex()
+                                .flex_col()
+                                .gap(px(8.0))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .text_color(rgb(text_main()))
+                                        .child("Khôi phục tài khoản Admin bằng Recovery Key"),
+                                )
+                                .child(Input::new(&self.recov_key_input).small())
+                                .child(Input::new(&self.recov_new_pw).small().mask_toggle())
+                                .child(Input::new(&self.recov_confirm_pw).small().mask_toggle())
+                                .child(
+                                    Button::new("btn-exec-recovery")
+                                        .label("Khôi phục & Đặt mật khẩu mới")
+                                        .small()
+                                        .primary()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.run_recovery_admin(window, cx);
+                                        })),
+                                ),
+                        )
+                    }),
+            )
+            .into_any_element()
+    }
+
+    pub fn run_first_time_setup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let db_path = self.setup_db_path.read(cx).value().trim().to_string();
+        let pw = self.setup_admin_pw.read(cx).value().to_string();
+        let pw2 = self.setup_admin_pw_confirm.read(cx).value().to_string();
+        if db_path.is_empty() {
+            self.setup_error = Some("Vui lòng chọn đường dẫn cơ sở dữ liệu!".into());
+            cx.notify();
+            return;
+        }
+        if pw.len() < 4 {
+            self.setup_error = Some("Mật khẩu Admin phải có ít nhất 4 ký tự!".into());
+            cx.notify();
+            return;
+        }
+        if pw != pw2 {
+            self.setup_error = Some("Mật khẩu xác nhận không khớp!".into());
+            cx.notify();
+            return;
+        }
+
+        let mut new_cfg = self.cfg.clone();
+        new_cfg.database_path = db_path.clone();
+        if let Err(e) = new_cfg.save() {
+            self.setup_error = Some(format!("Lỗi lưu cấu hình DB: {}", e));
+            cx.notify();
+            return;
+        }
+
+        let state = self.state.clone();
+        let cfg_c = new_cfg.clone();
+        let res = self.run_sync(async move {
+            let pool = db::init_db(&db_path).await.map_err(|e| e.to_string())?;
+            let (mk, rk) = db::initialize_master_key_for_admin(&pool, &pw).await?;
+            *state.db.write().await = pool;
+            *state.config.write().await = cfg_c;
+            *state.master_key.write().await = Some(mk);
+            Ok::<([u8; 32], String), String>((mk, rk))
+        });
+
+        match res {
+            Ok((mk, rk)) => {
+                self.cfg = new_cfg.clone();
+                self.master_key = Some(mk);
+                self.setup_error = None;
+                self.setup_generated_recovery_key = Some(rk);
+                self.setup_recovery_saved_ack = false;
+                self.login_db_path
+                    .update(cx, |s, cx| s.set_value(new_cfg.database_path.clone(), window, cx));
+                self.adm_db_path
+                    .update(cx, |s, cx| s.set_value(new_cfg.database_path, window, cx));
+                cx.notify();
+            }
+            Err(e) => {
+                self.setup_error = Some(e);
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn run_recovery_admin(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let rk = self.recov_key_input.read(cx).value().trim().to_string();
+        let pw = self.recov_new_pw.read(cx).value().to_string();
+        let pw2 = self.recov_confirm_pw.read(cx).value().to_string();
+        if rk.is_empty() || pw.is_empty() {
+            self.login_error = Some("Vui lòng nhập Recovery Key và mật khẩu mới!".into());
+            cx.notify();
+            return;
+        }
+        if pw != pw2 {
+            self.login_error = Some("Mật khẩu mới và xác nhận không khớp!".into());
+            cx.notify();
+            return;
+        }
+
+        let state = self.state.clone();
+        let pw_for_rec = pw.clone();
+        let res = self.run_sync(async move {
+            let pool = state.db.read().await;
+            let mk = db::recover_admin_with_key(&pool, &rk, &pw_for_rec).await?;
+            *state.master_key.write().await = Some(mk);
+            Ok::<[u8; 32], String>(mk)
+        });
+
+        match res {
+            Ok(mk) => {
+                self.master_key = Some(mk);
+                self.login_error = None;
+                self.show_recovery_panel = false;
+                self.recov_key_input.update(cx, |s, cx| s.set_value("", window, cx));
+                self.recov_new_pw.update(cx, |s, cx| s.set_value("", window, cx));
+                self.recov_confirm_pw.update(cx, |s, cx| s.set_value("", window, cx));
+                self.login_username.update(cx, |s, cx| s.set_value("admin", window, cx));
+                self.login_password.update(cx, |s, cx| s.set_value(pw, window, cx));
+                self.do_login(window, cx);
+            }
+            Err(e) => {
+                self.login_error = Some(e);
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn trigger_manual_backup(&mut self, cx: &mut Context<Self>) {
+        let state = self.state.clone();
+        let db_path = self.cfg.database_path.clone();
+        let backup_dir = self.adm_backup_dir.read(cx).value().trim().to_string();
+        let keep = self.cfg.backup_keep_count;
+        let res = self.run_sync(async move {
+            let pool = state.db.read().await;
+            db::backup_database(&pool, &db_path, &backup_dir, keep).await
+        });
+        match res {
+            Ok(path) => {
+                self.last_backup_status = Some(format!(
+                    "Đã sao lưu lúc {}: {}",
+                    chrono::Local::now().format("%H:%M:%S %d/%m/%Y"),
+                    path
+                ));
+                self.show_toast(&format!("Đã backup database: {}", path), false, cx);
+            }
+            Err(e) => {
+                self.show_toast(&format!("Lỗi backup DB: {}", e), true, cx);
+            }
+        }
+    }
+
+    pub fn start_auto_backup_loop(&mut self, cx: &mut Context<Self>) {
+        if !self.cfg.auto_backup_enabled {
+            return;
+        }
+        let state = self.state.clone();
+        let db_path = self.cfg.database_path.clone();
+        let backup_dir = self.cfg.backup_dir_path.clone();
+        let keep = self.cfg.backup_keep_count;
+        let interval_mins = self.cfg.backup_interval_minutes.max(5);
+
+        cx.spawn(async move |this, cx| {
+            loop {
+                let st_c = state.clone();
+                let dp_c = db_path.clone();
+                let bd_c = backup_dir.clone();
+                let res = cx
+                    .background_executor()
+                    .spawn(async move {
+                        let rt = tokio::runtime::Handle::try_current();
+                        if let Ok(handle) = rt {
+                            handle.block_on(async move {
+                                let pool = st_c.db.read().await;
+                                db::backup_database(&pool, &dp_c, &bd_c, keep).await
+                            })
+                        } else {
+                            let rt_new = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+                            rt_new.block_on(async move {
+                                let pool = st_c.db.read().await;
+                                db::backup_database(&pool, &dp_c, &bd_c, keep).await
+                            })
+                        }
+                    })
+                    .await;
+
+                if let Ok(path) = res {
+                    let msg = format!(
+                        "Tự động sao lưu lúc {}: {}",
+                        chrono::Local::now().format("%H:%M:%S %d/%m/%Y"),
+                        path
+                    );
+                    let _ = this.update(cx, |app, cx| {
+                        app.last_backup_status = Some(msg);
+                        cx.notify();
+                    });
+                }
+
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(interval_mins * 60))
+                    .await;
+            }
+        })
+        .detach();
+    }
+
+    fn render_first_time_setup(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        div()
+            .size_full()
+            .bg(rgb(bg_app()))
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .p(px(24.0))
+            .child(
+                card_box()
+                    .w(px(500.0))
+                    .p(px(24.0))
+                    .gap(px(14.0))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .gap(px(6.0))
+                            .child(
+                                gpui::img(self.app_logo.clone())
+                                    .h(px(56.0))
+                                    .w(px(121.0)),
+                            )
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(rgb(PRIMARY_COL))
+                                    .child("Cài đặt lần đầu — Khởi tạo Bảo mật & CSDL"),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(text_muted()))
+                                    .child("Tạo cơ sở dữ liệu, mật khẩu Admin và Recovery Key để mã hóa toàn bộ hồ sơ bệnh án (AES-256-GCM)."),
+                            ),
+                    )
+                    .when(self.setup_generated_recovery_key.is_none(), |el| {
+                        el.child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.0))
+                                .child(field_label("Đường dẫn file cơ sở dữ liệu (.db)", true))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .gap(px(6.0))
+                                        .child(div().flex_1().child(Input::new(&self.setup_db_path).small()))
+                                        .child(
+                                            Button::new("btn-setup-browse-db")
+                                                .label("Chọn nơi lưu...")
+                                                .small()
+                                                .secondary()
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    if let Some(p) = rfd::FileDialog::new()
+                                                        .set_file_name("ksk_data.db")
+                                                        .add_filter("SQLite DB", &["db", "sqlite"])
+                                                        .save_file()
+                                                    {
+                                                        let s = p.to_string_lossy().to_string();
+                                                        this.setup_db_path.update(cx, |inp, cx| {
+                                                            inp.set_value(s, window, cx);
+                                                        });
+                                                    }
+                                                })),
+                                        ),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.0))
+                                .child(field_label("Mật khẩu Admin", true))
+                                .child(Input::new(&self.setup_admin_pw).small().mask_toggle()),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.0))
+                                .child(field_label("Xác nhận mật khẩu Admin", true))
+                                .child(Input::new(&self.setup_admin_pw_confirm).small().mask_toggle()),
+                        )
+                        .when_some(self.setup_error.clone(), |err_el, err| {
+                            err_el.child(
+                                div()
+                                    .p(px(8.0))
+                                    .rounded(px(6.0))
+                                    .bg(rgb(DANGER_BG))
+                                    .text_xs()
+                                    .text_color(rgb(DANGER_COL))
+                                    .child(err),
+                            )
+                        })
+                        .child(
+                            Button::new("btn-setup-init")
+                                .label("Khởi tạo Database & Tạo Recovery Key")
+                                .primary()
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.run_first_time_setup(window, cx);
+                                })),
+                        )
+                    })
+                    .when_some(self.setup_generated_recovery_key.clone(), |el, rk| {
+                        let rk_copy = rk.clone();
+                        el.child(
+                            div()
+                                .p(px(12.0))
+                                .rounded(px(8.0))
+                                .bg(rgb(WARN_BG))
+                                .border_1()
+                                .border_color(rgb(WARN_COL))
+                                .flex()
+                                .flex_col()
+                                .gap(px(8.0))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .text_color(rgb(WARN_COL))
+                                        .child("QUAN TRỌNG: Hãy lưu lại Recovery Key này ở nơi an toàn!"),
+                                )
+                                .child(
+                                    div()
+                                        .p(px(10.0))
+                                        .rounded(px(6.0))
+                                        .bg(rgb(bg_card()))
+                                        .border_1()
+                                        .border_color(rgb(border_col()))
+                                        .text_sm()
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .text_color(rgb(PRIMARY_COL))
+                                        .child(rk),
+                                )
+                                .child(
+                                    Button::new("btn-copy-rk")
+                                        .label("Sao chép Recovery Key")
+                                        .small()
+                                        .secondary()
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                                rk_copy.clone(),
+                                            ));
+                                            this.show_toast(
+                                                "Đã sao chép Recovery Key vào clipboard!",
+                                                false,
+                                                cx,
+                                            );
+                                        })),
+                                ),
+                        )
+                        .child(
+                            gpui_component::checkbox::Checkbox::new("chk-rk-ack")
+                                .label("Tôi đã lưu giữ Recovery Key cẩn thận")
+                                .checked(self.setup_recovery_saved_ack)
+                                .on_change(cx.listener(|this, val, _, cx| {
+                                    this.setup_recovery_saved_ack = *val;
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            Button::new("btn-finish-setup")
+                                .label("Hoàn tất & Vào Đăng nhập")
+                                .primary()
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    if !this.setup_recovery_saved_ack {
+                                        this.show_toast(
+                                            "Vui lòng xác nhận đã lưu Recovery Key trước khi tiếp tục!",
+                                            true,
+                                            cx,
+                                        );
+                                        return;
+                                    }
+                                    this.needs_first_setup = false;
+                                    this.login_username
+                                        .update(cx, |s, cx| s.set_value("admin", window, cx));
+                                    cx.notify();
+                                })),
+                        )
+                    }),
             )
             .into_any_element()
     }
@@ -1844,6 +2460,9 @@ impl KskGpuiApp {
 
 impl Render for KskGpuiApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.needs_first_setup {
+            return self.render_first_time_setup(window, cx);
+        }
         if self.current_user.is_none() {
             return self.render_login(window, cx);
         }
