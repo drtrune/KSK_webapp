@@ -297,6 +297,7 @@ impl KskGpuiApp {
 
         let id_owned = dropdown_id.to_string();
         let on_select_rc = std::rc::Rc::new(on_select);
+        let needs_search = options.len() > 10;
 
         div()
             .relative()
@@ -325,11 +326,13 @@ impl KskGpuiApp {
                     .text_color(rgb(if editable { text_main() } else { text_muted() }))
                     .when(editable, |el| {
                         let id_toggle = id_owned.clone();
-                        el.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| {
+                        el.cursor_pointer().on_click(cx.listener(move |this, _, window, cx| {
                             if this.open_dropdown.as_deref() == Some(&id_toggle) {
                                 this.open_dropdown = None;
                             } else {
                                 this.open_dropdown = Some(id_toggle.clone());
+                                this.dropdown_search_input
+                                    .update(cx, |s, cx| s.set_value("", window, cx));
                             }
                             cx.notify();
                         }))
@@ -338,15 +341,29 @@ impl KskGpuiApp {
                     .child(div().text_xs().text_color(rgb(text_muted())).child("▾")),
             )
             .when(is_open && editable, |el| {
+                let q = if needs_search {
+                    self.dropdown_search_input.read(cx).value().trim().to_lowercase()
+                } else {
+                    String::new()
+                };
+                let filtered: Vec<(String, String)> = options
+                    .into_iter()
+                    .filter(|(val, lbl)| {
+                        q.is_empty()
+                            || val.to_lowercase().contains(&q)
+                            || lbl.to_lowercase().contains(&q)
+                    })
+                    .collect();
+                let total_matched = filtered.len();
+                let shown: Vec<(String, String)> = filtered.into_iter().take(100).collect();
+
                 let menu = div()
                     .id(SharedString::from(format!("dd-menu-{}", id_owned)))
                     .absolute()
                     .top(px(if label.is_empty() { 34.0 } else { 54.0 }))
                     .left_0()
-                    .min_w(px(240.0))
+                    .min_w(px(260.0))
                     .w_full()
-                    .max_h(px(260.0))
-                    .overflow_y_scroll()
                     .bg(rgb(bg_card()))
                     .border_1()
                     .border_color(rgb(PRIMARY_COL))
@@ -355,28 +372,64 @@ impl KskGpuiApp {
                     .p(px(4.0))
                     .flex()
                     .flex_col()
-                    .gap(px(2.0))
-                    .children(options.into_iter().enumerate().map(|(idx, (val, lbl))| {
-                        let is_sel = val == current_val;
-                        let cb = on_select_rc.clone();
-                        let val_c = val.clone();
+                    .gap(px(4.0))
+                    .when(needs_search, |m| {
+                        m.child(
+                            div()
+                                .p(px(2.0))
+                                .child(Input::new(&self.dropdown_search_input).small().cleanable(true)),
+                        )
+                    })
+                    .child(
                         div()
-                            .id(SharedString::from(format!("dd-opt-{}-{}", id_owned, idx)))
-                            .px(px(8.0))
-                            .py(px(6.0))
-                            .rounded(px(4.0))
-                            .text_sm()
-                            .cursor_pointer()
-                            .bg(rgb(if is_sel { primary_light() } else { bg_card() }))
-                            .text_color(rgb(if is_sel { PRIMARY_COL } else { text_main() }))
-                            .hover(|s| s.bg(rgb(bg_subtle())))
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.open_dropdown = None;
-                                cb(this, val_c.clone(), window, cx);
-                                cx.notify();
-                            }))
-                            .child(lbl)
-                    }));
+                            .id(SharedString::from(format!("dd-list-{}", id_owned)))
+                            .max_h(px(240.0))
+                            .overflow_y_scroll()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.0))
+                            .when(shown.is_empty(), |l| {
+                                l.child(
+                                    div()
+                                        .px(px(8.0))
+                                        .py(px(6.0))
+                                        .text_xs()
+                                        .text_color(rgb(text_muted()))
+                                        .child("Không tìm thấy mục phù hợp"),
+                                )
+                            })
+                            .children(shown.into_iter().enumerate().map(|(idx, (val, lbl))| {
+                                let is_sel = val == current_val;
+                                let cb = on_select_rc.clone();
+                                let val_c = val.clone();
+                                div()
+                                    .id(SharedString::from(format!("dd-opt-{}-{}", id_owned, idx)))
+                                    .px(px(8.0))
+                                    .py(px(6.0))
+                                    .rounded(px(4.0))
+                                    .text_sm()
+                                    .cursor_pointer()
+                                    .bg(rgb(if is_sel { primary_light() } else { bg_card() }))
+                                    .text_color(rgb(if is_sel { PRIMARY_COL } else { text_main() }))
+                                    .hover(|s| s.bg(rgb(bg_subtle())))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.open_dropdown = None;
+                                        cb(this, val_c.clone(), window, cx);
+                                        cx.notify();
+                                    }))
+                                    .child(lbl)
+                            })),
+                    )
+                    .when(total_matched > 100, |m| {
+                        m.child(
+                            div()
+                                .px(px(8.0))
+                                .py(px(2.0))
+                                .text_xs()
+                                .text_color(rgb(text_muted()))
+                                .child(format!("Hiển thị 100/{} mục — nhập thêm để lọc", total_matched)),
+                        )
+                    });
                 el.child(gpui::deferred(menu).with_priority(100))
             })
             .into_any_element()

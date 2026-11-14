@@ -77,6 +77,7 @@ pub struct KskGpuiApp {
     pub active_nav: String,       // "exam" | "export" | "admin"
     pub active_exam_tab: String,  // "reception" | "history" | "physical" | "clinical" | "paraclinical" | "conclusion"
     pub open_dropdown: Option<String>,
+    pub dropdown_search_input: Entity<InputState>,
     pub toast: Option<(String, bool)>,
     pub available_update: Option<UpdateManifest>,
 
@@ -196,6 +197,14 @@ impl KskGpuiApp {
 
         let disease_search_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Tìm tên bệnh (vd: tăng huyết áp, cận thị...)")
+        });
+        let dropdown_search_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Tìm theo mã hoặc tên...")
+        });
+        let sub_dd_search = cx.subscribe_in(&dropdown_search_input, window, |_, _, ev, _window, cx| {
+            if matches!(ev, InputEvent::Change) {
+                cx.notify();
+            }
         });
 
         let exp_from_date = cx.new(|cx| {
@@ -338,6 +347,7 @@ impl KskGpuiApp {
             active_nav: "exam".into(),
             active_exam_tab: "reception".into(),
             open_dropdown: None,
+            dropdown_search_input,
             toast: None,
             available_update,
             sidebar_open: true,
@@ -388,7 +398,7 @@ impl KskGpuiApp {
             adm_cat_parent_filter,
             adm_cat_search,
             adm_cat_edit_id: None,
-            _ui_subs: vec![sub_search, sub_from, sub_to, sub_disease, sub_cat_search, sub_cat_parent_filter],
+            _ui_subs: vec![sub_search, sub_from, sub_to, sub_disease, sub_cat_search, sub_cat_parent_filter, sub_dd_search],
         }
     }
 
@@ -1134,13 +1144,16 @@ impl KskGpuiApp {
         cat_type: &str,
         parent_code: Option<&str>,
     ) -> Vec<(String, String)> {
+        let show_code = cat_type == "ICD10";
         self.query_catalog_items(cat_type, parent_code)
             .into_iter()
             .map(|item| {
                 let label = if item.name.trim().is_empty() {
                     item.code.clone()
-                } else {
+                } else if show_code {
                     format!("{} - {}", item.code, item.name)
+                } else {
+                    item.name.clone()
                 };
                 (item.code, label)
             })
