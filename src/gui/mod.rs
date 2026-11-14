@@ -56,6 +56,7 @@ pub struct KskGpuiApp {
     pub rt: tokio::runtime::Handle,
     pub state: Arc<AppState>,
     pub cfg: AppConfig,
+    pub app_logo: Arc<gpui::Image>,
 
     // Auth & Profile
     pub current_user: Option<User>,
@@ -341,6 +342,10 @@ impl KskGpuiApp {
             state: launch_ctx.state,
             adm_auto_check_update: cfg.auto_check_update,
             cfg,
+            app_logo: Arc::new(gpui::Image::from_bytes(
+                gpui::ImageFormat::Png,
+                include_bytes!("../../asset/logo.png").to_vec(),
+            )),
             current_user: None,
             login_username,
             login_password,
@@ -1712,7 +1717,13 @@ impl KskGpuiApp {
                         div()
                             .flex()
                             .flex_col()
-                            .gap(px(4.0))
+                            .items_center()
+                            .gap(px(6.0))
+                            .child(
+                                gpui::img(self.app_logo.clone())
+                                    .h(px(64.0))
+                                    .w(px(138.0)),
+                            )
                             .child(
                                 div()
                                     .text_xl()
@@ -1884,6 +1895,11 @@ impl Render for KskGpuiApp {
                             .flex_row()
                             .items_center()
                             .gap(px(12.0))
+                            .child(
+                                gpui::img(self.app_logo.clone())
+                                    .h(px(30.0))
+                                    .w(px(65.0)),
+                            )
                             .child(
                                 div()
                                     .text_base()

@@ -217,9 +217,9 @@ impl KskGpuiApp {
         let kcb = self.get_form_val("MA_LOAI_KCB");
 
         let gender_opts = vec![
-            ("1".to_string(), "1 - Nam".to_string()),
-            ("2".to_string(), "2 - Nữ".to_string()),
-            ("3".to_string(), "3 - Khác".to_string()),
+            ("1".to_string(), "Nam".to_string()),
+            ("2".to_string(), "Nữ".to_string()),
+            ("3".to_string(), "Khác".to_string()),
         ];
         let tinh_opts = self.query_catalog_options("TINH_TP", None);
         let xa_opts = if ma_tinh.is_empty() {
@@ -233,9 +233,9 @@ impl KskGpuiApp {
         let mut kcb_opts = self.query_catalog_options("LOAI_KCB", None);
         if kcb_opts.is_empty() {
             kcb_opts = vec![
-                ("1".to_string(), "1 - Khám sức khỏe định kỳ".to_string()),
-                ("2".to_string(), "2 - Khám sức khỏe tuyển dụng".to_string()),
-                ("3".to_string(), "3 - Khám sức khỏe lái xe".to_string()),
+                ("1".to_string(), "Khám sức khỏe định kỳ".to_string()),
+                ("2".to_string(), "Khám sức khỏe tuyển dụng".to_string()),
+                ("3".to_string(), "Khám sức khỏe lái xe".to_string()),
             ];
         }
 
@@ -440,8 +440,8 @@ impl KskGpuiApp {
                                 "Có ai trong gia đình mắc bệnh không?",
                                 &ts_gd,
                                 vec![
-                                    ("0".to_string(), "0 - Không".to_string()),
-                                    ("1".to_string(), "1 - Có".to_string()),
+                                    ("0".to_string(), "Không".to_string()),
+                                    ("1".to_string(), "Có".to_string()),
                                 ],
                                 editable,
                                 |this, val, _, _| {
@@ -543,8 +543,8 @@ impl KskGpuiApp {
                         "Đang điều trị bệnh",
                         &ts_dang_dieu_tri,
                         vec![
-                            ("0".to_string(), "0 - Không".to_string()),
-                            ("1".to_string(), "1 - Có".to_string()),
+                            ("0".to_string(), "Không".to_string()),
+                            ("1".to_string(), "Có".to_string()),
                         ],
                         editable,
                         |this, val, _, _| {
