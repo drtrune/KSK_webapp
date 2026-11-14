@@ -151,6 +151,7 @@ pub async fn init_db(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
             exam_date TEXT NOT NULL DEFAULT '',
             expected_count INTEGER NOT NULL DEFAULT 0,
             status INTEGER NOT NULL DEFAULT 0,
+            scan_file_path TEXT NOT NULL DEFAULT '',
             note TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE RESTRICT
@@ -159,6 +160,11 @@ pub async fn init_db(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
     )
     .execute(&pool)
     .await?;
+    let _ = sqlx::query(
+        "ALTER TABLE exam_contracts ADD COLUMN scan_file_path TEXT NOT NULL DEFAULT ''",
+    )
+    .execute(&pool)
+    .await;
 
     // 4. Tạo bảng catalogs & catalog_meta (lưu version/timestamp cho caching)
     sqlx::query(
@@ -870,6 +876,7 @@ pub async fn list_exam_contracts(
             ec.exam_date,
             ec.expected_count,
             ec.status,
+            ec.scan_file_path,
             ec.note,
             COALESCE(COUNT(r.id), 0) AS total_records,
             COALESCE(SUM(CASE WHEN r.status = 1 THEN 1 ELSE 0 END), 0) AS done_records,
@@ -950,6 +957,38 @@ pub async fn set_exam_contract_status(pool: &SqlitePool, id: i64, status: i64) -
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub async fn update_exam_contract_scan_file(
+    pool: &SqlitePool,
+    id: i64,
+    scan_file_path: &str,
+) -> Result<(), String> {
+    sqlx::query("UPDATE exam_contracts SET scan_file_path = ? WHERE id = ?")
+        .bind(scan_file_path.trim())
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub async fn list_contract_records(
+    pool: &SqlitePool,
+    contract_id: i64,
+    master_key: Option<&[u8; 32]>,
+) -> Vec<crate::models::KskRecordRow> {
+    let mut rows = sqlx::query_as::<_, crate::models::KskRecordRow>(
+        "SELECT id, ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, payload_json, updated_by, created_at, updated_at FROM ksk_records WHERE exam_mode = 'doan' AND contract_id = ? ORDER BY id ASC",
+    )
+    .bind(contract_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    for r in &mut rows {
+        crate::crypto::decrypt_record_row(master_key, r);
+    }
+    rows
 }
 
 pub async fn get_existing_ma_tiep_nhan_set(pool: &SqlitePool) -> std::collections::HashSet<String> {

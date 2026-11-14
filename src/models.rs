@@ -754,6 +754,8 @@ pub struct ExamContract {
     pub exam_date: String,
     pub expected_count: i64,
     pub status: i64,
+    #[sqlx(default)]
+    pub scan_file_path: String,
     pub note: String,
     pub created_at: String,
 }
@@ -769,6 +771,8 @@ pub struct ExamContractSummary {
     pub exam_date: String,
     pub expected_count: i64,
     pub status: i64,
+    #[sqlx(default)]
+    pub scan_file_path: String,
     pub note: String,
     pub total_records: i64,
     pub done_records: i64,
