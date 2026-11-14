@@ -74,7 +74,24 @@ fn section_role_and_fields(section: &str) -> (&'static str, &'static [&'static s
     }
 }
 
-fn load_catalogs_sync(rt: &Runtime, state: &SharedState) -> HashMap<String, Vec<CatalogItem>> {
+fn run_sync<F, T>(rt: &Arc<Runtime>, fut: F) -> T
+where
+    F: std::future::Future<Output = T> + Send,
+    T: Send,
+{
+    if tokio::runtime::Handle::try_current().is_ok() {
+        let rt_clone = rt.clone();
+        std::thread::scope(|s| {
+            s.spawn(|| rt_clone.block_on(fut))
+                .join()
+                .expect("Async thread panicked")
+        })
+    } else {
+        rt.block_on(fut)
+    }
+}
+
+fn load_catalogs_sync(rt: &Arc<Runtime>, state: &SharedState) -> HashMap<String, Vec<CatalogItem>> {
     let types = [
         "DAN_TOC",
         "NGHE_NGHIEP",
@@ -86,7 +103,7 @@ fn load_catalogs_sync(rt: &Runtime, state: &SharedState) -> HashMap<String, Vec<
         "ICD10",
     ];
     let mut map = HashMap::new();
-    rt.block_on(async {
+    run_sync(rt, async {
         let db = state.db.read().await;
         for t in types {
             let items: Vec<CatalogItem> = sqlx::query_as(
@@ -175,7 +192,7 @@ pub fn App() -> Element {
             let f_to = filter_to_date.read().clone();
             let f_st = *filter_status.read();
             let f_q = filter_q.read().clone();
-            let rows = rt.block_on(async {
+            let rows = run_sync(&rt, async {
                 let db = state.db.read().await;
                 query_filtered_records(
                     &*db,
@@ -215,7 +232,7 @@ pub fn App() -> Element {
         let rt = ctx.rt.clone();
         let state = ctx.state.clone();
         move |record_id: i64| {
-            let row: Option<KskRecordRow> = rt.block_on(async {
+            let row: Option<KskRecordRow> = run_sync(&rt, async {
                 let db = state.db.read().await;
                 sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
                     .bind(record_id)
@@ -264,7 +281,7 @@ pub fn App() -> Element {
         let state = ctx.state.clone();
         move || {
             let path = cfg.read().database_path.clone();
-            let info = rt.block_on(async {
+            let info = run_sync(&rt, async {
                 let db = state.db.read().await;
                 get_db_info(&*db, &path).await
             });
@@ -276,7 +293,7 @@ pub fn App() -> Element {
         let rt = ctx.rt.clone();
         let state = ctx.state.clone();
         move || {
-            let rows: Vec<User> = rt.block_on(async {
+            let rows: Vec<User> = run_sync(&rt, async {
                 let db = state.db.read().await;
                 sqlx::query_as("SELECT * FROM users ORDER BY id ASC")
                     .fetch_all(&*db)
@@ -293,7 +310,7 @@ pub fn App() -> Element {
         move || {
             let ct = catalog_type_filter.read().clone();
             let q = format!("%{}%", catalog_search.read().trim());
-            let rows: Vec<CatalogItem> = rt.block_on(async {
+            let rows: Vec<CatalogItem> = run_sync(&rt, async {
                 let db = state.db.read().await;
                 sqlx::query_as(
                     "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type = ? AND (code LIKE ? OR name LIKE ?) ORDER BY is_default DESC, name ASC LIMIT 200",
@@ -320,7 +337,7 @@ pub fn App() -> Element {
                 toast.set(Some(("Đường dẫn DB không được để trống!".to_string(), true)));
                 return;
             }
-            let res = rt.block_on(async {
+            let res = run_sync(&rt, async {
                 let new_pool = init_db(&p).await.map_err(|e| e.to_string())?;
                 let mut db_guard = state.db.write().await;
                 *db_guard = new_pool;
@@ -331,7 +348,7 @@ pub fn App() -> Element {
                     cfg.write().database_path = p;
                     let c_clone = cfg.read().clone();
                     let _ = c_clone.save();
-                    rt.block_on(async {
+                    run_sync(&rt, async {
                         *state.config.write().await = c_clone;
                     });
                     catalogs_cache.set(load_catalogs_sync(&rt, &state));
@@ -363,7 +380,7 @@ pub fn App() -> Element {
                 return;
             }
             let p_hash = hash_password(&p_trim);
-            let res: Result<Option<User>, String> = rt.block_on(async {
+            let res: Result<Option<User>, String> = run_sync(&rt, async {
                 let db = state.db.read().await;
                 sqlx::query_as("SELECT * FROM users WHERE username = ? AND password_hash = ?")
                     .bind(&u_trim)
@@ -530,7 +547,7 @@ pub fn App() -> Element {
             let rec_id = *selected_record_id.read();
             let cfg_snap = cfg.read().clone();
 
-            let res: Result<i64, String> = rt.block_on(async {
+            let res: Result<i64, String> = run_sync(&rt, async {
                 let db = state.db.read().await;
                 if let Some(id) = rec_id {
                     let row: Option<KskRecordRow> =
@@ -661,7 +678,7 @@ pub fn App() -> Element {
         let state = ctx.state.clone();
         move |(id, is_rec): (i64, bool)| {
             let cfg_snap = cfg.read().clone();
-            let res = rt.block_on(async {
+            let res = run_sync(&rt, async {
                 let db = state.db.read().await;
                 generate_docx_bytes(&*db, &cfg_snap, id, is_rec).await
             });
@@ -698,7 +715,7 @@ pub fn App() -> Element {
                 return;
             }
             let cfg_snap = cfg.read().clone();
-            let res: Result<Value, String> = rt.block_on(async {
+            let res: Result<Value, String> = run_sync(&rt, async {
                 let payload_str = cfg_snap.his_payload_template.replace("{{ma_tn}}", &ma_tn);
                 let payload_val: Value = serde_json::from_str(&payload_str)
                     .unwrap_or_else(|_| json!({"ma_tiep_nhan": ma_tn}));
@@ -745,7 +762,7 @@ pub fn App() -> Element {
                 return;
             }
             let new_status = if lock { 1 } else { 0 };
-            let res = rt.block_on(async {
+            let res = run_sync(&rt, async {
                 let db = state.db.read().await;
                 sqlx::query("UPDATE ksk_records SET status = ?, updated_at = datetime('now', 'localtime') WHERE id = ?")
                     .bind(new_status)
@@ -778,7 +795,7 @@ pub fn App() -> Element {
             let f_q = csv_q.read().clone();
             let f_wp = csv_workplace.read().clone();
             let f_cl = csv_classification.read().clone();
-            let rows = rt.block_on(async {
+            let rows = run_sync(&rt, async {
                 let db = state.db.read().await;
                 query_filtered_records(
                     &*db,
@@ -1087,7 +1104,7 @@ pub fn App() -> Element {
                                             toast.set(Some((format!("Lỗi lưu config.toml: {}", e), true)));
                                             return;
                                         }
-                                        rt.block_on(async { *state.config.write().await = c; });
+                                        run_sync(&rt, async { *state.config.write().await = c; });
                                         toast.set(Some(("Đã lưu cấu hình vào config.toml!".to_string(), false)));
                                     }
                                 },
@@ -1114,7 +1131,7 @@ pub fn App() -> Element {
                                         }
                                         let role_str = roles.join(",");
                                         let p_hash = hash_password(&p);
-                                        let res = rt.block_on(async {
+                                        let res = run_sync(&rt, async {
                                             let db = state.db.read().await;
                                             sqlx::query("INSERT INTO users (username, password_hash, full_name, role, is_locked) VALUES (?, ?, ?, ?, 0)")
                                                 .bind(&u).bind(&p_hash).bind(&f).bind(&role_str)
@@ -1137,7 +1154,7 @@ pub fn App() -> Element {
                                     let state = ctx.state.clone();
                                     let mut r_usr = refresh_users.clone();
                                     move |uid| {
-                                        let _ = rt.block_on(async {
+                                        let _ = run_sync(&rt, async {
                                             let db = state.db.read().await;
                                             sqlx::query("UPDATE users SET is_locked = CASE WHEN is_locked = 1 THEN 0 ELSE 1 END WHERE id = ?")
                                                 .bind(uid).execute(&*db).await
@@ -1153,7 +1170,7 @@ pub fn App() -> Element {
                                     let mut r_cat = refresh_admin_catalogs.clone();
                                     move |cid| {
                                         let ct = catalog_type_filter.read().clone();
-                                        let _ = rt.block_on(async {
+                                        let _ = run_sync(&rt, async {
                                             let db = state.db.read().await;
                                             let _ = sqlx::query("UPDATE catalogs SET is_default = 0 WHERE cat_type = ?").bind(&ct).execute(&*db).await;
                                             let _ = sqlx::query("UPDATE catalogs SET is_default = 1 WHERE id = ?").bind(cid).execute(&*db).await;
@@ -1167,7 +1184,7 @@ pub fn App() -> Element {
                                     let state = ctx.state.clone();
                                     let mut r_cat = refresh_admin_catalogs.clone();
                                     move |cid| {
-                                        let _ = rt.block_on(async {
+                                        let _ = run_sync(&rt, async {
                                             let db = state.db.read().await;
                                             sqlx::query("UPDATE catalogs SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?")
                                                 .bind(cid).execute(&*db).await
@@ -1181,7 +1198,7 @@ pub fn App() -> Element {
                                     let state = ctx.state.clone();
                                     let mut r_cat = refresh_admin_catalogs.clone();
                                     move |_| {
-                                        let res = rt.block_on(async {
+                                        let res = run_sync(&rt, async {
                                             let db = state.db.read().await;
                                             seed_catalogs_from_asset(&*db).await.map_err(|e| e.to_string())
                                         });
@@ -1231,7 +1248,7 @@ pub fn App() -> Element {
                                         if let Some(ref mut u) = *current_user.write() {
                                             let uid = u.id;
                                             let new_name = profile_full_name.read().trim().to_string();
-                                            let _ = rt.block_on(async {
+                                            let _ = run_sync(&rt, async {
                                                 let db = state.db.read().await;
                                                 sqlx::query("UPDATE users SET full_name = ? WHERE id = ?")
                                                     .bind(&new_name).bind(uid).execute(&*db).await
@@ -1257,7 +1274,7 @@ pub fn App() -> Element {
                                         let Some(u) = current_user.read().clone() else { return; };
                                         let old_h = hash_password(profile_old_pw.read().trim());
                                         let new_h = hash_password(profile_new_pw.read().trim());
-                                        let res = rt.block_on(async {
+                                        let res = run_sync(&rt, async {
                                             let db = state.db.read().await;
                                             let row: Option<(String,)> = sqlx::query_as("SELECT password_hash FROM users WHERE id = ?")
                                                 .bind(u.id).fetch_optional(&*db).await.map_err(|e| e.to_string())?;

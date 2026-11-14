@@ -11,21 +11,88 @@ use axum::{routing::post, Router};
 use config::AppConfig;
 use gui::AppLaunchCtx;
 use handlers::{mock_his_api_handler, push_his_patient_handler, AppState};
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    fs::OpenOptions,
+    io::Write,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::{Any, CorsLayer};
 
-fn main() {
-    updater::cleanup_old_exe_on_startup();
+fn setup_logging_and_panic_hook() {
+    let log_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("ksk_app.log")
+        .ok();
+    let log_mutex = Arc::new(Mutex::new(log_file));
 
-    tracing_subscriber::fmt()
+    // Ghi toàn bộ panic (kể cả trong Dioxus Scope) ra file ksk_app.log
+    let panic_log = log_mutex.clone();
+    std::panic::set_hook(Box::new(move |info| {
+        let bt = std::backtrace::Backtrace::force_capture();
+        let msg = format!(
+            "\n[{}] PANIC: {}\nBacktrace:\n{}\n",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+            info,
+            bt
+        );
+        eprintln!("{}", msg);
+        if let Ok(mut guard) = panic_log.lock() {
+            if let Some(ref mut f) = *guard {
+                let _ = f.write_all(msg.as_bytes());
+                let _ = f.flush();
+            }
+        }
+    }));
+
+    // Ghi tracing log ra ksk_app.log
+    let writer_log = log_mutex;
+    let make_writer = move || LogFileWriter(writer_log.clone());
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info".into()),
         )
-        .init();
+        .with_writer(make_writer)
+        .with_ansi(false)
+        .try_init();
+}
+
+struct LogFileWriter(Arc<Mutex<Option<std::fs::File>>>);
+
+impl Write for LogFileWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let _ = std::io::stderr().write_all(buf);
+        if let Ok(mut guard) = self.0.lock() {
+            if let Some(ref mut f) = *guard {
+                let _ = f.write_all(buf);
+            }
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        let _ = std::io::stderr().flush();
+        if let Ok(mut guard) = self.0.lock() {
+            if let Some(ref mut f) = *guard {
+                let _ = f.flush();
+            }
+        }
+        Ok(())
+    }
+}
+
+fn main() {
+    setup_logging_and_panic_hook();
+    updater::cleanup_old_exe_on_startup();
+
+    tracing::info!("=== Khoi dong KSK Native Desktop (Dioxus 0.6) ===");
 
     let cfg = AppConfig::load();
+    tracing::info!("Database path: {}", cfg.database_path);
+
     let rt = Arc::new(
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -67,10 +134,10 @@ fn main() {
 
         let addr = SocketAddr::from(([127, 0, 0, 1], ipc_port));
         if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
-            tracing::info!("Local HIS Bridge IPC đang lắng nghe tại http://{}", addr);
+            tracing::info!("Local HIS Bridge IPC dang lang nghe tai http://{}", addr);
             let _ = axum::serve(listener, app).await;
         } else {
-            tracing::warn!("Cổng Local IPC {} đã được tiến trình khác sử dụng", ipc_port);
+            tracing::warn!("Cong Local IPC {} da duoc tien trinh khac su dung", ipc_port);
         }
     });
 
