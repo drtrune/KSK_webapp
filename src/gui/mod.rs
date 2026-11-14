@@ -436,7 +436,12 @@ impl KskGpuiApp {
         if let Some(existing) = self.form_inputs.get(key) {
             return existing.clone();
         }
-        let initial = self.form_values.get(key).cloned().unwrap_or_default();
+        let raw_val = self.form_values.get(key).cloned().unwrap_or_default();
+        let initial = if raw_val.is_empty() && placeholder.starts_with("Bình thường") {
+            "Bình thường".to_string()
+        } else {
+            raw_val
+        };
         let ph = placeholder.to_string();
         let entity = cx.new(|cx| {
             let s = InputState::new(window, cx)
@@ -471,7 +476,12 @@ impl KskGpuiApp {
         if let Some(existing) = self.form_textareas.get(key) {
             return existing.clone();
         }
-        let initial = self.form_values.get(key).cloned().unwrap_or_default();
+        let raw_val = self.form_values.get(key).cloned().unwrap_or_default();
+        let initial = if raw_val.is_empty() && placeholder.starts_with("Bình thường") {
+            "Bình thường".to_string()
+        } else {
+            raw_val
+        };
         let ph = placeholder.to_string();
         let entity = cx.new(|cx| {
             TextareaState::new(window, cx)
@@ -738,6 +748,19 @@ impl KskGpuiApp {
         let mut incoming = Map::new();
         for (k, v) in &self.form_values {
             incoming.insert(k.clone(), Value::String(v.clone()));
+        }
+        // Chỉ khi lưu đúng chuyên khoa này mới lấy giá trị mặc định trên UI (Bình thường / Loại 1) nếu chưa sửa
+        for &f in crate::models::get_section_fields(section) {
+            if !incoming.contains_key(f) {
+                if let Some(ta) = self.form_textareas.get(f) {
+                    let v = ta.read(cx).value().trim().to_string();
+                    if !v.is_empty() {
+                        incoming.insert(f.to_string(), Value::String(v));
+                    }
+                } else if f.ends_with("_PL") {
+                    incoming.insert(f.to_string(), Value::String("1".into()));
+                }
+            }
         }
 
         let state = self.state.clone();
@@ -1454,6 +1477,63 @@ impl KskGpuiApp {
         }
     }
 
+    pub fn set_default_tabs_for_user(&mut self, u: &User) {
+        let roles = u.roles();
+        let first_specific = roles
+            .iter()
+            .find(|r| r.as_str() != "admin")
+            .or_else(|| roles.first());
+        let Some(role) = first_specific else {
+            return;
+        };
+        match role.as_str() {
+            "reception" | "admin" => {
+                self.active_exam_tab = "reception".into();
+            }
+            "tiensu" => {
+                self.active_exam_tab = "history".into();
+            }
+            "bs_theluc" => {
+                self.active_exam_tab = "physical".into();
+            }
+            "bs_noi" => {
+                self.active_exam_tab = "clinical".into();
+                self.active_clinical_subtab = "noi".into();
+            }
+            "bs_ngoai" => {
+                self.active_exam_tab = "clinical".into();
+                self.active_clinical_subtab = "ngoai".into();
+            }
+            "bs_dalieu" => {
+                self.active_exam_tab = "clinical".into();
+                self.active_clinical_subtab = "dalieu".into();
+            }
+            "bs_san" => {
+                self.active_exam_tab = "clinical".into();
+                self.active_clinical_subtab = "san".into();
+            }
+            "bs_mat" => {
+                self.active_exam_tab = "clinical".into();
+                self.active_clinical_subtab = "mat".into();
+            }
+            "bs_tmh" => {
+                self.active_exam_tab = "clinical".into();
+                self.active_clinical_subtab = "tmh".into();
+            }
+            "bs_rhm" => {
+                self.active_exam_tab = "clinical".into();
+                self.active_clinical_subtab = "rhm".into();
+            }
+            "bs_cls" | "cls" | "xetnghiem" | "cdha" => {
+                self.active_exam_tab = "paraclinical".into();
+            }
+            "bs_ketluan" => {
+                self.active_exam_tab = "conclusion".into();
+            }
+            _ => {}
+        }
+    }
+
     pub fn do_login(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let username = self.login_username.read(cx).value().trim().to_string();
         let password = self.login_password.read(cx).value().to_string();
@@ -1502,6 +1582,7 @@ impl KskGpuiApp {
                 self.login_error = None;
                 self.prof_full_name
                     .update(cx, |s, cx| s.set_value(u.full_name.clone(), window, cx));
+                self.set_default_tabs_for_user(&u);
                 self.current_user = Some(u);
                 self.refresh_catalogs(cx);
                 self.refresh_records(window, cx);

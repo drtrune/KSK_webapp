@@ -680,12 +680,12 @@ impl KskGpuiApp {
                             .child(self.render_form_input("CO_KINH_MAT_PHAI", "Thị lực có kính MP", "10/10", false, edit_mat, window, cx))
                             .child(self.render_form_input("CO_KINH_MAT_TRAI", "Thị lực có kính MT", "10/10", false, edit_mat, window, cx)),
                     )
-                    .when(self.clinical_catalog_mode, |el| {
-                        el.child(self.render_specialty_classification_block("CK_MAT", "Chuyên khoa Mắt", edit_mat, window, cx))
-                    })
                     .child(self.render_form_textarea("BENH_KHAC_MAT", "Kết quả khám & Các bệnh về mắt", "Bình thường / Không có bệnh lý...", 3, edit_mat, window, cx))
                     .child(self.render_pl_radio_group("mat", "KHAM_MAT_PL", "Phân loại Mắt", edit_mat, cx))
                     .child(self.render_form_input("BS_MAT", "Bác sĩ khám Mắt", "", false, edit_mat, window, cx))
+                    .when(self.clinical_catalog_mode, |el| {
+                        el.child(self.render_specialty_classification_block("CK_MAT", "Chuyên khoa Mắt", edit_mat, window, cx))
+                    })
                     .into_any_element()
             }
             "tmh" => {
@@ -704,12 +704,12 @@ impl KskGpuiApp {
                             .child(self.render_form_input("TAI_TRAI_NOI_THUONG", "Tai trái nói thường (m)", "5m", false, edit_tmh, window, cx))
                             .child(self.render_form_input("TAI_TRAI_NOI_THAM", "Tai trái nói thầm (m)", "0.5m", false, edit_tmh, window, cx)),
                     )
-                    .when(self.clinical_catalog_mode, |el| {
-                        el.child(self.render_specialty_classification_block("CK_TMH", "Tai - Mũi - Họng", edit_tmh, window, cx))
-                    })
                     .child(self.render_form_textarea("BENH_KHAC_TAI_MUI_HONG", "Kết quả khám & Bệnh Tai - Mũi - Họng", "Bình thường...", 3, edit_tmh, window, cx))
                     .child(self.render_pl_radio_group("tmh", "KHAM_TAI_MUI_HONG_PL", "Phân loại TMH", edit_tmh, cx))
                     .child(self.render_form_input("BS_TMH", "Bác sĩ khám TMH", "", false, edit_tmh, window, cx))
+                    .when(self.clinical_catalog_mode, |el| {
+                        el.child(self.render_specialty_classification_block("CK_TMH", "Tai - Mũi - Họng", edit_tmh, window, cx))
+                    })
                     .into_any_element()
             }
             "rhm" => {
@@ -726,12 +726,12 @@ impl KskGpuiApp {
                             .child(self.render_form_textarea("HAM_TREN", "Hàm trên", "Bình thường", 2, edit_rhm, window, cx))
                             .child(self.render_form_textarea("HAM_DUOI", "Hàm dưới", "Bình thường", 2, edit_rhm, window, cx)),
                     )
-                    .when(self.clinical_catalog_mode, |el| {
-                        el.child(self.render_specialty_classification_block("CK_RHM", "Răng - Hàm - Mặt", edit_rhm, window, cx))
-                    })
                     .child(self.render_form_textarea("BENH_KHAC_RANG_HAM_MAT", "Kết quả khám & Bệnh Răng - Hàm - Mặt", "Bình thường...", 3, edit_rhm, window, cx))
                     .child(self.render_pl_radio_group("rhm", "KHAM_RANG_HAM_MAT_PL", "Phân loại RHM", edit_rhm, cx))
                     .child(self.render_form_input("BS_RHM", "Bác sĩ khám RHM", "", false, edit_rhm, window, cx))
+                    .when(self.clinical_catalog_mode, |el| {
+                        el.child(self.render_specialty_classification_block("CK_RHM", "Răng - Hàm - Mặt", edit_rhm, window, cx))
+                    })
                     .into_any_element()
             }
             "tree" => self.render_disease_classification_tree(window, cx),
@@ -789,15 +789,6 @@ impl KskGpuiApp {
                         cx,
                     ))
                     .child(noi_subtab_bar)
-                    .when(self.clinical_catalog_mode, |el| {
-                        el.child(self.render_specialty_classification_block(
-                            current_noi.0,
-                            current_noi.3,
-                            edit_noi,
-                            window,
-                            cx,
-                        ))
-                    })
                     .child(self.render_form_textarea(
                         current_noi.1,
                         &format!("Kết quả {}", current_noi.3),
@@ -815,6 +806,15 @@ impl KskGpuiApp {
                         cx,
                     ))
                     .child(self.render_form_input("BS_NOI", "Bác sĩ Nội khoa", "", false, edit_noi, window, cx))
+                    .when(self.clinical_catalog_mode, |el| {
+                        el.child(self.render_specialty_classification_block(
+                            current_noi.0,
+                            current_noi.3,
+                            edit_noi,
+                            window,
+                            cx,
+                        ))
+                    })
                     .into_any_element()
             }
         };
@@ -845,13 +845,10 @@ impl KskGpuiApp {
     ) -> AnyElement {
         card_box()
             .child(self.render_section_action_bar(sec_key, title, can_role, is_locked, cx))
-            .when(self.clinical_catalog_mode, |el| {
-                el.child(self.render_specialty_classification_block(spec_id, title, editable, window, cx))
-            })
             .child(self.render_form_textarea(
                 f_kq,
                 "Kết quả khám chuyên khoa",
-                "Nhập chi tiết kết quả khám...",
+                "Bình thường...",
                 3,
                 editable,
                 window,
@@ -859,6 +856,9 @@ impl KskGpuiApp {
             ))
             .child(self.render_pl_radio_group(f_pl, f_pl, "Phân loại sức khỏe chuyên khoa", editable, cx))
             .child(self.render_form_input(f_bs, "Bác sĩ khám", "", false, editable, window, cx))
+            .when(self.clinical_catalog_mode, |el| {
+                el.child(self.render_specialty_classification_block(spec_id, title, editable, window, cx))
+            })
             .into_any_element()
     }
 
@@ -1060,7 +1060,12 @@ impl KskGpuiApp {
                     max_score = sc;
                 }
                 if sc > 1 {
-                    abn_names.push(format!("{}: {}", d_name, c_name));
+                    let clean_name = strip_loai_suffix(&c_name);
+                    if clean_name.is_empty() {
+                        abn_names.push(d_name.clone());
+                    } else {
+                        abn_names.push(format!("{}: {}", d_name, clean_name));
+                    }
                 }
             }
         }
@@ -1102,7 +1107,23 @@ impl KskGpuiApp {
             self.form_values.insert("SELECTED_CLASSIFICATIONS_JSON".into(), json);
         }
     }
+}
 
+fn strip_loai_suffix(s: &str) -> String {
+    let mut out = s.trim();
+    for pat in [
+        "(Loại 1)", "(Loại 2)", "(Loại 3)", "(Loại 4)", "(Loại 5)", "(Loại 6)",
+        "(loại 1)", "(loại 2)", "(loại 3)", "(loại 4)", "(loại 5)", "(loại 6)",
+    ] {
+        if let Some(stripped) = out.strip_suffix(pat) {
+            out = stripped.trim();
+            break;
+        }
+    }
+    out.to_string()
+}
+
+impl KskGpuiApp {
     fn render_specialty_classification_block(
         &mut self,
         spec_id: &str,

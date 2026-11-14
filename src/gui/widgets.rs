@@ -178,6 +178,11 @@ impl KskGpuiApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let current_val = self.get_form_val(field_key);
+        let display_val = if current_val.is_empty() {
+            "1".to_string()
+        } else {
+            current_val
+        };
         let opts = [
             ("1", "Loại 1"),
             ("2", "Loại 2"),
@@ -202,7 +207,7 @@ impl KskGpuiApp {
                     .flex_wrap()
                     .gap(px(6.0))
                     .children(opts.iter().map(|(val, lbl)| {
-                        let is_sel = current_val == *val;
+                        let is_sel = display_val == *val;
                         let v_owned = (*val).to_string();
                         let fk_c = fk.clone();
                         div()
