@@ -80,21 +80,23 @@ impl KskGpuiApp {
                             .gap(px(10.0))
                             .child(
                                 div()
-                                    .w(px(140.0))
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(4.0))
-                                    .child(field_label("Từ ngày", false))
-                                    .child(Input::new(&self.exp_from_date).small()),
+                                    .w(px(170.0))
+                                    .child(self.render_date_picker_entity(
+                                        "exp-from",
+                                        "Từ ngày",
+                                        self.exp_from_date.clone(),
+                                        cx,
+                                    )),
                             )
                             .child(
                                 div()
-                                    .w(px(140.0))
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(4.0))
-                                    .child(field_label("Đến ngày", false))
-                                    .child(Input::new(&self.exp_to_date).small()),
+                                    .w(px(170.0))
+                                    .child(self.render_date_picker_entity(
+                                        "exp-to",
+                                        "Đến ngày",
+                                        self.exp_to_date.clone(),
+                                        cx,
+                                    )),
                             )
                             .child(
                                 div()

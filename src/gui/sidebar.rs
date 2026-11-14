@@ -140,8 +140,18 @@ impl KskGpuiApp {
                             .flex()
                             .flex_row()
                             .gap(px(6.0))
-                            .child(div().flex_1().child(Input::new(&self.sidebar_from_date).small()))
-                            .child(div().flex_1().child(Input::new(&self.sidebar_to_date).small())),
+                            .child(self.render_date_picker_entity(
+                                "sb-from",
+                                "",
+                                self.sidebar_from_date.clone(),
+                                cx,
+                            ))
+                            .child(self.render_date_picker_entity(
+                                "sb-to",
+                                "",
+                                self.sidebar_to_date.clone(),
+                                cx,
+                            )),
                     )
                     .child(
                         div()

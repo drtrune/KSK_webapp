@@ -261,7 +261,7 @@ impl KskGpuiApp {
                             .child(self.render_form_input("HO_TEN", "Họ và tên", "NGUYỄN VĂN A", true, editable, window, cx))
                             .child(self.render_form_input("MA_Y_TE", "Mã bệnh nhân (HIS)", "BN...", true, editable, window, cx))
                             .child(self.render_form_input("MA_TIEP_NHAN", "Số tiếp nhận", "TN...", false, editable, window, cx))
-                            .child(self.render_form_input("NGAY_SINH", "Ngày sinh (YYYYMMDD)", "19900101", true, editable, window, cx)),
+                            .child(self.render_date_picker_form("rec-ngay-sinh", "NGAY_SINH", "Ngày sinh (YYYYMMDD)", "19900101", true, editable, false, window, cx)),
                     )
                     .child(
                         div()
@@ -281,7 +281,7 @@ impl KskGpuiApp {
                                 cx,
                             ))
                             .child(self.render_form_input("SO_CCCD", "Số CCCD / CMND", "052...", false, editable, window, cx))
-                            .child(self.render_form_input("NGAYCAP_CCCD", "Ngày cấp CCCD", "20210501", false, editable, window, cx))
+                            .child(self.render_date_picker_form("rec-ngaycap-cccd", "NGAYCAP_CCCD", "Ngày cấp CCCD", "20210501", false, editable, false, window, cx))
                             .child(self.render_form_input("NOICAP_CCCD", "Nơi cấp CCCD", "Cục CSQLHC...", false, editable, window, cx)),
                     )
                     .child(
@@ -364,7 +364,7 @@ impl KskGpuiApp {
                                 },
                                 cx,
                             ))
-                            .child(self.render_form_input("NGAY_VAO", "Ngày vào khám (YYYYMMDDHHMM)", "", false, editable, window, cx))
+                            .child(self.render_date_picker_form("rec-ngay-vao", "NGAY_VAO", "Ngày vào khám (YYYYMMDDHHMM)", "", false, editable, true, window, cx))
                             .child(self.render_select_dropdown(
                                 "rec-nhom-mau",
                                 "Nhóm máu",
@@ -411,10 +411,8 @@ impl KskGpuiApp {
         let can_role = self.has_any_role(&["admin", "reception", "tiensu", "bs_noi"]);
         let editable = !is_locked && can_role && self.editing_section.as_deref() == Some("history");
         let ts_gd = self.get_form_val("TSGD_MAC_BENH");
-        let icd_val = self.get_form_val("TSBT_MA_BENH");
-
-        let mut icd_opts = vec![("".to_string(), "-- Chọn nhanh ICD-10 --".to_string())];
-        icd_opts.extend(self.query_catalog_options("ICD10", None));
+        let gioi_tinh = self.get_form_val("GIOI_TINH");
+        let ts_thai_san = self.get_form_val("TSBT_THAI_SAN");
 
         div()
             .flex()
@@ -487,21 +485,13 @@ impl KskGpuiApp {
                             .flex_wrap()
                             .gap(px(12.0))
                             .child(self.render_form_input("TSBT_MA_BENH_KHAC", "Bệnh khác (nếu có)", "", false, editable, window, cx))
-                            .child(self.render_select_dropdown(
+                            .child(self.render_icd_multi_select(
                                 "hist-icd10",
-                                "Chọn nhanh ICD-10 đang điều trị",
-                                &icd_val,
-                                icd_opts,
+                                "TSBT_MA_BENH",
+                                "Mã bệnh đang điều trị (ICD-10 - chọn nhiều)",
                                 editable,
-                                |this, val, window, cx| {
-                                    this.form_values.insert("TSBT_MA_BENH".into(), val.clone());
-                                    if let Some(inp) = this.form_inputs.get("TSBT_MA_BENH") {
-                                        inp.update(cx, |s, cx| s.set_value(val, window, cx));
-                                    }
-                                },
                                 cx,
-                            ))
-                            .child(self.render_form_input("TSBT_MA_BENH", "Mã bệnh đang điều trị", "", false, editable, window, cx)),
+                            )),
                     )
                     .child(self.render_form_textarea(
                         "TSBT_TEN_THUOC_LIEU_LUONG",
@@ -513,6 +503,65 @@ impl KskGpuiApp {
                         cx,
                     )),
             )
+            .when(gioi_tinh == "2", |el| {
+                el.child(
+                    card_box()
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .text_color(rgb(text_main()))
+                                        .child("D. Tiền sử sản khoa (Chỉ áp dụng đối với Nữ)"),
+                                )
+                                .child(badge("Bệnh nhân Nữ", primary_light(), PRIMARY_COL)),
+                        )
+                        .child(self.render_select_dropdown(
+                            "hist-thai-san",
+                            "Tiền sử thai sản",
+                            &ts_thai_san,
+                            vec![
+                                ("0".to_string(), "0 - Không".to_string()),
+                                ("1".to_string(), "1 - Có".to_string()),
+                            ],
+                            editable,
+                            |this, val, _, _| {
+                                this.form_values.insert("TSBT_THAI_SAN".into(), val);
+                            },
+                            cx,
+                        ))
+                        .when(ts_thai_san == "1", |sub| {
+                            sub.child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .flex_wrap()
+                                    .gap(px(12.0))
+                                    .child(self.render_icd_multi_select(
+                                        "hist-icd10-thaisan",
+                                        "TSBT_MA_BENH_THAI_SAN",
+                                        "Mã bệnh / Tình trạng thai sản (ICD-10 - chọn nhiều)",
+                                        editable,
+                                        cx,
+                                    ))
+                                    .child(self.render_form_input(
+                                        "TSBT_TEN_THUOC_THAI_SAN",
+                                        "Thuốc điều trị thai sản (nếu có)",
+                                        "Tên thuốc...",
+                                        false,
+                                        editable,
+                                        window,
+                                        cx,
+                                    )),
+                            )
+                        }),
+                )
+            })
             .into_any_element()
     }
 
@@ -978,7 +1027,7 @@ impl KskGpuiApp {
                 .into_iter()
                 .filter(|d| d.parent_code == spec_id)
                 .map(|d| {
-                    let classes = db_classes
+                    let mut classes: Vec<(String, String, i64, Option<String>, bool)> = db_classes
                         .iter()
                         .filter(|c| c.parent_code == d.code)
                         .map(|c| {
@@ -998,6 +1047,7 @@ impl KskGpuiApp {
                             (c.code.clone(), c.name.clone(), sc, ref_rule, is_ref)
                         })
                         .collect();
+                    classes.sort_by_key(|c| c.2);
                     (d.code, d.name, classes)
                 })
                 .collect()
@@ -1006,7 +1056,7 @@ impl KskGpuiApp {
                 .iter()
                 .filter(|d| d.specialty_id == spec_id)
                 .map(|d| {
-                    let classes = cfg
+                    let mut classes: Vec<(String, String, i64, Option<String>, bool)> = cfg
                         .classifications
                         .iter()
                         .filter(|c| c.disease_id == d.id)
@@ -1021,6 +1071,7 @@ impl KskGpuiApp {
                             (c.id.clone(), c.name.clone(), sc, c.ref_rule.clone(), is_ref)
                         })
                         .collect();
+                    classes.sort_by_key(|c| c.2);
                     (d.id.clone(), d.name.clone(), classes)
                 })
                 .collect()
@@ -1052,6 +1103,7 @@ impl KskGpuiApp {
                 let sel_id = self.selected_classifications.get(d_code);
                 sel_id
                     .and_then(|cid| classes.iter().find(|(c, _, _, _, _)| c == cid))
+                    .or_else(|| classes.iter().find(|(_, _, sc, _, _)| *sc == 1))
                     .or_else(|| classes.first())
                     .map(|(_, n, sc, _, _)| (n.clone(), *sc))
             };
@@ -1148,6 +1200,7 @@ impl KskGpuiApp {
                 let sel_id = self.selected_classifications.get(d_code);
                 sel_id
                     .and_then(|cid| classes.iter().find(|(c, _, _, _, _)| c == cid))
+                    .or_else(|| classes.iter().find(|(_, _, sc, _, _)| *sc == 1))
                     .or_else(|| classes.first())
                     .map(|(_, n, sc, _, _)| (n.clone(), *sc))
             };
@@ -1337,11 +1390,13 @@ impl KskGpuiApp {
                         .into_any_element();
                 }
 
-                let is_open = expand_all || self.expanded_diseases.contains(&d_code);
+                let is_radio_inline = !classes.is_empty() && classes.len() < 4;
+                let is_open = is_radio_inline || expand_all || self.expanded_diseases.contains(&d_code);
                 let sel_id = self.selected_classifications.get(&d_code).cloned();
                 let current_cls = sel_id
                     .as_ref()
                     .and_then(|cid| classes.iter().find(|(c, _, _, _, _)| c == cid))
+                    .or_else(|| classes.iter().find(|(_, _, sc, _, _)| *sc == 1))
                     .or_else(|| classes.first());
                 let (cur_cls_code, cur_cls_name, cur_score) = current_cls
                     .map(|(c, n, s, _, _)| (c.clone(), n.clone(), *s))

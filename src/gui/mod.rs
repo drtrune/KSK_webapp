@@ -108,6 +108,7 @@ pub struct KskGpuiApp {
     pub selected_classifications: HashMap<String, String>,
     pub disease_search_input: Entity<InputState>,
     pub selected_specialty_filter: String,
+    pub date_picker_view_ym: (i32, u32),
 
     // Export CSV Tab
     pub exp_from_date: Entity<InputState>,
@@ -372,6 +373,11 @@ impl KskGpuiApp {
             selected_classifications: HashMap::new(),
             disease_search_input,
             selected_specialty_filter: String::new(),
+            date_picker_view_ym: {
+                use chrono::Datelike;
+                let now = chrono::Local::now().date_naive();
+                (now.year(), now.month())
+            },
             exp_from_date,
             exp_to_date,
             exp_q,
