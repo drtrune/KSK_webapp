@@ -1,706 +1,1066 @@
-use super::components::{
-    form_set_key, map_get, CatalogSelect, IcdMultiField, SectionHeader, SelectField,
-    TextAreaField, TextField, PL_OPTIONS, YES_NO_OPTIONS,
+use gpui::{
+    AnyElement, Context, InteractiveElement, IntoElement, ParentElement, SharedString,
+    StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder as _, px, rgb,
 };
-use crate::models::{phan_loai_config, CatalogItem, User};
-use dioxus::prelude::*;
-use serde_json::{Map, Value};
-use std::collections::HashMap;
+use gpui_component::{
+    Disableable as _, Sizable,
+    button::{Button, ButtonVariants},
+    checkbox::Checkbox,
+    input::Input,
+};
 
-const TSBT_ITEMS: &[(&str, &str)] = &[
-    ("TSBT_BENH_TRONG_5_NAM_QUA", "Bệnh trong 5 năm qua"),
-    ("TSBT_BENH_THAN_KINH", "Bệnh thần kinh"),
-    ("TSBT_BENH_MAT", "Bệnh mắt / giảm thị lực"),
-    ("TSBT_BENH_TAI", "Bệnh tai / thính lực"),
-    ("TSBT_BENH_TIM", "Bệnh tim mạch"),
-    ("TSBT_PHAU_THUAT_TIM", "Phẫu thuật tim / can thiệp mạch"),
-    ("TSBT_TANG_HUYET_AP", "Tăng huyết áp"),
-    ("TSBT_KHO_THO", "Khó thở / hen phế quản"),
-    ("TSBT_BENH_PHOI", "Bệnh phổi / lao phổi"),
-    ("TSBT_BENH_THAN", "Bệnh thận / tiết niệu"),
-    ("TSBT_NGHIEN_RUOU", "Nghiện rượu / bia"),
-    ("TSBT_DAI_THAO_DUONG", "Đái tháo đường"),
-    ("TSBT_BENH_TAM_THAN", "Bệnh tâm thần"),
-    ("TSBT_MAT_Y_THUC", "Mất ý thức / động kinh"),
-    ("TSBT_NGAT", "Ngất / xỉu"),
-    ("TSBT_BENH_TIEU_HOA", "Bệnh tiêu hóa / gan mật"),
-    ("TSBT_ROI_LOAN_GIAC_NGU", "Rối loạn giấc ngủ"),
-    ("TSBT_TAI_BIEN", "Tai biến mạch máu não"),
-    ("TSBT_BENH_COT_SONG", "Bệnh cột sống / xương khớp"),
-    ("TSBT_RUOU_THUONG_XUYEN", "Uống rượu thường xuyên"),
-    ("TSBT_MA_TUY", "Sử dụng chất gây nghiện / ma túy"),
+use crate::models::phan_loai_config;
+
+use super::{
+    KskGpuiApp,
+    widgets::{
+        BG_CARD, BG_SUBTLE, BORDER_COL, DANGER_BG, DANGER_COL, PRIMARY_COL, PRIMARY_LIGHT,
+        SUCCESS_BG, SUCCESS_COL, TEXT_MAIN, TEXT_MUTED, WARN_BG, WARN_COL, badge, card_box,
+    },
+};
+
+const TIEN_SU_21_ITEMS: &[(&str, &str)] = &[
+    ("TSBT_BENH_TRONG_5_NAM_QUA", "1. Bá»‡nh trong 5 nÄƒm qua"),
+    ("TSBT_BENH_THAN_KINH", "2. Bá»‡nh tháº§n kinh"),
+    ("TSBT_BENH_MAT", "3. Bá»‡nh máº¯t"),
+    ("TSBT_BENH_TAI", "4. Bá»‡nh tai"),
+    ("TSBT_BENH_TIM", "5. Bá»‡nh tim máº¡ch"),
+    ("TSBT_PHAU_THUAT_TIM", "6. Pháº«u thuáº­t tim"),
+    ("TSBT_TANG_HUYET_AP", "7. TÄƒng huyáº¿t Ã¡p"),
+    ("TSBT_KHO_THO", "8. KhÃ³ thá»Ÿ"),
+    ("TSBT_BENH_PHOI", "9. Bá»‡nh phá»•i / hen"),
+    ("TSBT_BENH_THAN", "10. Bá»‡nh tháº­n"),
+    ("TSBT_NGHIEN_RUOU", "11. Nghiá»‡n rÆ°á»£u"),
+    ("TSBT_DAI_THAO_DUONG", "12. ÄÃ¡i thÃ¡o Ä‘Æ°á»ng"),
+    ("TSBT_BENH_TAM_THAN", "13. Bá»‡nh tÃ¢m tháº§n"),
+    ("TSBT_MAT_Y_THUC", "14. Máº¥t Ã½ thá»©c / Ä‘á»™ng kinh"),
+    ("TSBT_NGAT", "15. Ngáº¥t"),
+    ("TSBT_BENH_TIEU_HOA", "16. Bá»‡nh tiÃªu hÃ³a"),
+    ("TSBT_ROI_LOAN_GIAC_NGU", "17. Rá»‘i loáº¡n giáº¥c ngá»§"),
+    ("TSBT_TAI_BIEN", "18. Tai biáº¿n máº¡ch mÃ¡u nÃ£o"),
+    ("TSBT_BENH_COT_SONG", "19. Bá»‡nh cá»™t sá»‘ng"),
+    ("TSBT_RUOU_THUONG_XUYEN", "20. Uá»‘ng rÆ°á»£u thÆ°á»ng xuyÃªn"),
+    ("TSBT_MA_TUY", "21. Sá»­ dá»¥ng ma tÃºy"),
 ];
 
-fn pl_opts() -> Vec<(String, String)> {
-    PL_OPTIONS
-        .iter()
-        .map(|(c, n)| ((*c).to_string(), (*n).to_string()))
-        .collect()
+fn pl_options() -> Vec<(String, String)> {
+    vec![
+        ("".to_string(), "-- ChÆ°a phÃ¢n loáº¡i --".to_string()),
+        ("1".to_string(), "Loáº¡i 1 (Ráº¥t khá»e)".to_string()),
+        ("2".to_string(), "Loáº¡i 2 (Khá»e)".to_string()),
+        ("3".to_string(), "Loáº¡i 3 (Trung bÃ¬nh)".to_string()),
+        ("4".to_string(), "Loáº¡i 4 (Yáº¿u)".to_string()),
+        ("5".to_string(), "Loáº¡i 5 (Ráº¥t yáº¿u)".to_string()),
+    ]
 }
 
-fn yn_opts() -> Vec<(String, String)> {
-    YES_NO_OPTIONS
-        .iter()
-        .map(|(c, n)| ((*c).to_string(), (*n).to_string()))
-        .collect()
-}
+impl KskGpuiApp {
+    pub fn render_exam_workspace(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        if self.selected_record_id.is_none() && !self.is_creating_new {
+            return div()
+                .flex_1()
+                .h_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    card_box()
+                        .w(px(440.0))
+                        .items_center()
+                        .child(
+                            div()
+                                .text_lg()
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(rgb(TEXT_MAIN))
+                                .child("ChÆ°a chá»n há»“ sÆ¡ bá»‡nh nhÃ¢n"),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(rgb(TEXT_MUTED))
+                                .child("Chá»n má»™t há»“ sÆ¡ á»Ÿ danh sÃ¡ch bÃªn trÃ¡i, quÃ©t mÃ£ váº¡ch, hoáº·c nháº¥n '+ Tiáº¿p nháº­n há»“ sÆ¡ má»›i'."),
+                        ),
+                )
+                .into_any_element();
+        }
 
-fn check_section_unlocked(
-    user: &Option<User>,
-    selected_record_id: Option<i64>,
-    selected_record_status: i64,
-    editing_sections: &HashMap<String, bool>,
-    section: &str,
-    role: &str,
-) -> (bool, bool) {
-    let can_role = user
-        .as_ref()
-        .map(|u| u.has_role("admin") || u.has_role(role))
-        .unwrap_or(false);
-    if selected_record_status == 1 || !can_role {
-        return (can_role, false);
+        let is_locked = self.current_record_status == 2;
+        let ho_ten = self.get_form_val("HO_TEN");
+        let ma_bn = self.get_form_val("MA_Y_TE");
+        let ma_tn = self.get_form_val("MA_TIEP_NHAN");
+
+        let tabs = [
+            ("reception", "1. Tiáº¿p nháº­n"),
+            ("history", "2. Tiá»n sá»­"),
+            ("physical", "3. Thá»ƒ lá»±c"),
+            ("clinical", "4. LÃ¢m sÃ ng"),
+            ("paraclinical", "5. Cáº­n lÃ¢m sÃ ng"),
+            ("conclusion", "6. Káº¿t luáº­n"),
+        ];
+
+        let active = self.active_exam_tab.clone();
+
+        let body = match active.as_str() {
+            "reception" => self.render_tab_reception(is_locked, window, cx),
+            "history" => self.render_tab_history(is_locked, window, cx),
+            "physical" => self.render_tab_physical(is_locked, window, cx),
+            "clinical" => self.render_tab_clinical(is_locked, window, cx),
+            "paraclinical" => self.render_tab_paraclinical(is_locked, window, cx),
+            "conclusion" => self.render_tab_conclusion(is_locked, window, cx),
+            _ => self.render_tab_reception(is_locked, window, cx),
+        };
+
+        div()
+            .flex_1()
+            .h_full()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .child(
+                // Patient banner + sub-tabs
+                div()
+                    .bg(rgb(BG_CARD))
+                    .border_b_1()
+                    .border_color(rgb(BORDER_COL))
+                    .px(px(16.0))
+                    .pt(px(10.0))
+                    .flex()
+                    .flex_col()
+                    .gap(px(10.0))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .gap(px(10.0))
+                                    .child(
+                                        div()
+                                            .text_base()
+                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .text_color(rgb(TEXT_MAIN))
+                                            .child(if self.is_creating_new {
+                                                "Há»“ sÆ¡ tiáº¿p nháº­n má»›i".to_string()
+                                            } else if ho_ten.is_empty() {
+                                                "(ChÆ°a cÃ³ há» tÃªn)".to_string()
+                                            } else {
+                                                ho_ten
+                                            }),
+                                    )
+                                    .when(!ma_bn.is_empty(), |el| {
+                                        el.child(badge(format!("MÃ£ BN: {}", ma_bn), BG_SUBTLE, TEXT_MAIN))
+                                    })
+                                    .when(!ma_tn.is_empty(), |el| {
+                                        el.child(badge(format!("Sá»‘ TN: {}", ma_tn), PRIMARY_LIGHT, PRIMARY_COL))
+                                    }),
+                            )
+                            .child(match self.current_record_status {
+                                2 => badge("ÄÃ£ kÃ½ khÃ³a", DANGER_BG, DANGER_COL),
+                                1 => badge("HoÃ n táº¥t", SUCCESS_BG, SUCCESS_COL),
+                                _ => badge("Äang khÃ¡m", WARN_BG, WARN_COL),
+                            }),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .gap(px(4.0))
+                            .children(tabs.iter().map(|(key, lbl)| {
+                                let is_act = active == *key;
+                                let k = key.to_string();
+                                div()
+                                    .id(SharedString::from(format!("exam-tab-{}", key)))
+                                    .px(px(12.0))
+                                    .py(px(8.0))
+                                    .cursor_pointer()
+                                    .border_b_2()
+                                    .border_color(rgb(if is_act { PRIMARY_COL } else { BG_CARD }))
+                                    .text_sm()
+                                    .font_weight(if is_act {
+                                        gpui::FontWeight::SEMIBOLD
+                                    } else {
+                                        gpui::FontWeight::NORMAL
+                                    })
+                                    .text_color(rgb(if is_act { PRIMARY_COL } else { TEXT_MUTED }))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.active_exam_tab = k.clone();
+                                        this.open_dropdown = None;
+                                        cx.notify();
+                                    }))
+                                    .child(*lbl)
+                            })),
+                    ),
+            )
+            .child(
+                div()
+                    .id("exam-body-scroll")
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .p(px(16.0))
+                    .child(body),
+            )
+            .into_any_element()
     }
-    if selected_record_id.is_none() {
-        return (can_role, section == "reception");
+
+    fn render_tab_reception(
+        &mut self,
+        is_locked: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let can_role = self.has_any_role(&["admin", "reception", "tiensu"]);
+        let editable = !is_locked && can_role && self.editing_section.as_deref() == Some("reception");
+        let gioi_tinh = self.get_form_val("GIOI_TINH");
+        let kcb = self.get_form_val("MA_LOAI_KCB");
+
+        let gender_opts = vec![
+            ("1".to_string(), "1 - Nam".to_string()),
+            ("2".to_string(), "2 - Ná»¯".to_string()),
+            ("3".to_string(), "3 - KhÃ¡c".to_string()),
+        ];
+        let kcb_opts = vec![
+            ("1".to_string(), "1 - KhÃ¡m sá»©c khá»e Ä‘á»‹nh ká»³".to_string()),
+            ("2".to_string(), "2 - KhÃ¡m sá»©c khá»e tuyá»ƒn dá»¥ng".to_string()),
+            ("3".to_string(), "3 - KhÃ¡m sá»©c khá»e lÃ¡i xe".to_string()),
+        ];
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(14.0))
+            .child(
+                card_box()
+                    .child(self.render_section_action_bar(
+                        "reception",
+                        "ThÃ´ng tin hÃ nh chÃ­nh & Tiáº¿p nháº­n",
+                        can_role,
+                        is_locked,
+                        cx,
+                    ))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_form_input("HO_TEN", "Há» vÃ  tÃªn", "NGUYá»„N VÄ‚N A", true, editable, window, cx))
+                            .child(self.render_form_input("MA_Y_TE", "MÃ£ bá»‡nh nhÃ¢n (HIS)", "BN...", true, editable, window, cx))
+                            .child(self.render_form_input("MA_TIEP_NHAN", "Sá»‘ tiáº¿p nháº­n", "TN...", false, editable, window, cx))
+                            .child(self.render_form_input("NGAY_SINH", "NgÃ y sinh (YYYYMMDD)", "19900101", true, editable, window, cx)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_select_dropdown(
+                                "rec-gioi-tinh",
+                                "Giá»›i tÃ­nh",
+                                &gioi_tinh,
+                                gender_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("GIOI_TINH".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_form_input("SO_CCCD", "Sá»‘ CCCD / CMND", "052...", false, editable, window, cx))
+                            .child(self.render_form_input("NGAYCAP_CCCD", "NgÃ y cáº¥p CCCD", "20210501", false, editable, window, cx))
+                            .child(self.render_form_input("NOICAP_CCCD", "NÆ¡i cáº¥p CCCD", "Cá»¥c CSQLHC...", false, editable, window, cx)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_form_input("DIEN_THOAI", "Sá»‘ Ä‘iá»‡n thoáº¡i", "09...", false, editable, window, cx))
+                            .child(self.render_form_input("DIA_CHI", "Äá»‹a chá»‰ thÆ°á»ng trÃº", "Sá»‘ nhÃ , Ä‘Æ°á»ng...", false, editable, window, cx))
+                            .child(self.render_form_input("NOI_LAM_VIEC_HOC_TAP", "NÆ¡i lÃ m viá»‡c / Há»c táº­p", "CÃ´ng ty / ÄÆ¡n vá»‹...", false, editable, window, cx)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_select_dropdown(
+                                "rec-loai-kcb",
+                                "Loáº¡i hÃ¬nh khÃ¡m (QÄ 3176)",
+                                &kcb,
+                                kcb_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("MA_LOAI_KCB".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_form_input("NGAY_VAO", "NgÃ y vÃ o khÃ¡m (YYYYMMDDHHMM)", "", false, editable, window, cx))
+                            .child(self.render_form_input("NHOM_MAU", "NhÃ³m mÃ¡u", "O / A / B / AB", false, editable, window, cx))
+                            .child(self.render_form_input("LY_DO_VV", "LÃ½ do khÃ¡m", "KhÃ¡m sá»©c khá»e", false, editable, window, cx)),
+                    )
+                    .when(!self.is_creating_new && self.selected_record_id.is_some(), |el| {
+                        el.child(
+                            div()
+                                .pt(px(8.0))
+                                .border_t_1()
+                                .border_color(rgb(BORDER_COL))
+                                .flex()
+                                .flex_row()
+                                .justify_end()
+                                .child(
+                                    Button::new("btn-print-reception-docx")
+                                        .label("In Phiáº¿u Tiáº¿p Nháº­n (DOCX)")
+                                        .small()
+                                        .secondary()
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.export_docx(true, cx);
+                                        })),
+                                ),
+                        )
+                    }),
+            )
+            .into_any_element()
     }
-    let is_ed = *editing_sections.get(section).unwrap_or(&false);
-    (can_role, is_ed)
-}
 
-#[component]
-pub fn TabReception(
-    user: Option<User>,
-    selected_record_id: Signal<Option<i64>>,
-    selected_record_status: Signal<i64>,
-    form: Signal<Map<String, Value>>,
-    editing_sections: Signal<HashMap<String, bool>>,
-    catalogs_cache: Signal<HashMap<String, Vec<CatalogItem>>>,
-    on_save_section: EventHandler<String>,
-    on_cancel_section: EventHandler<String>,
-    on_fetch_his: EventHandler<()>,
-    on_export_docx: EventHandler<(i64, bool)>,
-) -> Element {
-    let rec_id = *selected_record_id.read();
-    let rec_status = *selected_record_status.read();
-    let eds = editing_sections.read().clone();
-    let (can_role, enabled) =
-        check_section_unlocked(&user, rec_id, rec_status, &eds, "reception", "reception");
-    let is_editing = *eds.get("reception").unwrap_or(&false);
+    fn render_tab_history(
+        &mut self,
+        is_locked: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let can_role = self.has_any_role(&["admin", "reception", "tiensu", "bs_noi"]);
+        let editable = !is_locked && can_role && self.editing_section.as_deref() == Some("history");
+        let ts_gd = self.get_form_val("TSGD_MAC_BENH");
+        let icd_val = self.get_form_val("TSBT_MA_BENH");
 
-    let cats = catalogs_cache.read();
-    let dan_toc = cats.get("DAN_TOC").cloned().unwrap_or_default();
-    let nghe_nghiep = cats.get("NGHE_NGHIEP").cloned().unwrap_or_default();
-    let tinh_tp = cats.get("TINH_TP").cloned().unwrap_or_default();
-    let xa_phuong = cats.get("XA_PHUONG").cloned().unwrap_or_default();
-    let doi_tuong = cats.get("DOI_TUONG").cloned().unwrap_or_default();
-    let nguon_chi_tra = cats.get("NGUON_CHI_TRA").cloned().unwrap_or_default();
-    drop(cats);
-
-    let selected_tinh = map_get(&form.read(), "MATINH_CU_TRU");
-
-    rsx! {
-        div { class: "card",
-            SectionHeader {
-                title: "1. Tiếp nhận & Thông tin hành chính".to_string(),
-                can_edit_role: can_role,
-                is_new_record: rec_id.is_none(),
-                is_locked_record: rec_status == 1,
-                is_editing: is_editing,
-                on_edit: move |_| { editing_sections.write().insert("reception".to_string(), true); },
-                on_save: move |_| on_save_section.call("reception".to_string()),
-                on_cancel: move |_| on_cancel_section.call("reception".to_string()),
-            }
-
-            div { style: "display: flex; gap: 8px; margin-bottom: 12px;",
-                button {
-                    class: "btn btn-blue",
-                    disabled: !enabled,
-                    onclick: move |_| on_fetch_his.call(()),
-                    "🌐 Lấy từ HIS (API)"
-                }
-                if let Some(id) = rec_id {
-                    button {
-                        class: "btn",
-                        onclick: move |_| on_export_docx.call((id, true)),
-                        "🖨️ In Phiếu Tiếp Nhận (DOCX)"
-                    }
-                }
-            }
-
-            div { class: "grid-3",
-                TextField { label: "Mã tiếp nhận (*)".to_string(), field_key: "MA_TIEP_NHAN".to_string(), form: form, enabled: enabled, hint: "VD: TN.2611.0009394".to_string() }
-                TextField { label: "Mã y tế (HIS)".to_string(), field_key: "MA_Y_TE".to_string(), form: form, enabled: enabled, hint: "VD: 18086929".to_string() }
-                TextField { label: "Ngày vào (dd/MM/yyyy)".to_string(), field_key: "NGAY_VAO".to_string(), form: form, enabled: enabled, hint: "dd/MM/yyyy".to_string() }
-
-                TextField { label: "Họ và tên (*)".to_string(), field_key: "HO_TEN".to_string(), form: form, enabled: enabled, hint: "NGUYỄN VĂN A".to_string() }
-                SelectField {
-                    label: "Giới tính".to_string(),
-                    field_key: "GIOI_TINH".to_string(),
-                    form: form,
-                    options: vec![("1".to_string(), "Nam".to_string()), ("2".to_string(), "Nữ".to_string())],
-                    enabled: enabled,
-                }
-                TextField { label: "Ngày sinh (dd/MM/yyyy)".to_string(), field_key: "NGAY_SINH".to_string(), form: form, enabled: enabled, hint: "12/03/1967".to_string() }
-
-                TextField { label: "Số CCCD / CMND".to_string(), field_key: "SO_CCCD".to_string(), form: form, enabled: enabled, hint: "052067005614".to_string() }
-                TextField { label: "Ngày cấp CCCD".to_string(), field_key: "NGAYCAP_CCCD".to_string(), form: form, enabled: enabled, hint: "dd/MM/yyyy".to_string() }
-                TextField { label: "Nơi cấp CCCD".to_string(), field_key: "NOICAP_CCCD".to_string(), form: form, enabled: enabled, hint: "Cục Cảnh sát QLHCVTTXH".to_string() }
-
-                CatalogSelect { label: "Dân tộc".to_string(), field_key: "MA_DAN_TOC".to_string(), form: form, items: dan_toc, enabled: enabled }
-                CatalogSelect { label: "Nghề nghiệp".to_string(), field_key: "MA_NGHE_NGHIEP".to_string(), form: form, items: nghe_nghiep, enabled: enabled }
-                TextField { label: "Số điện thoại".to_string(), field_key: "DIEN_THOAI".to_string(), form: form, enabled: enabled, hint: "0968459138".to_string() }
-
-                CatalogSelect { label: "Tỉnh / Thành phố cư trú".to_string(), field_key: "MATINH_CU_TRU".to_string(), form: form, items: tinh_tp, enabled: enabled }
-                CatalogSelect { label: "Xã / Phường cư trú".to_string(), field_key: "MAXA_CU_TRU".to_string(), form: form, items: xa_phuong, parent_filter: selected_tinh, enabled: enabled }
-                TextField { label: "Địa chỉ chi tiết (Số nhà/Thôn)".to_string(), field_key: "DIA_CHI".to_string(), form: form, enabled: enabled, hint: "Khu Phố 3...".to_string() }
-
-                TextField { label: "Nơi làm việc / Học tập".to_string(), field_key: "NOI_LAM_VIEC_HOC_TAP".to_string(), form: form, enabled: enabled, hint: "Công ty / Đơn vị...".to_string() }
-                CatalogSelect { label: "Đối tượng KSK".to_string(), field_key: "DOI_TUONG".to_string(), form: form, items: doi_tuong, enabled: enabled }
-                CatalogSelect { label: "Nguồn chi trả".to_string(), field_key: "NGUON_CHI_TRA".to_string(), form: form, items: nguon_chi_tra, enabled: enabled }
-            }
-
-            div { class: "grid-2", style: "margin-top: 10px;",
-                TextField { label: "Nhóm máu (nếu biết)".to_string(), field_key: "NHOM_MAU".to_string(), form: form, enabled: enabled, hint: "O / A / B / AB".to_string() }
-                TextField { label: "Lý do khám / vào viện".to_string(), field_key: "LY_DO_VV".to_string(), form: form, enabled: enabled, hint: "Khám sức khỏe định kỳ / Lái xe...".to_string() }
+        let mut icd_opts = vec![("".to_string(), "-- Chá»n nhanh ICD-10 --".to_string())];
+        for c in &self.catalogs {
+            if c.cat_type == "icd10" {
+                icd_opts.push((c.code.clone(), format!("{} - {}", c.code, c.name)));
             }
         }
-    }
-}
 
-#[component]
-pub fn TabHistory(
-    user: Option<User>,
-    selected_record_id: Signal<Option<i64>>,
-    selected_record_status: Signal<i64>,
-    form: Signal<Map<String, Value>>,
-    editing_sections: Signal<HashMap<String, bool>>,
-    catalogs_cache: Signal<HashMap<String, Vec<CatalogItem>>>,
-    on_save_section: EventHandler<String>,
-    on_cancel_section: EventHandler<String>,
-) -> Element {
-    let rec_id = *selected_record_id.read();
-    if rec_id.is_none() {
-        return rsx! { div { class: "card", "Vui lòng chọn hoặc tiếp nhận một hồ sơ bên danh sách trái." } };
-    }
-    let rec_status = *selected_record_status.read();
-    let eds = editing_sections.read().clone();
-    let (can_role, enabled) =
-        check_section_unlocked(&user, rec_id, rec_status, &eds, "history", "tiensu");
-    let is_editing = *eds.get("history").unwrap_or(&false);
-    let his_raw = map_get(&form.read(), "HIS_TIEN_SU_RAW");
-    let icd_items = catalogs_cache.read().get("ICD10").cloned().unwrap_or_default();
-
-    rsx! {
-        div { class: "card",
-            SectionHeader {
-                title: "2. Tiền sử gia đình & Tiền sử bản thân (21 mục)".to_string(),
-                can_edit_role: can_role,
-                is_new_record: false,
-                is_locked_record: rec_status == 1,
-                is_editing: is_editing,
-                on_edit: move |_| { editing_sections.write().insert("history".to_string(), true); },
-                on_save: move |_| on_save_section.call("history".to_string()),
-                on_cancel: move |_| on_cancel_section.call("history".to_string()),
-            }
-
-            if !his_raw.is_empty() {
-                div { style: "background: #fef3c7; border: 1px solid #f59e0b; padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; color: #92400e; font-size: 12.5px;",
-                    "📌 Ghi chú tiền sử từ HIS: {his_raw}"
-                }
-            }
-
-            div { style: "font-weight: 700; color: #0284c7; margin-bottom: 6px;", "A. Tiền sử gia đình" }
-            div { class: "grid-2", style: "margin-bottom: 12px;",
-                SelectField { label: "Gia đình có người mắc bệnh?".to_string(), field_key: "TSGD_MAC_BENH".to_string(), form: form, options: yn_opts(), enabled: enabled }
-                IcdMultiField { label: "Mã bệnh gia đình (ICD-10)".to_string(), field_key: "TSGD_MA_BENH".to_string(), form: form, icd_items: icd_items.clone(), enabled: enabled }
-            }
-
-            div { style: "font-weight: 700; color: #0284c7; margin-bottom: 8px;", "B. Tiền sử bản thân (21 câu hỏi sàng lọc)" }
-            div { class: "checkbox-grid", style: "margin-bottom: 12px;",
-                for (key, label) in TSBT_ITEMS {
-                    {
-                        let k = (*key).to_string();
-                        let checked = map_get(&form.read(), &k) == "1";
-                        rsx! {
-                            label { class: "checkbox-item",
-                                input {
-                                    r#type: "checkbox",
-                                    checked: checked,
-                                    disabled: !enabled,
-                                    onchange: move |evt| {
-                                        form_set_key(&mut form, &k, if evt.checked() { "1".into() } else { "0".into() });
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(14.0))
+            .child(
+                card_box()
+                    .child(self.render_section_action_bar(
+                        "history",
+                        "Tiá»n sá»­ bá»‡nh táº­t (Gia Ä‘Ã¬nh & Báº£n thÃ¢n - 21 má»¥c)",
+                        can_role,
+                        is_locked,
+                        cx,
+                    ))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_select_dropdown(
+                                "hist-tsgd",
+                                "Tiá»n sá»­ gia Ä‘Ã¬nh máº¯c bá»‡nh?",
+                                &ts_gd,
+                                vec![
+                                    ("0".to_string(), "0 - KhÃ´ng".to_string()),
+                                    ("1".to_string(), "1 - CÃ³".to_string()),
+                                ],
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("TSGD_MAC_BENH".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_form_input("TSGD_MA_BENH", "MÃ£ bá»‡nh gia Ä‘Ã¬nh (náº¿u cÃ³)", "", false, editable, window, cx)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(8.0))
+                            .children(TIEN_SU_21_ITEMS.iter().map(|(key, label)| {
+                                let checked = self.get_form_val(key) == "1";
+                                let k = key.to_string();
+                                div()
+                                    .w(px(280.0))
+                                    .p(px(6.0))
+                                    .rounded(px(6.0))
+                                    .bg(rgb(if checked { WARN_BG } else { BG_SUBTLE }))
+                                    .child(
+                                        Checkbox::new(SharedString::from(format!("chk-{}", key)))
+                                            .label(*label)
+                                            .checked(checked)
+                                            .disabled(!editable)
+                                            .on_change(cx.listener(move |this, val, _, cx| {
+                                                this.form_values.insert(
+                                                    k.clone(),
+                                                    if *val { "1".into() } else { "0".into() },
+                                                );
+                                                cx.notify();
+                                            })),
+                                    )
+                            })),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_form_input("TSBT_MA_BENH_KHAC", "Bá»‡nh khÃ¡c (náº¿u cÃ³)", "", false, editable, window, cx))
+                            .child(self.render_select_dropdown(
+                                "hist-icd10",
+                                "Chá»n nhanh ICD-10 Ä‘ang Ä‘iá»u trá»‹",
+                                &icd_val,
+                                icd_opts,
+                                editable,
+                                |this, val, window, cx| {
+                                    this.form_values.insert("TSBT_MA_BENH".into(), val.clone());
+                                    if let Some(inp) = this.form_inputs.get("TSBT_MA_BENH") {
+                                        inp.update(cx, |s, cx| s.set_value(val, window, cx));
                                     }
-                                }
-                                span { "{label}" }
-                            }
-                        }
-                    }
+                                },
+                                cx,
+                            ))
+                            .child(self.render_form_input("TSBT_MA_BENH", "MÃ£ bá»‡nh Ä‘ang Ä‘iá»u trá»‹", "", false, editable, window, cx))
+                            .child(self.render_form_input("TSBT_TEN_THUOC_LIEU_LUONG", "Thuá»‘c & liá»u lÆ°á»£ng Ä‘ang dÃ¹ng", "", false, editable, window, cx)),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_tab_physical(
+        &mut self,
+        is_locked: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let can_role = self.has_any_role(&["admin", "tiensu", "bs_noi"]);
+        let editable = !is_locked && can_role && self.editing_section.as_deref() == Some("physical");
+        let pl = self.get_form_val("KHAM_THE_LUC_PL");
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(14.0))
+            .child(
+                card_box()
+                    .child(self.render_section_action_bar(
+                        "physical",
+                        "KhÃ¡m Thá»ƒ lá»±c & Sinh hiá»‡u",
+                        can_role,
+                        is_locked,
+                        cx,
+                    ))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_form_input("CHIEU_CAO", "Chiá»u cao (cm)", "170", false, editable, window, cx))
+                            .child(self.render_form_input("CAN_NANG", "CÃ¢n náº·ng (kg)", "65", false, editable, window, cx))
+                            .child(self.render_form_input("CHI_SO_BMI", "Chá»‰ sá»‘ BMI (tá»± tÃ­nh)", "22.5", false, false, window, cx)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_form_input("MACH", "Máº¡ch (láº§n/phÃºt)", "75", false, editable, window, cx))
+                            .child(self.render_form_input("HUYET_AP", "Huyáº¿t Ã¡p (mmHg)", "120/80", false, editable, window, cx))
+                            .child(self.render_select_dropdown(
+                                "phys-pl",
+                                "PhÃ¢n loáº¡i thá»ƒ lá»±c",
+                                &pl,
+                                pl_options(),
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("KHAM_THE_LUC_PL".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_form_input("BS_THE_LUC", "NgÆ°á»i khÃ¡m thá»ƒ lá»±c", "", false, editable, window, cx)),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_tab_clinical(
+        &mut self,
+        is_locked: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let mode_btn_quick = Button::new("btn-clin-quick")
+            .label("KhÃ¡m chuyÃªn khoa")
+            .small()
+            .when(!self.clinical_tree_mode, |b| b.primary())
+            .when(self.clinical_tree_mode, |b| b.secondary())
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.clinical_tree_mode = false;
+                cx.notify();
+            }));
+
+        let mode_btn_tree = Button::new("btn-clin-tree")
+            .label("Tra cá»©u phÃ¢n loáº¡i bá»‡nh (110+ bá»‡nh)")
+            .small()
+            .when(self.clinical_tree_mode, |b| b.primary())
+            .when(!self.clinical_tree_mode, |b| b.secondary())
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.clinical_tree_mode = true;
+                cx.notify();
+            }));
+
+        let header = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .text_base()
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(rgb(TEXT_MAIN))
+                    .child("KhÃ¡m LÃ¢m sÃ ng ChuyÃªn khoa"),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(8.0))
+                    .child(mode_btn_quick)
+                    .child(mode_btn_tree),
+            );
+
+        if self.clinical_tree_mode {
+            return div()
+                .flex()
+                .flex_col()
+                .gap(px(14.0))
+                .child(header)
+                .child(self.render_disease_classification_tree(window, cx))
+                .into_any_element();
+        }
+
+        // Quick / Specialty cards
+        let can_noi = self.has_any_role(&["admin", "bs_noi", "bs_theluc"]);
+        let edit_noi = !is_locked && can_noi && self.editing_section.as_deref() == Some("clin_noi");
+
+        let can_ngoai = self.has_any_role(&["admin", "bs_ngoai"]);
+        let edit_ngoai = !is_locked && can_ngoai && self.editing_section.as_deref() == Some("clin_ngoai");
+
+        let can_dalieu = self.has_any_role(&["admin", "bs_dalieu"]);
+        let edit_dalieu = !is_locked && can_dalieu && self.editing_section.as_deref() == Some("clin_dalieu");
+
+        let can_san = self.has_any_role(&["admin", "bs_san"]);
+        let edit_san = !is_locked && can_san && self.editing_section.as_deref() == Some("clin_san");
+
+        let can_mat = self.has_any_role(&["admin", "bs_mat"]);
+        let edit_mat = !is_locked && can_mat && self.editing_section.as_deref() == Some("clin_mat");
+
+        let can_tmh = self.has_any_role(&["admin", "bs_tmh"]);
+        let edit_tmh = !is_locked && can_tmh && self.editing_section.as_deref() == Some("clin_tmh");
+
+        let can_rhm = self.has_any_role(&["admin", "bs_rhm"]);
+        let edit_rhm = !is_locked && can_rhm && self.editing_section.as_deref() == Some("clin_rhm");
+
+        let noi_fields = [
+            ("NOI_KHOA_TUAN_HOAN", "NOI_KHOA_TUAN_HOAN_PL", "Tuáº§n hoÃ n"),
+            ("NOI_KHOA_HO_HAP", "NOI_KHOA_HO_HAP_PL", "HÃ´ háº¥p"),
+            ("NOI_KHOA_TIEU_HOA", "NOI_KHOA_TIEU_HOA_PL", "TiÃªu hÃ³a"),
+            ("NOI_KHOA_THAN_TN_SD", "NOI_KHOA_THAN_TIETNIEU_PL", "Tháº­n - Tiáº¿t niá»‡u"),
+            ("NOI_KHOA_NOI_TIET", "NOI_KHOA_NOI_TIET_PL", "Ná»™i tiáº¿t"),
+            ("NOI_KHOA_CO_XUONG_KHOP", "NOI_KHOA_CO_XUONG_KHOP_PL", "CÆ¡ xÆ°Æ¡ng khá»›p"),
+            ("NOI_KHOA_THAN_KINH", "NOI_KHOA_THAN_KINH_PL", "Tháº§n kinh"),
+            ("NOI_KHOA_TAM_THAN", "NOI_KHOA_TAM_THAN_PL", "TÃ¢m tháº§n"),
+        ];
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(14.0))
+            .child(header)
+            // Ná»™i khoa
+            .child({
+                let mut box_noi = card_box().child(self.render_section_action_bar(
+                    "clin_noi",
+                    "1. Ná»™i khoa & TÃ¢m tháº§n",
+                    can_noi,
+                    is_locked,
+                    cx,
+                ));
+                for (f_kq, f_pl, lbl) in noi_fields {
+                    let pl_val = self.get_form_val(f_pl);
+                    let f_pl_owned = f_pl.to_string();
+                    box_noi = box_noi.child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .gap(px(12.0))
+                            .child(self.render_form_input(f_kq, lbl, "BÃ¬nh thÆ°á»ng", false, edit_noi, window, cx))
+                            .child(self.render_select_dropdown(
+                                &format!("dd-{}", f_pl),
+                                "PhÃ¢n loáº¡i",
+                                &pl_val,
+                                pl_options(),
+                                edit_noi,
+                                move |this, val, _, _| {
+                                    this.form_values.insert(f_pl_owned.clone(), val);
+                                },
+                                cx,
+                            )),
+                    );
                 }
-            }
+                box_noi.child(self.render_form_input("BS_NOI", "BÃ¡c sÄ© Ná»™i khoa", "", false, edit_noi, window, cx))
+            })
+            // Ngoáº¡i khoa + Da liá»…u + Sáº£n
+            .child(self.render_simple_specialty_card(
+                "clin_ngoai",
+                "2. Ngoáº¡i khoa",
+                "KET_QUA_KHAM_NGOAI_KHOA",
+                "KHAM_NGOAI_KHOA_PL",
+                "BS_NGOAI",
+                can_ngoai,
+                edit_ngoai,
+                is_locked,
+                window,
+                cx,
+            ))
+            .child(self.render_simple_specialty_card(
+                "clin_dalieu",
+                "3. Da liá»…u",
+                "KET_QUA_KHAM_DA_LIEU",
+                "KHAM_DA_LIEU_PL",
+                "BS_DA_LIEU",
+                can_dalieu,
+                edit_dalieu,
+                is_locked,
+                window,
+                cx,
+            ))
+            .child(self.render_simple_specialty_card(
+                "clin_san",
+                "4. Sáº£n phá»¥ khoa",
+                "KET_QUA_KHAM_SAN_PHU_KHOA",
+                "KHAM_SAN_PHU_KHOA_PL",
+                "BS_SAN",
+                can_san,
+                edit_san,
+                is_locked,
+                window,
+                cx,
+            ))
+            // Máº¯t
+            .child({
+                let pl = self.get_form_val("KHAM_MAT_PL");
+                card_box()
+                    .child(self.render_section_action_bar("clin_mat", "5. Máº¯t", can_mat, is_locked, cx))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_form_input("KHONG_KINH_MAT_PHAI", "KhÃ´ng kÃ­nh MP", "10/10", false, edit_mat, window, cx))
+                            .child(self.render_form_input("KHONG_KINH_MAT_TRAI", "KhÃ´ng kÃ­nh MT", "10/10", false, edit_mat, window, cx))
+                            .child(self.render_form_input("CO_KINH_MAT_PHAI", "CÃ³ kÃ­nh MP", "10/10", false, edit_mat, window, cx))
+                            .child(self.render_form_input("CO_KINH_MAT_TRAI", "CÃ³ kÃ­nh MT", "10/10", false, edit_mat, window, cx)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_form_input("BENH_KHAC_MAT", "Bá»‡nh vá» máº¯t", "KhÃ´ng", false, edit_mat, window, cx))
+                            .child(self.render_select_dropdown(
+                                "dd-KHAM_MAT_PL",
+                                "PhÃ¢n loáº¡i Máº¯t",
+                                &pl,
+                                pl_options(),
+                                edit_mat,
+                                |this, val, _, _| {
+                                    this.form_values.insert("KHAM_MAT_PL".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_form_input("BS_MAT", "BÃ¡c sÄ© Máº¯t", "", false, edit_mat, window, cx)),
+                    )
+            })
+            // TMH
+            .child({
+                let pl = self.get_form_val("KHAM_TAI_MUI_HONG_PL");
+                card_box()
+                    .child(self.render_section_action_bar("clin_tmh", "6. Tai - MÅ©i - Há»ng", can_tmh, is_locked, cx))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_form_input("TAI_PHAI_NOI_THUONG", "Tai pháº£i nÃ³i thÆ°á»ng (m)", "5m", false, edit_tmh, window, cx))
+                            .child(self.render_form_input("TAI_PHAI_NOI_THAM", "Tai pháº£i nÃ³i tháº§m (m)", "0.5m", false, edit_tmh, window, cx))
+                            .child(self.render_form_input("TAI_TRAI_NOI_THUONG", "Tai trÃ¡i nÃ³i thÆ°á»ng (m)", "5m", false, edit_tmh, window, cx))
+                            .child(self.render_form_input("TAI_TRAI_NOI_THAM", "Tai trÃ¡i nÃ³i tháº§m (m)", "0.5m", false, edit_tmh, window, cx)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_form_input("BENH_KHAC_TAI_MUI_HONG", "Bá»‡nh TMH", "BÃ¬nh thÆ°á»ng", false, edit_tmh, window, cx))
+                            .child(self.render_select_dropdown(
+                                "dd-KHAM_TAI_MUI_HONG_PL",
+                                "PhÃ¢n loáº¡i TMH",
+                                &pl,
+                                pl_options(),
+                                edit_tmh,
+                                |this, val, _, _| {
+                                    this.form_values.insert("KHAM_TAI_MUI_HONG_PL".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_form_input("BS_TMH", "BÃ¡c sÄ© TMH", "", false, edit_tmh, window, cx)),
+                    )
+            })
+            // RHM
+            .child({
+                let pl = self.get_form_val("KHAM_RANG_HAM_MAT_PL");
+                card_box()
+                    .child(self.render_section_action_bar("clin_rhm", "7. RÄƒng - HÃ m - Máº·t", can_rhm, is_locked, cx))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_form_input("HAM_TREN", "HÃ m trÃªn", "BÃ¬nh thÆ°á»ng", false, edit_rhm, window, cx))
+                            .child(self.render_form_input("HAM_DUOI", "HÃ m dÆ°á»›i", "BÃ¬nh thÆ°á»ng", false, edit_rhm, window, cx))
+                            .child(self.render_form_input("BENH_KHAC_RANG_HAM_MAT", "Bá»‡nh RHM", "KhÃ´ng", false, edit_rhm, window, cx))
+                            .child(self.render_select_dropdown(
+                                "dd-KHAM_RANG_HAM_MAT_PL",
+                                "PhÃ¢n loáº¡i RHM",
+                                &pl,
+                                pl_options(),
+                                edit_rhm,
+                                |this, val, _, _| {
+                                    this.form_values.insert("KHAM_RANG_HAM_MAT_PL".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_form_input("BS_RHM", "BÃ¡c sÄ© RHM", "", false, edit_rhm, window, cx)),
+                    )
+            })
+            .into_any_element()
+    }
 
-            div { class: "grid-2", style: "margin-bottom: 8px;",
-                SelectField { label: "Bệnh khác (TSBT)".to_string(), field_key: "TSBT_BENH_KHAC".to_string(), form: form, options: yn_opts(), enabled: enabled }
-                IcdMultiField { label: "Mã bệnh khác (ICD-10)".to_string(), field_key: "TSBT_MA_BENH_KHAC".to_string(), form: form, icd_items: icd_items.clone(), enabled: enabled }
-            }
-            div { class: "grid-3", style: "margin-bottom: 8px;",
-                SelectField { label: "Đang điều trị bệnh?".to_string(), field_key: "TSBT_DANG_DIEU_TRI_BENH".to_string(), form: form, options: yn_opts(), enabled: enabled }
-                IcdMultiField { label: "Mã bệnh đang điều trị".to_string(), field_key: "TSBT_MA_BENH".to_string(), form: form, icd_items: icd_items.clone(), enabled: enabled }
-                TextField { label: "Tên thuốc & liều lượng".to_string(), field_key: "TSBT_TEN_THUOC_LIEU_LUONG".to_string(), form: form, enabled: enabled }
-            }
-            div { class: "grid-3",
-                SelectField { label: "Tiền sử thai sản (Nữ)".to_string(), field_key: "TSBT_THAI_SAN".to_string(), form: form, options: yn_opts(), enabled: enabled }
-                IcdMultiField { label: "Mã bệnh thai sản".to_string(), field_key: "TSBT_MA_BENH_THAI_SAN".to_string(), form: form, icd_items: icd_items, enabled: enabled }
-                TextField { label: "Thuốc thai sản".to_string(), field_key: "TSBT_TEN_THUOC_THAI_SAN".to_string(), form: form, enabled: enabled }
-            }
+    #[allow(clippy::too_many_arguments)]
+    fn render_simple_specialty_card(
+        &mut self,
+        sec_key: &str,
+        title: &str,
+        f_kq: &str,
+        f_pl: &str,
+        f_bs: &str,
+        can_role: bool,
+        editable: bool,
+        is_locked: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let pl_val = self.get_form_val(f_pl);
+        let f_pl_owned = f_pl.to_string();
+        card_box()
+            .child(self.render_section_action_bar(sec_key, title, can_role, is_locked, cx))
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(px(12.0))
+                    .child(self.render_form_input(f_kq, "Káº¿t quáº£ khÃ¡m", "BÃ¬nh thÆ°á»ng", false, editable, window, cx))
+                    .child(self.render_select_dropdown(
+                        &format!("dd-{}", f_pl),
+                        "PhÃ¢n loáº¡i",
+                        &pl_val,
+                        pl_options(),
+                        editable,
+                        move |this, val, _, _| {
+                            this.form_values.insert(f_pl_owned.clone(), val);
+                        },
+                        cx,
+                    ))
+                    .child(self.render_form_input(f_bs, "BÃ¡c sÄ© khÃ¡m", "", false, editable, window, cx)),
+            )
+            .into_any_element()
+    }
+
+    fn render_disease_classification_tree(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let cfg = phan_loai_config();
+        let search_q = self.disease_search_input.read(cx).value().to_lowercase();
+        let sel_spec = self.selected_specialty_filter.clone();
+
+        let mut spec_opts = vec![("".to_string(), "Táº¥t cáº£ chuyÃªn khoa".to_string())];
+        for s in &cfg.specialties {
+            spec_opts.push((s.id.clone(), s.name.clone()));
         }
-    }
-}
 
-#[component]
-pub fn TabPhysical(
-    user: Option<User>,
-    selected_record_id: Signal<Option<i64>>,
-    selected_record_status: Signal<i64>,
-    form: Signal<Map<String, Value>>,
-    editing_sections: Signal<HashMap<String, bool>>,
-    on_save_section: EventHandler<String>,
-    on_cancel_section: EventHandler<String>,
-) -> Element {
-    let rec_id = *selected_record_id.read();
-    if rec_id.is_none() {
-        return rsx! { div { class: "card", "Vui lòng chọn một hồ sơ bên danh sách trái." } };
-    }
-    let rec_status = *selected_record_status.read();
-    let eds = editing_sections.read().clone();
-    let (can_role, enabled) =
-        check_section_unlocked(&user, rec_id, rec_status, &eds, "physical", "bs_theluc");
-    let is_editing = *eds.get("physical").unwrap_or(&false);
+        let matching_diseases: Vec<_> = cfg
+            .diseases
+            .iter()
+            .filter(|d| {
+                (sel_spec.is_empty() || d.specialty_id == sel_spec)
+                    && (search_q.is_empty() || d.name.to_lowercase().contains(&search_q))
+            })
+            .take(50)
+            .collect();
 
-    // Tự động tính BMI
-    let h: f64 = map_get(&form.read(), "CHIEU_CAO").replace(',', ".").parse().unwrap_or(0.0);
-    let w: f64 = map_get(&form.read(), "CAN_NANG").replace(',', ".").parse().unwrap_or(0.0);
-    if h > 50.0 && w > 10.0 {
-        let bmi = format!("{:.1}", w / ((h / 100.0) * (h / 100.0)));
-        if map_get(&form.read(), "CHI_SO_BMI") != bmi {
-            form_set_key(&mut form, "CHI_SO_BMI", bmi);
-        }
-    }
-
-    rsx! {
-        div { class: "card",
-            SectionHeader {
-                title: "3. Khám thể lực & Sinh hiệu".to_string(),
-                can_edit_role: can_role,
-                is_new_record: false,
-                is_locked_record: rec_status == 1,
-                is_editing: is_editing,
-                on_edit: move |_| { editing_sections.write().insert("physical".to_string(), true); },
-                on_save: move |_| on_save_section.call("physical".to_string()),
-                on_cancel: move |_| on_cancel_section.call("physical".to_string()),
-            }
-
-            div { class: "grid-3",
-                TextField { label: "Chiều cao (cm)".to_string(), field_key: "CHIEU_CAO".to_string(), form: form, enabled: enabled, hint: "VD: 168".to_string() }
-                TextField { label: "Cân nặng (kg)".to_string(), field_key: "CAN_NANG".to_string(), form: form, enabled: enabled, hint: "VD: 62".to_string() }
-                TextField { label: "Chỉ số BMI (Tự động)".to_string(), field_key: "CHI_SO_BMI".to_string(), form: form, enabled: enabled }
-                TextField { label: "Mạch (lần/phút)".to_string(), field_key: "MACH".to_string(), form: form, enabled: enabled, hint: "VD: 76".to_string() }
-                TextField { label: "Huyết áp (mmHg)".to_string(), field_key: "HUYET_AP".to_string(), form: form, enabled: enabled, hint: "VD: 120/80".to_string() }
-                SelectField { label: "Phân loại thể lực".to_string(), field_key: "KHAM_THE_LUC_PL".to_string(), form: form, options: pl_opts(), enabled: enabled }
-            }
-        }
-    }
-}
-
-#[component]
-pub fn TabClinical(
-    user: Option<User>,
-    selected_record_id: Signal<Option<i64>>,
-    selected_record_status: Signal<i64>,
-    form: Signal<Map<String, Value>>,
-    editing_sections: Signal<HashMap<String, bool>>,
-    clinical_full_mode: Signal<bool>,
-    on_save_section: EventHandler<String>,
-    on_cancel_section: EventHandler<String>,
-) -> Element {
-    let rec_id = *selected_record_id.read();
-    if rec_id.is_none() {
-        return rsx! { div { class: "card", "Vui lòng chọn một hồ sơ bên danh sách trái." } };
-    }
-    let rec_status = *selected_record_status.read();
-    let eds = editing_sections.read().clone();
-
-    let noi_rows: &[(&str, &str, &str, &str)] = &[
-        ("Tuần hoàn", "NOI_KHOA_TUAN_HOAN", "NOI_KHOA_TUAN_HOAN_PL", "CKDT_NOI_KHOA_TUAN_HOAN"),
-        ("Hô hấp", "NOI_KHOA_HO_HAP", "NOI_KHOA_HO_HAP_PL", "CKDT_NOI_KHOA_HO_HAP"),
-        ("Tiêu hóa", "NOI_KHOA_TIEU_HOA", "NOI_KHOA_TIEU_HOA_PL", "CKDT_NOI_KHOA_TIEU_HOA"),
-        ("Thận - Tiết niệu - SD", "NOI_KHOA_THAN_TN_SD", "NOI_KHOA_THAN_TN_SD_PL", "CKDT_NOI_KHOA_THAN_TN_SD"),
-        ("Nội tiết", "NOI_KHOA_NOI_TIET", "NOI_KHOA_NOI_TIET_PL", "CKDT_NOI_KHOA_NOI_TIET"),
-        ("Cơ - Xương - Khớp", "NOI_KHOA_CO_XUONG_KHOP", "NOI_KHOA_CO_XUONG_KHOP_PL", "CKDT_NOI_KHOA_CO_XUONG_KHOP"),
-        ("Thần kinh", "NOI_KHOA_THAN_KINH", "NOI_KHOA_THAN_KINH_PL", "CKDT_NOI_KHOA_THAN_KINH"),
-        ("Tâm thần", "NOI_KHOA_TAM_THAN", "NOI_KHOA_TAM_THAN_PL", "CKDT_NOI_KHOA_TAM_THAN"),
-    ];
-
-    let (can_noi, en_noi) = check_section_unlocked(&user, rec_id, rec_status, &eds, "noi", "bs_noi");
-    let (can_ngoai, en_ngoai) = check_section_unlocked(&user, rec_id, rec_status, &eds, "ngoai", "bs_ngoai");
-    let (can_dl, en_dl) = check_section_unlocked(&user, rec_id, rec_status, &eds, "dalieu", "bs_dalieu");
-    let (can_san, en_san) = check_section_unlocked(&user, rec_id, rec_status, &eds, "san", "bs_san");
-    let (can_mat, en_mat) = check_section_unlocked(&user, rec_id, rec_status, &eds, "mat", "bs_mat");
-    let (can_tmh, en_tmh) = check_section_unlocked(&user, rec_id, rec_status, &eds, "tmh", "bs_tmh");
-    let (can_rhm, en_rhm) = check_section_unlocked(&user, rec_id, rec_status, &eds, "rhm", "bs_rhm");
-
-    let full_tree = *clinical_full_mode.read();
-    let cfg = phan_loai_config();
-
-    rsx! {
-        div { class: "card", style: "padding: 10px 16px;",
-            label { class: "checkbox-item",
-                input {
-                    r#type: "checkbox",
-                    checked: full_tree,
-                    onchange: move |e| clinical_full_mode.set(e.checked()),
-                }
-                span { style: "font-weight: 600;", "Hiển thị Cây phân loại bệnh QĐ 3176 (15 chuyên khoa / 110 bệnh)" }
-            }
-            if full_tree {
-                div { style: "margin-top: 10px; max-height: 240px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;",
-                    for sp in &cfg.specialties {
-                        {
-                            let diseases: Vec<_> = cfg.diseases.iter().filter(|d| d.specialty_id == sp.id).collect();
-                            rsx! {
-                                if !diseases.is_empty() {
-                                    details { style: "margin-bottom: 4px;",
-                                        summary { style: "cursor: pointer; font-weight: 600; color: #0f766e;", "{sp.name} ({diseases.len()} bệnh)" }
-                                        div { style: "padding-left: 14px; margin-top: 4px;",
-                                            for dis in diseases {
-                                                details {
-                                                    summary { style: "cursor: pointer; font-size: 12.5px;", "{dis.name}" }
-                                                    ul { style: "padding-left: 18px; font-size: 12px; color: #475569;",
-                                                        for c in cfg.classifications.iter().filter(|c| c.disease_id == dis.id) {
-                                                            {
-                                                                let score_lbl = c.score.map(|s| format!("Loại {}", s)).unwrap_or_else(|| "Tham chiếu".to_string());
-                                                                rsx! { li { "[{score_lbl}] {c.name}" } }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
+        card_box()
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(12.0))
+                    .child(div().flex_1().child(Input::new(&self.disease_search_input).small().cleanable(true)))
+                    .child(self.render_select_dropdown(
+                        "tree-spec-filter",
+                        "",
+                        &sel_spec,
+                        spec_opts,
+                        true,
+                        |this, val, _, _| {
+                            this.selected_specialty_filter = val;
+                        },
+                        cx,
+                    )),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(TEXT_MUTED))
+                    .child(format!("Hiá»ƒn thá»‹ {} máº·t bá»‡nh (tá»‘i Ä‘a 50 dÃ²ng/lÆ°á»£t lá»c). Nháº¥n vÃ o má»©c phÃ¢n loáº¡i Ä‘á»ƒ ghi vÃ o káº¿t luáº­n bá»‡nh:", matching_diseases.len())),
+            )
+            .children(matching_diseases.into_iter().map(|d| {
+                let classes: Vec<_> = cfg
+                    .classifications
+                    .iter()
+                    .filter(|c| c.disease_id == d.id)
+                    .collect();
+                let d_name = d.name.clone();
+                div()
+                    .p(px(10.0))
+                    .rounded(px(6.0))
+                    .bg(rgb(BG_SUBTLE))
+                    .border_1()
+                    .border_color(rgb(BORDER_COL))
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.0))
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(rgb(TEXT_MAIN))
+                            .child(d.name.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(6.0))
+                            .children(classes.into_iter().map(|c| {
+                                let score_str = c.score.map(|s| format!("Loáº¡i {}", s)).unwrap_or_else(|| "Ghi chÃº".into());
+                                let label = format!("{}: {}", score_str, c.name);
+                                let append_text = format!("{} ({})", d_name, score_str);
+                                let cid = c.id.clone();
+                                Button::new(SharedString::from(format!("cls-btn-{}", cid)))
+                                    .label(label)
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        let cur = this.get_form_val("CAC_BENH_TAT_NEU_CO");
+                                        let next = if cur.is_empty() {
+                                            append_text.clone()
+                                        } else {
+                                            format!("{}; {}", cur, append_text)
+                                        };
+                                        this.form_values.insert("CAC_BENH_TAT_NEU_CO".into(), next.clone());
+                                        if let Some(inp) = this.form_inputs.get("CAC_BENH_TAT_NEU_CO") {
+                                            inp.update(cx, |s, cx| s.set_value(next, window, cx));
                                         }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Nội khoa
-        div { class: "card",
-            SectionHeader {
-                title: "A. Khám Nội khoa (8 phân khoa)".to_string(),
-                can_edit_role: can_noi,
-                is_new_record: false,
-                is_locked_record: rec_status == 1,
-                is_editing: *eds.get("noi").unwrap_or(&false),
-                on_edit: move |_| { editing_sections.write().insert("noi".to_string(), true); },
-                on_save: move |_| on_save_section.call("noi".to_string()),
-                on_cancel: move |_| on_cancel_section.call("noi".to_string()),
-            }
-            for (name, k_res, k_pl, k_doc) in noi_rows {
-                div { class: "grid-3", style: "margin-bottom: 8px;",
-                    TextField { label: format!("{name} - Kết quả"), field_key: (*k_res).to_string(), form: form, enabled: en_noi, hint: "Bình thường".to_string() }
-                    SelectField { label: "Phân loại".to_string(), field_key: (*k_pl).to_string(), form: form, options: pl_opts(), enabled: en_noi }
-                    TextField { label: "Bác sĩ khám".to_string(), field_key: (*k_doc).to_string(), form: form, enabled: en_noi }
-                }
-            }
-        }
-
-        // Ngoại khoa
-        div { class: "card",
-            SectionHeader {
-                title: "B. Ngoại khoa".to_string(),
-                can_edit_role: can_ngoai,
-                is_new_record: false,
-                is_locked_record: rec_status == 1,
-                is_editing: *eds.get("ngoai").unwrap_or(&false),
-                on_edit: move |_| { editing_sections.write().insert("ngoai".to_string(), true); },
-                on_save: move |_| on_save_section.call("ngoai".to_string()),
-                on_cancel: move |_| on_cancel_section.call("ngoai".to_string()),
-            }
-            div { class: "grid-3",
-                TextField { label: "Kết quả khám".to_string(), field_key: "KET_QUA_KHAM_NGOAI_KHOA".to_string(), form: form, enabled: en_ngoai, hint: "Bình thường".to_string() }
-                SelectField { label: "Phân loại".to_string(), field_key: "KHAM_NGOAI_KHOA_PL".to_string(), form: form, options: pl_opts(), enabled: en_ngoai }
-                TextField { label: "Bác sĩ khám".to_string(), field_key: "CKDT_KHAM_NGOAI_KHOA".to_string(), form: form, enabled: en_ngoai }
-            }
-        }
-
-        // Da liễu
-        div { class: "card",
-            SectionHeader {
-                title: "C. Da liễu".to_string(),
-                can_edit_role: can_dl,
-                is_new_record: false,
-                is_locked_record: rec_status == 1,
-                is_editing: *eds.get("dalieu").unwrap_or(&false),
-                on_edit: move |_| { editing_sections.write().insert("dalieu".to_string(), true); },
-                on_save: move |_| on_save_section.call("dalieu".to_string()),
-                on_cancel: move |_| on_cancel_section.call("dalieu".to_string()),
-            }
-            div { class: "grid-3",
-                TextField { label: "Kết quả khám".to_string(), field_key: "KET_QUA_KHAM_DA_LIEU".to_string(), form: form, enabled: en_dl, hint: "Bình thường".to_string() }
-                SelectField { label: "Phân loại".to_string(), field_key: "KHAM_DA_LIEU_PL".to_string(), form: form, options: pl_opts(), enabled: en_dl }
-                TextField { label: "Bác sĩ khám".to_string(), field_key: "CKDT_KHAM_DA_LIEU".to_string(), form: form, enabled: en_dl }
-            }
-        }
-
-        // Sản phụ khoa
-        div { class: "card",
-            SectionHeader {
-                title: "D. Sản phụ khoa".to_string(),
-                can_edit_role: can_san,
-                is_new_record: false,
-                is_locked_record: rec_status == 1,
-                is_editing: *eds.get("san").unwrap_or(&false),
-                on_edit: move |_| { editing_sections.write().insert("san".to_string(), true); },
-                on_save: move |_| on_save_section.call("san".to_string()),
-                on_cancel: move |_| on_cancel_section.call("san".to_string()),
-            }
-            div { class: "grid-3",
-                TextField { label: "Kết quả khám".to_string(), field_key: "KET_QUA_KHAM_SAN_PHU_KHOA".to_string(), form: form, enabled: en_san, hint: "Bình thường".to_string() }
-                SelectField { label: "Phân loại".to_string(), field_key: "KHAM_SAN_PHU_KHOA_PL".to_string(), form: form, options: pl_opts(), enabled: en_san }
-                TextField { label: "Bác sĩ khám".to_string(), field_key: "CKDT_KHAM_SAN_PHU_KHOA".to_string(), form: form, enabled: en_san }
-            }
-        }
-
-        // Mắt
-        div { class: "card",
-            SectionHeader {
-                title: "E. Chuyên khoa Mắt".to_string(),
-                can_edit_role: can_mat,
-                is_new_record: false,
-                is_locked_record: rec_status == 1,
-                is_editing: *eds.get("mat").unwrap_or(&false),
-                on_edit: move |_| { editing_sections.write().insert("mat".to_string(), true); },
-                on_save: move |_| on_save_section.call("mat".to_string()),
-                on_cancel: move |_| on_cancel_section.call("mat".to_string()),
-            }
-            div { class: "grid-4", style: "margin-bottom: 8px;",
-                TextField { label: "Không kính MP".to_string(), field_key: "KHONG_KINH_MAT_PHAI".to_string(), form: form, enabled: en_mat, hint: "10/10".to_string() }
-                TextField { label: "Không kính MT".to_string(), field_key: "KHONG_KINH_MAT_TRAI".to_string(), form: form, enabled: en_mat, hint: "10/10".to_string() }
-                TextField { label: "Có kính MP".to_string(), field_key: "CO_KINH_MAT_PHAI".to_string(), form: form, enabled: en_mat }
-                TextField { label: "Có kính MT".to_string(), field_key: "CO_KINH_MAT_TRAI".to_string(), form: form, enabled: en_mat }
-            }
-            div { class: "grid-3",
-                TextField { label: "Bệnh khác về mắt".to_string(), field_key: "BENH_KHAC_MAT".to_string(), form: form, enabled: en_mat }
-                SelectField { label: "Phân loại Mắt".to_string(), field_key: "KHAM_MAT_PL".to_string(), form: form, options: pl_opts(), enabled: en_mat }
-                TextField { label: "Bác sĩ Mắt".to_string(), field_key: "CKDT_KHAM_MAT".to_string(), form: form, enabled: en_mat }
-            }
-        }
-
-        // Tai mũi họng
-        div { class: "card",
-            SectionHeader {
-                title: "F. Tai - Mũi - Họng".to_string(),
-                can_edit_role: can_tmh,
-                is_new_record: false,
-                is_locked_record: rec_status == 1,
-                is_editing: *eds.get("tmh").unwrap_or(&false),
-                on_edit: move |_| { editing_sections.write().insert("tmh".to_string(), true); },
-                on_save: move |_| on_save_section.call("tmh".to_string()),
-                on_cancel: move |_| on_cancel_section.call("tmh".to_string()),
-            }
-            div { class: "grid-4", style: "margin-bottom: 8px;",
-                TextField { label: "Tai trái nói thường".to_string(), field_key: "TAI_TRAI_NOI_THUONG".to_string(), form: form, enabled: en_tmh, hint: "5m".to_string() }
-                TextField { label: "Tai trái nói thầm".to_string(), field_key: "TAI_TRAI_NOI_THAM".to_string(), form: form, enabled: en_tmh, hint: "5m".to_string() }
-                TextField { label: "Tai phải nói thường".to_string(), field_key: "TAI_PHAI_NOI_THUONG".to_string(), form: form, enabled: en_tmh, hint: "5m".to_string() }
-                TextField { label: "Tai phải nói thầm".to_string(), field_key: "TAI_PHAI_NOI_THAM".to_string(), form: form, enabled: en_tmh, hint: "5m".to_string() }
-            }
-            div { class: "grid-3",
-                TextField { label: "Bệnh khác TMH".to_string(), field_key: "BENH_KHAC_TAI_MUI_HONG".to_string(), form: form, enabled: en_tmh }
-                SelectField { label: "Phân loại TMH".to_string(), field_key: "KHAM_TAI_MUI_HONG_PL".to_string(), form: form, options: pl_opts(), enabled: en_tmh }
-                TextField { label: "Bác sĩ TMH".to_string(), field_key: "CKDT_KHAM_TAI_MUI_HONG".to_string(), form: form, enabled: en_tmh }
-            }
-        }
-
-        // Răng hàm mặt
-        div { class: "card",
-            SectionHeader {
-                title: "G. Răng - Hàm - Mặt".to_string(),
-                can_edit_role: can_rhm,
-                is_new_record: false,
-                is_locked_record: rec_status == 1,
-                is_editing: *eds.get("rhm").unwrap_or(&false),
-                on_edit: move |_| { editing_sections.write().insert("rhm".to_string(), true); },
-                on_save: move |_| on_save_section.call("rhm".to_string()),
-                on_cancel: move |_| on_cancel_section.call("rhm".to_string()),
-            }
-            div { class: "grid-2", style: "margin-bottom: 8px;",
-                TextField { label: "Hàm trên".to_string(), field_key: "HAM_TREN".to_string(), form: form, enabled: en_rhm, hint: "Bình thường".to_string() }
-                TextField { label: "Hàm dưới".to_string(), field_key: "HAM_DUOI".to_string(), form: form, enabled: en_rhm, hint: "Bình thường".to_string() }
-            }
-            div { class: "grid-3",
-                TextField { label: "Bệnh khác RHM".to_string(), field_key: "BENH_KHAC_RANG_HAM_MAT".to_string(), form: form, enabled: en_rhm }
-                SelectField { label: "Phân loại RHM".to_string(), field_key: "KHAM_RANG_HAM_MAT_PL".to_string(), form: form, options: pl_opts(), enabled: en_rhm }
-                TextField { label: "Bác sĩ RHM".to_string(), field_key: "CKDT_KHAM_RANG_HAM_MAT".to_string(), form: form, enabled: en_rhm }
-            }
-        }
+                                        this.show_toast(&format!("ÄÃ£ thÃªm: {}", append_text), false, cx);
+                                    }))
+                            })),
+                    )
+            }))
+            .into_any_element()
     }
-}
 
-#[component]
-pub fn TabParaclinical(
-    user: Option<User>,
-    selected_record_id: Signal<Option<i64>>,
-    selected_record_status: Signal<i64>,
-    form: Signal<Map<String, Value>>,
-    editing_sections: Signal<HashMap<String, bool>>,
-    on_save_section: EventHandler<String>,
-    on_cancel_section: EventHandler<String>,
-) -> Element {
-    let rec_id = *selected_record_id.read();
-    if rec_id.is_none() {
-        return rsx! { div { class: "card", "Vui lòng chọn một hồ sơ bên danh sách trái." } };
+    fn render_tab_paraclinical(
+        &mut self,
+        is_locked: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let can_role = self.has_any_role(&["admin", "bs_cls", "bs_ketluan"]);
+        let editable = !is_locked && can_role && self.editing_section.as_deref() == Some("paraclinical");
+
+        card_box()
+            .child(self.render_section_action_bar(
+                "paraclinical",
+                "Káº¿t quáº£ Cáº­n lÃ¢m sÃ ng (XÃ©t nghiá»‡m & CÄHA)",
+                can_role,
+                is_locked,
+                cx,
+            ))
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(px(12.0))
+                    .child(self.render_form_input("CLS_HUYET_HOC", "CÃ´ng thá»©c mÃ¡u", "BÃ¬nh thÆ°á»ng", false, editable, window, cx))
+                    .child(self.render_form_input("CLS_DUONG_MAU", "ÄÆ°á»ng mÃ¡u (mmol/L)", "", false, editable, window, cx))
+                    .child(self.render_form_input("CLS_URE", "UrÃª (mmol/L)", "", false, editable, window, cx))
+                    .child(self.render_form_input("CLS_CREATININ", "Creatinin (Âµmol/L)", "", false, editable, window, cx)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(px(12.0))
+                    .child(self.render_form_input("CLS_ASAT_GOT", "AST / GOT (U/L)", "", false, editable, window, cx))
+                    .child(self.render_form_input("CLS_ALAT_GPT", "ALT / GPT (U/L)", "", false, editable, window, cx))
+                    .child(self.render_form_input("CLS_NUOC_TIEU", "Tá»•ng phÃ¢n tÃ­ch nÆ°á»›c tiá»ƒu", "BÃ¬nh thÆ°á»ng", false, editable, window, cx))
+                    .child(self.render_form_input("CLS_XQ_TIM_PHOI", "X-Quang tim phá»•i", "BÃ¬nh thÆ°á»ng", false, editable, window, cx)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(px(12.0))
+                    .child(self.render_form_input("CLS_KHAC_MO_TA", "Cáº­n lÃ¢m sÃ ng khÃ¡c (SiÃªu Ã¢m, ECG...)", "", false, editable, window, cx))
+                    .child(self.render_form_input("CLS_DINH_KY_KET_QUA", "Káº¿t luáº­n Cáº­n lÃ¢m sÃ ng", "BÃ¬nh thÆ°á»ng", false, editable, window, cx))
+                    .child(self.render_form_input("BS_CLS", "BÃ¡c sÄ© CLS", "", false, editable, window, cx)),
+            )
+            .into_any_element()
     }
-    let rec_status = *selected_record_status.read();
-    let eds = editing_sections.read().clone();
-    let (can_role, enabled) =
-        check_section_unlocked(&user, rec_id, rec_status, &eds, "cls", "bs_cls");
-    let is_editing = *eds.get("cls").unwrap_or(&false);
 
-    rsx! {
-        div { class: "card",
-            SectionHeader {
-                title: "5. Cận lâm sàng (Xét nghiệm & CĐHA)".to_string(),
-                can_edit_role: can_role,
-                is_new_record: false,
-                is_locked_record: rec_status == 1,
-                is_editing: is_editing,
-                on_edit: move |_| { editing_sections.write().insert("cls".to_string(), true); },
-                on_save: move |_| on_save_section.call("cls".to_string()),
-                on_cancel: move |_| on_cancel_section.call("cls".to_string()),
-            }
+    fn render_tab_conclusion(
+        &mut self,
+        is_locked: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let can_role = self.has_any_role(&["admin", "bs_ketluan"]);
+        let is_admin = self.has_any_role(&["admin"]);
+        let editable = !is_locked && can_role && self.editing_section.as_deref() == Some("conclusion");
+        let pl = self.get_form_val("PHAN_LOAI_SK");
 
-            div { class: "grid-2", style: "margin-bottom: 10px;",
-                TextAreaField { label: "Xét nghiệm Máu".to_string(), field_key: "CLS_MAU".to_string(), form: form, enabled: enabled, rows: 3 }
-                TextAreaField { label: "Xét nghiệm Nước tiểu".to_string(), field_key: "CLS_NUOC_TIEU".to_string(), form: form, enabled: enabled, rows: 3 }
-                TextAreaField { label: "X-Quang tim phổi".to_string(), field_key: "CLS_XQ_TIM_PHOI".to_string(), form: form, enabled: enabled, rows: 2 }
-                TextAreaField { label: "Siêu âm / Điện tim / Khác".to_string(), field_key: "CLS_SIEU_AM".to_string(), form: form, enabled: enabled, rows: 2 }
-            }
-            div { class: "grid-4", style: "margin-bottom: 10px;",
-                TextField { label: "Mã dịch vụ (CSV)".to_string(), field_key: "MA_DICH_VU".to_string(), form: form, enabled: enabled }
-                TextField { label: "Mã chỉ số (CSV)".to_string(), field_key: "MA_CHI_SO".to_string(), form: form, enabled: enabled }
-                TextField { label: "Giá trị (CSV)".to_string(), field_key: "GIA_TRI".to_string(), form: form, enabled: enabled }
-                TextField { label: "Đơn vị đo".to_string(), field_key: "DON_VI_DO".to_string(), form: form, enabled: enabled }
-            }
-            div { class: "grid-2",
-                TextField { label: "Kết luận Cận lâm sàng".to_string(), field_key: "KET_LUAN_CLS".to_string(), form: form, enabled: enabled }
-                TextField { label: "Bác sĩ CLS".to_string(), field_key: "BS_CLS".to_string(), form: form, enabled: enabled }
-            }
-        }
-    }
-}
-
-#[component]
-pub fn TabConclusion(
-    user: Option<User>,
-    selected_record_id: Signal<Option<i64>>,
-    selected_record_status: Signal<i64>,
-    form: Signal<Map<String, Value>>,
-    editing_sections: Signal<HashMap<String, bool>>,
-    catalogs_cache: Signal<HashMap<String, Vec<CatalogItem>>>,
-    on_save_section: EventHandler<String>,
-    on_cancel_section: EventHandler<String>,
-    on_lock_toggle: EventHandler<(i64, bool)>,
-    on_export_docx: EventHandler<(i64, bool)>,
-) -> Element {
-    let Some(rec_id) = *selected_record_id.read() else {
-        return rsx! { div { class: "card", "Vui lòng chọn một hồ sơ bên danh sách trái." } };
-    };
-    let rec_status = *selected_record_status.read();
-    let eds = editing_sections.read().clone();
-    let (can_role, enabled) =
-        check_section_unlocked(&user, Some(rec_id), rec_status, &eds, "ketluan", "bs_ketluan");
-    let is_editing = *eds.get("ketluan").unwrap_or(&false);
-
-    let pl_keys = [
-        "KHAM_THE_LUC_PL",
-        "NOI_KHOA_TUAN_HOAN_PL",
-        "NOI_KHOA_HO_HAP_PL",
-        "NOI_KHOA_TIEU_HOA_PL",
-        "NOI_KHOA_THAN_TN_SD_PL",
-        "NOI_KHOA_NOI_TIET_PL",
-        "NOI_KHOA_CO_XUONG_KHOP_PL",
-        "NOI_KHOA_THAN_KINH_PL",
-        "NOI_KHOA_TAM_THAN_PL",
-        "KHAM_NGOAI_KHOA_PL",
-        "KHAM_DA_LIEU_PL",
-        "KHAM_SAN_PHU_KHOA_PL",
-        "KHAM_MAT_PL",
-        "KHAM_TAI_MUI_HONG_PL",
-        "KHAM_RANG_HAM_MAT_PL",
-    ];
-    let max_pl = pl_keys
-        .iter()
-        .filter_map(|k| map_get(&form.read(), k).parse::<i32>().ok())
-        .max();
-
-    let icd_items = catalogs_cache.read().get("ICD10").cloned().unwrap_or_default();
-
-    rsx! {
-        div { class: "card",
-            SectionHeader {
-                title: "6. Kết luận sức khỏe & Ký khóa hồ sơ".to_string(),
-                can_edit_role: can_role,
-                is_new_record: false,
-                is_locked_record: rec_status == 1,
-                is_editing: is_editing,
-                on_edit: move |_| { editing_sections.write().insert("ketluan".to_string(), true); },
-                on_save: move |_| on_save_section.call("ketluan".to_string()),
-                on_cancel: move |_| on_cancel_section.call("ketluan".to_string()),
-            }
-
-            if let Some(m) = max_pl {
-                div { style: "background: #e0f2fe; border: 1px solid #7dd3fc; padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; color: #0369a1; font-size: 12.5px;",
-                    "💡 Gợi ý phân loại tổng hợp từ các chuyên khoa: Loại {m}"
-                }
-            }
-
-            div { class: "grid-2", style: "margin-bottom: 10px;",
-                SelectField { label: "Phân loại sức khỏe chung (*)".to_string(), field_key: "PHAN_LOAI_SK".to_string(), form: form, options: pl_opts(), enabled: enabled }
-                TextField { label: "Bác sĩ Kết luận".to_string(), field_key: "BS_KET_LUAN".to_string(), form: form, enabled: enabled }
-            }
-            div { style: "margin-bottom: 10px;",
-                TextAreaField { label: "Tình trạng sức khỏe / Các bệnh tật (nếu có)".to_string(), field_key: "KET_LUAN_BENH".to_string(), form: form, enabled: enabled, rows: 3 }
-            }
-            div { style: "margin-bottom: 10px;",
-                IcdMultiField { label: "Mã bệnh tật kèm theo (ICD-10)".to_string(), field_key: "CAC_BENH_TAT_NEU_CO".to_string(), form: form, icd_items: icd_items, enabled: enabled }
-            }
-            div { style: "margin-bottom: 14px;",
-                TextAreaField { label: "Đề nghị / Hướng xử trí".to_string(), field_key: "DE_NGHI".to_string(), form: form, enabled: enabled, rows: 2 }
-            }
-
-            div { style: "display: flex; gap: 10px; border-top: 1px solid #e2e8f0; padding-top: 12px;",
-                if rec_status == 0 {
-                    button {
-                        class: "btn btn-success",
-                        disabled: !can_role,
-                        onclick: move |_| on_lock_toggle.call((rec_id, true)),
-                        "🔒 Ký khóa hồ sơ"
-                    }
-                } else {
-                    button {
-                        class: "btn btn-danger",
-                        disabled: !can_role,
-                        onclick: move |_| on_lock_toggle.call((rec_id, false)),
-                        "🔓 Mở khóa hồ sơ"
-                    }
-                }
-                button {
-                    class: "btn btn-primary",
-                    onclick: move |_| on_export_docx.call((rec_id, false)),
-                    "📄 Xuất & Mở Phiếu KSK (.docx)"
-                }
-            }
-        }
+        card_box()
+            .child(self.render_section_action_bar(
+                "conclusion",
+                "Káº¿t luáº­n Sá»©c khá»e & KÃ½ khÃ³a há»“ sÆ¡",
+                can_role,
+                is_locked,
+                cx,
+            ))
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(px(12.0))
+                    .child(self.render_select_dropdown(
+                        "conc-phan-loai",
+                        "PhÃ¢n loáº¡i sá»©c khá»e chung",
+                        &pl,
+                        pl_options(),
+                        editable,
+                        |this, val, _, _| {
+                            this.form_values.insert("PHAN_LOAI_SK".into(), val);
+                        },
+                        cx,
+                    ))
+                    .child(self.render_form_input("KET_LUAN_BENH", "Káº¿t luáº­n Ä‘á»§ sá»©c khá»e / Bá»‡nh táº­t", "Äá»§ sá»©c khá»e lÃ m viá»‡c/há»c táº­p", false, editable, window, cx))
+                    .child(self.render_form_input("BS_KET_LUAN", "BÃ¡c sÄ© káº¿t luáº­n", "", false, editable, window, cx)),
+            )
+            .child(self.render_form_input("CAC_BENH_TAT_NEU_CO", "CÃ¡c bá»‡nh táº­t náº¿u cÃ³", "", false, editable, window, cx))
+            .child(
+                div()
+                    .pt(px(10.0))
+                    .border_t_1()
+                    .border_color(rgb(BORDER_COL))
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(10.0))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .gap(px(8.0))
+                            .when(!is_locked && can_role && self.selected_record_id.is_some(), |el| {
+                                el.child(
+                                    Button::new("btn-sign-lock")
+                                        .label("KÃ½ khÃ³a há»“ sÆ¡ (HoÃ n táº¥t)")
+                                        .small()
+                                        .primary()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.set_record_status(2, window, cx);
+                                        })),
+                                )
+                            })
+                            .when(is_locked && is_admin && self.selected_record_id.is_some(), |el| {
+                                el.child(
+                                    Button::new("btn-unlock-admin")
+                                        .label("Má»Ÿ khÃ³a há»“ sÆ¡ (Admin)")
+                                        .small()
+                                        .secondary()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.set_record_status(1, window, cx);
+                                        })),
+                                )
+                            }),
+                    )
+                    .when(self.selected_record_id.is_some(), |el| {
+                        el.child(
+                            Button::new("btn-export-docx")
+                                .label("Xuáº¥t Giáº¥y KSK (DOCX)")
+                                .small()
+                                .secondary()
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.export_docx(false, cx);
+                                })),
+                        )
+                    }),
+            )
+            .into_any_element()
     }
 }

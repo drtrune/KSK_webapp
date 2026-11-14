@@ -1,1306 +1,1512 @@
-pub mod components;
 pub mod sidebar;
 pub mod tab_export_admin;
 pub mod tabs_exam;
+pub mod widgets;
 
-use crate::config::AppConfig;
-use crate::db::{get_db_info, hash_password, init_db, seed_catalogs_from_asset};
-use crate::handlers::{
-    generate_csv_bytes, generate_docx_bytes, query_filtered_records, SharedState,
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
 };
-use crate::models::*;
-use crate::updater::{self, CURRENT_VERSION};
-use components::map_get;
-use dioxus::prelude::*;
-use serde_json::{json, Map, Value};
-use sidebar::Sidebar;
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::sync::Arc;
-use tab_export_admin::{TabAdmin, TabExportCsv};
-use tabs_exam::{
-    TabClinical, TabConclusion, TabHistory, TabParaclinical, TabPhysical, TabReception,
+
+use gpui::{
+    AnyElement, AppContext as _, Context, Entity, InteractiveElement, IntoElement, ParentElement,
+    Render, Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, rgb,
 };
-use tokio::runtime::Handle;
+use gpui_component::{
+    Sizable,
+    button::{Button, ButtonVariants},
+    input::{Input, InputEvent, InputState},
+};
+use serde_json::{Map, Value};
 use tokio::sync::broadcast;
 
-const STYLES_CSS: &str = include_str!("styles.css");
+use crate::{
+    config::AppConfig,
+    db,
+    handlers::{
+        AppState, generate_csv_bytes, generate_docx_bytes, query_filtered_records,
+    },
+    models::{CatalogItem, KskRecordRow, UpdateManifest, User, merge_payload_by_roles},
+    updater,
+};
+
+use self::widgets::{
+    BG_APP, BG_CARD, BORDER_COL, DANGER_BG, DANGER_COL, PRIMARY_COL, PRIMARY_LIGHT,
+    SUCCESS_BG, SUCCESS_COL, TEXT_MAIN, TEXT_MUTED, WARN_BG, WARN_COL, badge, card_box,
+    field_label, role_label_vi,
+};
+
+pub fn payload_field(row: &KskRecordRow, key: &str) -> String {
+    serde_json::from_str::<Map<String, Value>>(&row.payload_json)
+        .ok()
+        .and_then(|m| m.get(key).and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .unwrap_or_default()
+}
 
 #[derive(Clone)]
 pub struct AppLaunchCtx {
-    pub rt: Handle,
-    pub state: SharedState,
+    pub rt: tokio::runtime::Handle,
+    pub state: Arc<AppState>,
     pub his_tx: broadcast::Sender<String>,
     pub initial_cfg: AppConfig,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AppTab {
-    Reception,
-    History,
-    Physical,
-    Clinical,
-    Paraclinical,
-    Conclusion,
-    ExportCsv,
-    Admin,
+pub struct KskGpuiApp {
+    pub rt: tokio::runtime::Handle,
+    pub state: Arc<AppState>,
+    pub cfg: AppConfig,
+
+    // Auth & Profile
+    pub current_user: Option<User>,
+    pub login_username: Entity<InputState>,
+    pub login_password: Entity<InputState>,
+    pub login_db_path: Entity<InputState>,
+    pub login_error: Option<String>,
+    pub show_profile_modal: bool,
+    pub prof_full_name: Entity<InputState>,
+    pub prof_old_pw: Entity<InputState>,
+    pub prof_new_pw: Entity<InputState>,
+
+    // Navigation & Modals
+    pub active_nav: String,       // "exam" | "export" | "admin"
+    pub active_exam_tab: String,  // "reception" | "history" | "physical" | "clinical" | "paraclinical" | "conclusion"
+    pub open_dropdown: Option<String>,
+    pub toast: Option<(String, bool)>,
+    pub available_update: Option<UpdateManifest>,
+
+    // Sidebar
+    pub sidebar_open: bool,
+    pub sidebar_search: Entity<InputState>,
+    pub sidebar_from_date: Entity<InputState>,
+    pub sidebar_to_date: Entity<InputState>,
+    pub sidebar_status_filter: Option<i64>,
+    pub records: Vec<KskRecordRow>,
+
+    // Current Exam Record
+    pub selected_record_id: Option<i64>,
+    pub is_creating_new: bool,
+    pub current_record_status: i64,
+    pub editing_section: Option<String>,
+    pub form_values: HashMap<String, String>,
+    pub form_inputs: HashMap<String, Entity<InputState>>,
+    pub form_subs: HashMap<String, Subscription>,
+
+    // Clinical Disease Tree
+    pub clinical_tree_mode: bool,
+    pub disease_search_input: Entity<InputState>,
+    pub selected_specialty_filter: String,
+
+    // Export CSV Tab
+    pub exp_from_date: Entity<InputState>,
+    pub exp_to_date: Entity<InputState>,
+    pub exp_q: Entity<InputState>,
+    pub exp_workplace: Entity<InputState>,
+    pub exp_status_filter: Option<i64>,
+    pub export_rows: Vec<KskRecordRow>,
+    pub export_selected_ids: HashSet<i64>,
+
+    // Admin Tab
+    pub admin_sub_tab: String,
+    pub adm_cskcb: Entity<InputState>,
+    pub adm_ma_cskcb: Entity<InputState>,
+    pub adm_db_path: Entity<InputState>,
+    pub adm_update_dir: Entity<InputState>,
+    pub adm_auto_check_update: bool,
+    pub adm_changelog: Entity<InputState>,
+    pub users_list: Vec<User>,
+    pub adm_new_user: Entity<InputState>,
+    pub adm_new_pw: Entity<InputState>,
+    pub adm_new_fullname: Entity<InputState>,
+    pub adm_new_roles: Vec<String>,
+    pub catalogs: Vec<CatalogItem>,
+    pub adm_cat_type: String,
+    pub adm_cat_code: Entity<InputState>,
+    pub adm_cat_name: Entity<InputState>,
+
+    pub _ui_subs: Vec<Subscription>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct KskRecordSummary {
-    pub id: i64,
-    pub ma_tiep_nhan: String,
-    pub ho_ten: String,
-    pub ngay_vao: String,
-    pub status: i64,
-    pub phan_loai_sk: String,
-}
+impl KskGpuiApp {
+    pub fn new(launch_ctx: AppLaunchCtx, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let cfg = launch_ctx.initial_cfg.clone();
 
-fn section_role_and_fields(section: &str) -> (&'static str, &'static [&'static str]) {
-    match section {
-        "reception" => ("reception", FIELDS_RECEPTION),
-        "history" => ("tiensu", FIELDS_TIENSU),
-        "physical" => ("bs_theluc", FIELDS_BS_THELUC),
-        "noi" => ("bs_noi", FIELDS_BS_NOI),
-        "ngoai" => ("bs_ngoai", FIELDS_BS_NGOAI),
-        "dalieu" => ("bs_dalieu", FIELDS_BS_DALIEU),
-        "san" => ("bs_san", FIELDS_BS_SAN),
-        "mat" => ("bs_mat", FIELDS_BS_MAT),
-        "tmh" => ("bs_tmh", FIELDS_BS_TMH),
-        "rhm" => ("bs_rhm", FIELDS_BS_RHM),
-        "cls" => ("bs_cls", FIELDS_BS_CLS),
-        "ketluan" => ("bs_ketluan", FIELDS_BS_KETLUAN),
-        _ => ("admin", &[]),
-    }
-}
+        let login_username = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Tên đăng nhập (vd: admin)")
+                .default_value("admin")
+        });
+        let login_password = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Mật khẩu")
+                .masked(true)
+        });
+        let login_db_path = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Đường dẫn file SQLite (.db)")
+                .default_value(cfg.database_path.clone())
+        });
 
-fn run_sync<F, T>(rt: &Handle, fut: F) -> T
-where
-    F: std::future::Future<Output = T> + Send,
-    T: Send,
-{
-    if tokio::runtime::Handle::try_current().is_ok() {
-        let rt_clone = rt.clone();
-        std::thread::scope(|s| {
-            s.spawn(|| rt_clone.block_on(fut))
-                .join()
-                .expect("Async thread panicked")
-        })
-    } else {
-        rt.block_on(fut)
-    }
-}
+        let prof_full_name = cx.new(|cx| InputState::new(window, cx).placeholder("Họ tên"));
+        let prof_old_pw = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Mật khẩu cũ")
+                .masked(true)
+        });
+        let prof_new_pw = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Mật khẩu mới")
+                .masked(true)
+        });
 
-fn load_catalogs_sync(rt: &Handle, state: &SharedState) -> HashMap<String, Vec<CatalogItem>> {
-    let types = [
-        "DAN_TOC",
-        "NGHE_NGHIEP",
-        "TINH_TP",
-        "XA_PHUONG",
-        "DOI_TUONG",
-        "NGUON_CHI_TRA",
-        "NOI_CAP",
-        "ICD10",
-    ];
-    let mut map = HashMap::new();
-    run_sync(rt, async {
-        let db = state.db.read().await;
-        for t in types {
-            let items: Vec<CatalogItem> = sqlx::query_as(
-                "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type = ? ORDER BY is_default DESC, name ASC",
-            )
-            .bind(t)
-            .fetch_all(&*db)
-            .await
-            .unwrap_or_default();
-            map.insert(t.to_string(), items);
-        }
-    });
-    map
-}
+        let sidebar_search = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Quét mã vạch / Tên / CCCD...")
+        });
+        let sidebar_from_date = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("YYYY-MM-DD")
+                .default_value(today.clone())
+        });
+        let sidebar_to_date = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("YYYY-MM-DD")
+                .default_value(today.clone())
+        });
 
-#[allow(non_snake_case)]
-pub fn App() -> Element {
-    let ctx = use_context::<AppLaunchCtx>();
-    let today = chrono::Local::now().format("%d/%m/%Y").to_string();
+        let disease_search_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Tìm tên bệnh (vd: tăng huyết áp, cận thị...)")
+        });
 
-    let mut cfg = use_signal(|| ctx.initial_cfg.clone());
-    let mut current_user = use_signal(|| None::<User>);
-    let mut login_username = use_signal(String::new);
-    let mut login_password = use_signal(String::new);
-    let mut login_error = use_signal(|| None::<String>);
+        let exp_from_date = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("YYYY-MM-DD")
+                .default_value(today.clone())
+        });
+        let exp_to_date = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("YYYY-MM-DD")
+                .default_value(today)
+        });
+        let exp_q = cx.new(|cx| InputState::new(window, cx).placeholder("Tên / Mã BN / CCCD"));
+        let exp_workplace = cx.new(|cx| InputState::new(window, cx).placeholder("Đơn vị / Công ty"));
 
-    let mut show_profile_modal = use_signal(|| false);
-    let mut profile_full_name = use_signal(String::new);
-    let mut profile_old_pw = use_signal(String::new);
-    let mut profile_new_pw = use_signal(String::new);
+        let adm_cskcb = cx.new(|cx| {
+            InputState::new(window, cx).default_value(cfg.ten_cskcb.clone())
+        });
+        let adm_ma_cskcb = cx.new(|cx| {
+            InputState::new(window, cx).default_value(cfg.ma_cskcb.clone())
+        });
+        let adm_db_path = cx.new(|cx| {
+            InputState::new(window, cx).default_value(cfg.database_path.clone())
+        });
+        let adm_update_dir = cx.new(|cx| {
+            InputState::new(window, cx).default_value(cfg.update_dir_path.clone())
+        });
+        let adm_changelog = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Nội dung cập nhật phiên bản mới...")
+        });
 
-    let update_available = use_signal(|| {
-        if ctx.initial_cfg.auto_check_update {
-            updater::check_for_update(&ctx.initial_cfg.update_dir_path).unwrap_or(None)
-        } else {
-            None
-        }
-    });
+        let adm_new_user = cx.new(|cx| InputState::new(window, cx).placeholder("username"));
+        let adm_new_pw = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("mật khẩu")
+                .masked(true)
+        });
+        let adm_new_fullname = cx.new(|cx| InputState::new(window, cx).placeholder("BS. Nguyễn Văn A"));
 
-    let mut active_tab = use_signal(|| AppTab::Reception);
-    let sidebar_open = use_signal(|| true);
-    let filter_from_date = use_signal(|| today.clone());
-    let filter_to_date = use_signal(|| today.clone());
-    let filter_status = use_signal(|| None::<i64>);
-    let filter_q = use_signal(String::new);
+        let adm_cat_code = cx.new(|cx| InputState::new(window, cx).placeholder("Mã (vd: I10)"));
+        let adm_cat_name = cx.new(|cx| InputState::new(window, cx).placeholder("Tên hiển thị"));
 
-    let mut records = use_signal(Vec::<KskRecordSummary>::new);
-    let mut selected_record_id = use_signal(|| None::<i64>);
-    let mut selected_record_status = use_signal(|| 0i64);
-    let mut form = use_signal(Map::<String, Value>::new);
-    let mut editing_sections = use_signal(HashMap::<String, bool>::new);
-    let clinical_full_mode = use_signal(|| false);
-
-    let mut catalogs_cache = use_signal(|| load_catalogs_sync(&ctx.rt, &ctx.state));
-
-    // Export CSV
-    let csv_from_date = use_signal(|| today.clone());
-    let csv_to_date = use_signal(|| today);
-    let csv_status = use_signal(|| None::<i64>);
-    let csv_q = use_signal(String::new);
-    let csv_workplace = use_signal(String::new);
-    let csv_classification = use_signal(String::new);
-    let mut csv_rows = use_signal(Vec::<KskRecordRow>::new);
-    let mut csv_selected_ids = use_signal(HashSet::<i64>::new);
-
-    // Admin
-    let mut db_info = use_signal(|| None::<DbInfo>);
-    let publish_changelog = use_signal(String::new);
-    let mut users_list = use_signal(Vec::<User>::new);
-    let mut new_user_username = use_signal(String::new);
-    let mut new_user_password = use_signal(String::new);
-    let mut new_user_fullname = use_signal(String::new);
-    let new_user_roles = use_signal(|| vec!["reception".to_string()]);
-    let catalog_type_filter = use_signal(|| "DAN_TOC".to_string());
-    let catalog_search = use_signal(String::new);
-    let mut catalog_rows = use_signal(Vec::<CatalogItem>::new);
-
-    // Toast: (message, is_error)
-    let mut toast = use_signal(|| None::<(String, bool)>);
-
-    let mut refresh_records = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        move || {
-            let f_from = filter_from_date.read().clone();
-            let f_to = filter_to_date.read().clone();
-            let f_st = *filter_status.read();
-            let f_q = filter_q.read().clone();
-            let rows = run_sync(&rt, async {
-                let db = state.db.read().await;
-                query_filtered_records(
-                    &*db,
-                    Some(f_from.as_str()),
-                    Some(f_to.as_str()),
-                    f_st,
-                    Some(f_q.as_str()),
-                    None,
-                    None,
-                    None,
-                    Some(300),
-                    false,
-                )
-                .await
-            });
-            let list = rows
-                .into_iter()
-                .map(|r| {
-                    let map: Map<String, Value> =
-                        serde_json::from_str(&r.payload_json).unwrap_or_default();
-                    let pl = map_get(&map, "PHAN_LOAI_SK");
-                    KskRecordSummary {
-                        id: r.id,
-                        ma_tiep_nhan: r.ma_tiep_nhan,
-                        ho_ten: r.ho_ten,
-                        ngay_vao: r.ngay_vao,
-                        status: r.status,
-                        phan_loai_sk: pl,
-                    }
-                })
-                .collect();
-            records.set(list);
-        }
-    };
-
-    let mut load_record = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        move |record_id: i64| {
-            let row: Option<KskRecordRow> = run_sync(&rt, async {
-                let db = state.db.read().await;
-                sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
-                    .bind(record_id)
-                    .fetch_optional(&*db)
-                    .await
-                    .unwrap_or(None)
-            });
-            if let Some(r) = row {
-                selected_record_id.set(Some(r.id));
-                selected_record_status.set(r.status);
-                form.set(serde_json::from_str(&r.payload_json).unwrap_or_default());
-                editing_sections.write().clear();
-            }
-        }
-    };
-
-    // Lắng nghe push real-time từ AHK v2 UIA Bridge / Mock HIS Push
-    let his_tx_sub = ctx.his_tx.clone();
-    let refresh_for_his = refresh_records.clone();
-    let load_for_his = load_record.clone();
-    use_effect(move || {
-        let mut rx = his_tx_sub.subscribe();
-        let mut r_his = refresh_for_his.clone();
-        let mut l_his = load_for_his.clone();
-        spawn(async move {
-            while let Ok(ma_tn) = rx.recv().await {
-                toast.set(Some((format!("📡 HIS Bridge vừa đẩy hồ sơ: {}", ma_tn), false)));
-                if current_user.read().is_some() {
-                    r_his();
-                    let found_id = records
-                        .read()
-                        .iter()
-                        .find(|r| r.ma_tiep_nhan == ma_tn)
-                        .map(|r| r.id);
-                    if let Some(id) = found_id {
-                        l_his(id);
-                        active_tab.set(AppTab::Reception);
+        let sub_search = cx.subscribe_in(&sidebar_search, window, |this, _, ev, window, cx| {
+            if matches!(ev, InputEvent::Change) {
+                this.refresh_records(window, cx);
+                // Auto-match exact barcode
+                let q = this.sidebar_search.read(cx).value().trim().to_string();
+                if !q.is_empty() {
+                    if let Some(m) = this.records.iter().find(|r| {
+                        r.ma_y_te == q || r.so_cccd == q || r.ma_tiep_nhan == q
+                    }) {
+                        let id = m.id;
+                        if this.selected_record_id != Some(id) {
+                            this.load_record_into_form(id, window, cx);
+                        }
                     }
                 }
             }
         });
-    });
-
-    let mut refresh_db_info = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        move || {
-            let path = cfg.read().database_path.clone();
-            let info = run_sync(&rt, async {
-                let db = state.db.read().await;
-                get_db_info(&*db, &path).await
-            });
-            db_info.set(Some(info));
-        }
-    };
-
-    let mut refresh_users = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        move || {
-            let rows: Vec<User> = run_sync(&rt, async {
-                let db = state.db.read().await;
-                sqlx::query_as("SELECT * FROM users ORDER BY id ASC")
-                    .fetch_all(&*db)
-                    .await
-                    .unwrap_or_default()
-            });
-            users_list.set(rows);
-        }
-    };
-
-    let mut refresh_admin_catalogs = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        move || {
-            let ct = catalog_type_filter.read().clone();
-            let q = format!("%{}%", catalog_search.read().trim());
-            let rows: Vec<CatalogItem> = run_sync(&rt, async {
-                let db = state.db.read().await;
-                sqlx::query_as(
-                    "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type = ? AND (code LIKE ? OR name LIKE ?) ORDER BY is_default DESC, name ASC LIMIT 200",
-                )
-                .bind(&ct)
-                .bind(&q)
-                .bind(&q)
-                .fetch_all(&*db)
-                .await
-                .unwrap_or_default()
-            });
-            catalog_rows.set(rows);
-        }
-    };
-
-    let mut switch_database = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        let mut r_rec = refresh_records.clone();
-        let mut r_db = refresh_db_info.clone();
-        move |new_path: String| {
-            let p = new_path.trim().to_string();
-            if p.is_empty() {
-                toast.set(Some(("Đường dẫn DB không được để trống!".to_string(), true)));
-                return;
+        let sub_from = cx.subscribe_in(&sidebar_from_date, window, |this, _, ev, window, cx| {
+            if matches!(ev, InputEvent::Change) {
+                this.refresh_records(window, cx);
             }
-            let res = run_sync(&rt, async {
-                let new_pool = init_db(&p).await.map_err(|e| e.to_string())?;
-                let mut db_guard = state.db.write().await;
-                *db_guard = new_pool;
-                Ok::<(), String>(())
-            });
-            match res {
-                Ok(_) => {
-                    cfg.write().database_path = p;
-                    let c_clone = cfg.read().clone();
-                    let _ = c_clone.save();
-                    run_sync(&rt, async {
-                        *state.config.write().await = c_clone;
-                    });
-                    catalogs_cache.set(load_catalogs_sync(&rt, &state));
-                    r_db();
-                    if current_user.read().is_some() {
-                        r_rec();
-                    }
-                    toast.set(Some(("Đã kết nối cơ sở dữ liệu mới thành công!".to_string(), false)));
-                }
-                Err(e) => {
-                    toast.set(Some((format!("Không thể mở DB: {}", e), true)));
-                }
+        });
+        let sub_to = cx.subscribe_in(&sidebar_to_date, window, |this, _, ev, window, cx| {
+            if matches!(ev, InputEvent::Change) {
+                this.refresh_records(window, cx);
             }
-        }
-    };
-
-    let mut do_login = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        let mut r_rec = refresh_records.clone();
-        let mut r_db = refresh_db_info.clone();
-        let mut r_usr = refresh_users.clone();
-        let mut r_cat = refresh_admin_catalogs.clone();
-        move || {
-            let u_trim = login_username.read().trim().to_string();
-            let p_trim = login_password.read().trim().to_string();
-            if u_trim.is_empty() || p_trim.is_empty() {
-                login_error.set(Some("Vui lòng nhập tên đăng nhập và mật khẩu.".to_string()));
-                return;
+        });
+        let sub_disease = cx.subscribe_in(&disease_search_input, window, |_, _, ev, _, cx| {
+            if matches!(ev, InputEvent::Change) {
+                cx.notify();
             }
-            let p_hash = hash_password(&p_trim);
-            let res: Result<Option<User>, String> = run_sync(&rt, async {
-                let db = state.db.read().await;
-                sqlx::query_as("SELECT * FROM users WHERE username = ? AND password_hash = ?")
-                    .bind(&u_trim)
-                    .bind(&p_hash)
-                    .fetch_optional(&*db)
-                    .await
-                    .map_err(|e| e.to_string())
-            });
-            match res {
-                Ok(Some(u)) => {
-                    if u.is_locked == 1 {
-                        login_error.set(Some("Tài khoản đã bị khóa bởi Quản trị viên.".to_string()));
-                        return;
-                    }
-                    let is_admin = u.has_role("admin");
-                    profile_full_name.set(u.full_name.clone());
-                    current_user.set(Some(u));
-                    login_error.set(None);
-                    login_password.set(String::new());
-                    r_rec();
-                    r_db();
-                    if is_admin {
-                        r_usr();
-                        r_cat();
-                    }
-                    toast.set(Some(("Đăng nhập thành công!".to_string(), false)));
-                }
-                Ok(None) => login_error.set(Some("Sai tên đăng nhập hoặc mật khẩu.".to_string())),
-                Err(e) => login_error.set(Some(format!("Lỗi kết nối CSDL: {}", e))),
-            }
-        }
-    };
+        });
 
-    // Màn hình Đăng nhập
-    if current_user.read().is_none() {
-        let upd = update_available.read().clone();
-        let cfg_snap = cfg.read().clone();
-        let err_msg = login_error.read().clone();
-        let mut do_login_btn = do_login.clone();
-        let mut switch_db_pick = switch_database.clone();
-        let mut switch_db_btn = switch_database.clone();
-        return rsx! {
-            style { "{STYLES_CSS}" }
-            div { class: "login-wrapper",
-                div { class: "login-card",
-                    div { style: "text-align: center;",
-                        div { style: "font-size: 20px; font-weight: 800; color: #0f766e;", "🏥 HỆ THỐNG KHÁM SỨC KHỎE (KSK)" }
-                        div { style: "font-size: 12.5px; color: #64748b; margin-top: 4px;", "{cfg_snap.ten_cskcb} • Phiên bản v{CURRENT_VERSION} (Dioxus)" }
-                    }
-
-                    if let Some(m) = upd {
-                        div { style: "background: #fef3c7; border: 1px solid #f59e0b; padding: 10px; border-radius: 7px; display: flex; justify-content: space-between; align-items: center;",
-                            span { style: "font-weight: 700; color: #92400e; font-size: 12.5px;", "🆕 Có phiên bản mới v{m.version}" }
-                            button {
-                                class: "btn btn-amber",
-                                onclick: move |_| {
-                                    if let Err(e) = updater::apply_update_and_restart(&cfg.read().update_dir_path, &m) {
-                                        login_error.set(Some(e));
-                                    }
-                                },
-                                "Cập nhật ngay"
-                            }
-                        }
-                    }
-
-                    div { class: "field",
-                        label { "Tên đăng nhập" }
-                        input {
-                            r#type: "text",
-                            placeholder: "VD: admin / letan / bsnoi...",
-                            value: "{login_username}",
-                            oninput: move |e| login_username.set(e.value()),
-                        }
-                    }
-                    div { class: "field",
-                        label { "Mật khẩu" }
-                        input {
-                            r#type: "password",
-                            placeholder: "Nhập mật khẩu",
-                            value: "{login_password}",
-                            oninput: move |e| login_password.set(e.value()),
-                            onkeypress: move |e| {
-                                if e.key() == Key::Enter {
-                                    do_login();
-                                }
-                            }
-                        }
-                    }
-
-                    if let Some(err) = err_msg {
-                        div { style: "color: #dc2626; font-size: 12.5px; font-weight: 600;", "{err}" }
-                    }
-
-                    button {
-                        class: "btn btn-primary",
-                        style: "width: 100%; justify-content: center; padding: 9px;",
-                        onclick: move |_| do_login_btn(),
-                        "ĐĂNG NHẬP"
-                    }
-
-                    div { style: "border-top: 1px solid #e2e8f0; padding-top: 10px;",
-                        div { style: "font-size: 11.5px; color: #64748b; margin-bottom: 4px;", "Đường dẫn SQLite Database (config.toml):" }
-                        div { style: "display: flex; gap: 6px;",
-                            input {
-                                r#type: "text",
-                                value: "{cfg_snap.database_path}",
-                                oninput: move |e| cfg.write().database_path = e.value(),
-                            }
-                            button {
-                                class: "btn",
-                                onclick: move |_| {
-                                    if let Some(p) = rfd::FileDialog::new().add_filter("SQLite DB", &["db", "sqlite"]).pick_file() {
-                                        switch_db_pick(p.display().to_string());
-                                    }
-                                },
-                                "📂 Chọn"
-                            }
-                            button {
-                                class: "btn btn-blue",
-                                onclick: move |_| {
-                                    let p = cfg.read().database_path.clone();
-                                    switch_db_btn(p);
-                                },
-                                "Kết nối"
-                            }
-                        }
-                    }
-                }
-            }
+        let available_update = if cfg.auto_check_update && !cfg.update_dir_path.trim().is_empty() {
+            updater::check_for_update(&cfg.update_dir_path).ok().flatten()
+        } else {
+            None
         };
+
+        // Background listener for HIS IPC Push (127.0.0.1:18080 -> his_tx)
+        let mut his_rx = launch_ctx.his_tx.subscribe();
+        cx.spawn(async move |this, cx| {
+            loop {
+                let (res, rx_back) = cx
+                    .background_executor()
+                    .spawn(async move {
+                        let r = his_rx.blocking_recv();
+                        (r, his_rx)
+                    })
+                    .await;
+                his_rx = rx_back;
+                match res {
+                    Ok(ma_bn) => {
+                        let _ = this.update(cx, |app, cx| {
+                            app.handle_his_push_event(&ma_bn, cx);
+                        });
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        })
+        .detach();
+
+        Self {
+            rt: launch_ctx.rt,
+            state: launch_ctx.state,
+            adm_auto_check_update: cfg.auto_check_update,
+            cfg,
+            current_user: None,
+            login_username,
+            login_password,
+            login_db_path,
+            login_error: None,
+            show_profile_modal: false,
+            prof_full_name,
+            prof_old_pw,
+            prof_new_pw,
+            active_nav: "exam".into(),
+            active_exam_tab: "reception".into(),
+            open_dropdown: None,
+            toast: None,
+            available_update,
+            sidebar_open: true,
+            sidebar_search,
+            sidebar_from_date,
+            sidebar_to_date,
+            sidebar_status_filter: None,
+            records: Vec::new(),
+            selected_record_id: None,
+            is_creating_new: false,
+            current_record_status: 0,
+            editing_section: None,
+            form_values: HashMap::new(),
+            form_inputs: HashMap::new(),
+            form_subs: HashMap::new(),
+            clinical_tree_mode: false,
+            disease_search_input,
+            selected_specialty_filter: String::new(),
+            exp_from_date,
+            exp_to_date,
+            exp_q,
+            exp_workplace,
+            exp_status_filter: None,
+            export_rows: Vec::new(),
+            export_selected_ids: HashSet::new(),
+            admin_sub_tab: "config".into(),
+            adm_cskcb,
+            adm_ma_cskcb,
+            adm_db_path,
+            adm_update_dir,
+            adm_changelog,
+            users_list: Vec::new(),
+            adm_new_user,
+            adm_new_pw,
+            adm_new_fullname,
+            adm_new_roles: vec!["reception".into()],
+            catalogs: Vec::new(),
+            adm_cat_type: "icd10".into(),
+            adm_cat_code,
+            adm_cat_name,
+            _ui_subs: vec![sub_search, sub_from, sub_to, sub_disease],
+        }
     }
 
-    let user_opt = current_user.read().clone();
-    let is_admin = user_opt.as_ref().map(|u| u.has_role("admin")).unwrap_or(false);
-    let can_create = user_opt
-        .as_ref()
-        .map(|u| u.has_role("admin") || u.has_role("reception"))
-        .unwrap_or(false);
+    pub fn run_sync<F: std::future::Future + Send>(&self, fut: F) -> F::Output
+    where
+        F::Output: Send,
+    {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            let rt = self.rt.clone();
+            std::thread::scope(|s| s.spawn(|| rt.block_on(fut)).join().unwrap())
+        } else {
+            self.rt.block_on(fut)
+        }
+    }
 
-    let save_section = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        let mut l_rec = load_record.clone();
-        let mut r_rec = refresh_records.clone();
-        move |section: String| {
-            let Some(u) = current_user.read().clone() else {
-                return;
-            };
-            let (req_role, allowed_fields) = section_role_and_fields(&section);
-            if !u.has_role("admin") && !u.has_role(req_role) {
-                toast.set(Some((format!("Bạn không có quyền sửa mục '{}'", section), true)));
-                return;
-            }
-            if *selected_record_status.read() == 1 {
-                toast.set(Some(("Hồ sơ đã ký khóa, không thể sửa!".to_string(), true)));
-                return;
-            }
-            let form_snap = form.read().clone();
-            let ma_tn = map_get(&form_snap, "MA_TIEP_NHAN").trim().to_string();
-            if ma_tn.is_empty() {
-                toast.set(Some(("Vui lòng nhập Mã tiếp nhận!".to_string(), true)));
-                return;
-            }
-            let rec_id = *selected_record_id.read();
-            let cfg_snap = cfg.read().clone();
+    pub fn has_any_role(&self, roles: &[&str]) -> bool {
+        let Some(u) = &self.current_user else {
+            return false;
+        };
+        roles.iter().any(|r| u.has_role(r))
+    }
 
-            let res: Result<i64, String> = run_sync(&rt, async {
-                let db = state.db.read().await;
-                if let Some(id) = rec_id {
-                    let row: Option<KskRecordRow> =
-                        sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
-                            .bind(id)
-                            .fetch_optional(&*db)
-                            .await
-                            .map_err(|e| e.to_string())?;
-                    let Some(existing) = row else {
-                        return Err("Không tìm thấy hồ sơ trong CSDL".to_string());
-                    };
-                    if existing.status == 1 {
-                        return Err("Hồ sơ đã bị khóa!".to_string());
-                    }
-                    let mut merged: Map<String, Value> =
-                        serde_json::from_str(&existing.payload_json).unwrap_or_default();
-                    for k in allowed_fields {
-                        if let Some(v) = form_snap.get(*k) {
-                            merged.insert((*k).to_string(), v.clone());
-                        }
-                    }
-                    if section == "cls" && map_get(&merged, "BS_CLS").is_empty() {
-                        merged.insert("BS_CLS".to_string(), json!(u.full_name));
-                    }
-                    if section == "ketluan" && map_get(&merged, "BS_KET_LUAN").is_empty() {
-                        merged.insert("BS_KET_LUAN".to_string(), json!(u.full_name));
-                    }
-                    let ho_ten = map_get(&merged, "HO_TEN").to_uppercase();
-                    let ma_y_te = map_get(&merged, "MA_Y_TE");
-                    let gioi_tinh = map_get(&merged, "GIOI_TINH");
-                    let ngay_sinh = map_get(&merged, "NGAY_SINH");
-                    let so_cccd = map_get(&merged, "SO_CCCD");
-                    let ngay_vao = map_get(&merged, "NGAY_VAO");
-                    let payload_str = serde_json::to_string(&merged).map_err(|e| e.to_string())?;
+    pub fn get_form_val(&self, key: &str) -> String {
+        self.form_values.get(key).cloned().unwrap_or_default()
+    }
 
-                    sqlx::query(
-                        r#"
-                        UPDATE ksk_records SET
-                            ma_tiep_nhan = ?, ma_y_te = ?, ho_ten = ?, gioi_tinh = ?,
-                            ngay_sinh = ?, so_cccd = ?, ngay_vao = ?,
-                            payload_json = ?, updated_by = ?, updated_at = datetime('now', 'localtime')
-                        WHERE id = ?
-                        "#,
-                    )
-                    .bind(&ma_tn)
-                    .bind(&ma_y_te)
-                    .bind(&ho_ten)
-                    .bind(&gioi_tinh)
-                    .bind(&ngay_sinh)
-                    .bind(&so_cccd)
-                    .bind(&ngay_vao)
-                    .bind(&payload_str)
-                    .bind(&u.username)
-                    .bind(id)
-                    .execute(&*db)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                    Ok(id)
-                } else {
-                    if section != "reception" {
-                        return Err("Vui lòng lưu Thông tin tiếp nhận trước!".to_string());
-                    }
-                    let mut merged = Map::new();
-                    for k in allowed_fields {
-                        if let Some(v) = form_snap.get(*k) {
-                            merged.insert((*k).to_string(), v.clone());
-                        }
-                    }
-                    merged.insert("MA_LK".to_string(), json!(ma_tn));
-                    merged.insert("MA_CSKCB".to_string(), json!(cfg_snap.ma_cskcb));
-                    merged.insert("MA_GTIN_CSKCB".to_string(), json!(cfg_snap.ma_gtin_cskcb));
-                    let ho_ten = map_get(&merged, "HO_TEN").to_uppercase();
-                    let ma_y_te = map_get(&merged, "MA_Y_TE");
-                    let gioi_tinh = map_get(&merged, "GIOI_TINH");
-                    let ngay_sinh = map_get(&merged, "NGAY_SINH");
-                    let so_cccd = map_get(&merged, "SO_CCCD");
-                    let ngay_vao = map_get(&merged, "NGAY_VAO");
-                    let payload_str = serde_json::to_string(&merged).map_err(|e| e.to_string())?;
+    pub fn get_or_create_form_input(
+        &mut self,
+        key: &str,
+        placeholder: &str,
+        masked: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
+        if let Some(existing) = self.form_inputs.get(key) {
+            return existing.clone();
+        }
+        let initial = self.form_values.get(key).cloned().unwrap_or_default();
+        let ph = placeholder.to_string();
+        let entity = cx.new(|cx| {
+            let s = InputState::new(window, cx)
+                .placeholder(ph)
+                .default_value(initial);
+            if masked { s.masked(true) } else { s }
+        });
 
-                    let res = sqlx::query(
-                        r#"
-                        INSERT INTO ksk_records (
-                            ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao,
-                            status, payload_json, updated_by
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-                        "#,
-                    )
-                    .bind(&ma_tn)
-                    .bind(&ma_y_te)
-                    .bind(&ho_ten)
-                    .bind(&gioi_tinh)
-                    .bind(&ngay_sinh)
-                    .bind(&so_cccd)
-                    .bind(&ngay_vao)
-                    .bind(&payload_str)
-                    .bind(&u.username)
-                    .execute(&*db)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                    Ok(res.last_insert_rowid())
+        let key_owned = key.to_string();
+        let sub = cx.subscribe_in(&entity, window, move |this, ent, ev, window, cx| {
+            if matches!(ev, InputEvent::Change) {
+                let val = ent.read(cx).value().to_string();
+                this.form_values.insert(key_owned.clone(), val);
+                if key_owned == "CHIEU_CAO" || key_owned == "CAN_NANG" {
+                    this.recompute_bmi(window, cx);
                 }
-            });
+            }
+        });
+        self.form_subs.insert(key.to_string(), sub);
+        self.form_inputs.insert(key.to_string(), entity.clone());
+        entity
+    }
 
-            match res {
-                Ok(id) => {
-                    editing_sections.write().insert(section, false);
-                    l_rec(id);
-                    r_rec();
-                    toast.set(Some(("Đã lưu thành công!".to_string(), false)));
-                }
-                Err(e) => toast.set(Some((format!("Lỗi lưu dữ liệu: {}", e), true))),
+    fn recompute_bmi(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let h_cm = self
+            .get_form_val("CHIEU_CAO")
+            .replace(',', ".")
+            .parse::<f64>()
+            .unwrap_or(0.0);
+        let w_kg = self
+            .get_form_val("CAN_NANG")
+            .replace(',', ".")
+            .parse::<f64>()
+            .unwrap_or(0.0);
+        if h_cm > 30.0 && w_kg > 5.0 {
+            let h_m = h_cm / 100.0;
+            let bmi = w_kg / (h_m * h_m);
+            let bmi_str = format!("{:.1}", bmi);
+            self.form_values
+                .insert("CHI_SO_BMI".into(), bmi_str.clone());
+            if let Some(ent) = self.form_inputs.get("CHI_SO_BMI") {
+                ent.update(cx, |s, cx| s.set_value(bmi_str, window, cx));
             }
         }
-    };
+    }
 
-    let cancel_section = {
-        let mut l_rec = load_record.clone();
-        move |section: String| {
-            if let Some(id) = *selected_record_id.read() {
-                l_rec(id);
-            }
-            editing_sections.write().insert(section, false);
-        }
-    };
+    pub fn show_toast(&mut self, msg: &str, is_err: bool, cx: &mut Context<Self>) {
+        self.toast = Some((msg.to_string(), is_err));
+        cx.notify();
+    }
 
-    let export_docx = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        move |(id, is_rec): (i64, bool)| {
-            let cfg_snap = cfg.read().clone();
-            let res = run_sync(&rt, async {
-                let db = state.db.read().await;
-                generate_docx_bytes(&*db, &cfg_snap, id, is_rec).await
-            });
-            match res {
-                Ok((filename, bytes)) => {
-                    if let Some(path) = rfd::FileDialog::new()
-                        .set_file_name(&filename)
-                        .add_filter("Word Document", &["docx"])
-                        .save_file()
-                    {
-                        match fs::write(&path, &bytes) {
-                            Ok(_) => {
-                                toast.set(Some((format!("Đã xuất file: {}", path.display()), false)));
-                                let _ = std::process::Command::new("cmd")
-                                    .args(["/C", "start", "", &path.display().to_string()])
-                                    .spawn();
-                            }
-                            Err(e) => toast.set(Some((format!("Lỗi ghi file: {}", e), true))),
-                        }
-                    }
-                }
-                Err(e) => toast.set(Some((e, true))),
-            }
-        }
-    };
-
-    let fetch_his = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        move |_: ()| {
-            let ma_tn = map_get(&form.read(), "MA_TIEP_NHAN").trim().to_string();
-            if ma_tn.is_empty() {
-                toast.set(Some(("Nhập Mã tiếp nhận trước khi lấy dữ liệu HIS!".to_string(), true)));
-                return;
-            }
-            let cfg_snap = cfg.read().clone();
-            let res: Result<Value, String> = run_sync(&rt, async {
-                let payload_str = cfg_snap.his_payload_template.replace("{{ma_tn}}", &ma_tn);
-                let payload_val: Value = serde_json::from_str(&payload_str)
-                    .unwrap_or_else(|_| json!({"ma_tiep_nhan": ma_tn}));
-                let resp = state
-                    .http_client
-                    .post(&cfg_snap.his_api_url)
-                    .header(&cfg_snap.his_auth_header, &cfg_snap.his_api_key)
-                    .json(&payload_val)
-                    .send()
-                    .await
-                    .map_err(|e| format!("Lỗi gọi HIS API: {}", e))?;
-                resp.json::<Value>().await.map_err(|e| e.to_string())
-            });
-            match res {
-                Ok(val) => {
-                    if let Some(data) = val.get("data").and_then(|d| d.as_object()) {
-                        let mut f = form.write();
-                        for (k, v) in data {
-                            f.insert(k.to_uppercase(), v.clone());
-                        }
-                        toast.set(Some(("Đã nạp dữ liệu từ HIS!".to_string(), false)));
-                    } else {
-                        toast.set(Some(("HIS không trả về dữ liệu bệnh nhân".to_string(), true)));
-                    }
-                }
-                Err(e) => toast.set(Some((e, true))),
-            }
-        }
-    };
-
-    let lock_toggle = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        let mut l_rec = load_record.clone();
-        let mut r_rec = refresh_records.clone();
-        move |(id, lock): (i64, bool)| {
-            let has_perm = current_user
-                .read()
-                .as_ref()
-                .map(|u| u.has_role("admin") || u.has_role("bs_ketluan"))
-                .unwrap_or(false);
-            if !has_perm {
-                toast.set(Some(("Chỉ Bác sĩ Kết luận hoặc Admin mới có quyền ký khóa/mở khóa!".to_string(), true)));
-                return;
-            }
-            let new_status = if lock { 1 } else { 0 };
-            let res = run_sync(&rt, async {
-                let db = state.db.read().await;
-                sqlx::query("UPDATE ksk_records SET status = ?, updated_at = datetime('now', 'localtime') WHERE id = ?")
-                    .bind(new_status)
-                    .bind(id)
-                    .execute(&*db)
-                    .await
-                    .map_err(|e| e.to_string())
-            });
-            match res {
-                Ok(_) => {
-                    l_rec(id);
-                    r_rec();
-                    toast.set(Some((
-                        if lock { "Đã ký khóa hồ sơ!" } else { "Đã mở khóa hồ sơ!" }.to_string(),
-                        false,
-                    )));
-                }
-                Err(e) => toast.set(Some((e, true))),
-            }
-        }
-    };
-
-    let mut refresh_csv = {
-        let rt = ctx.rt.clone();
-        let state = ctx.state.clone();
-        move |_: ()| {
-            let f_from = csv_from_date.read().clone();
-            let f_to = csv_to_date.read().clone();
-            let f_st = *csv_status.read();
-            let f_q = csv_q.read().clone();
-            let f_wp = csv_workplace.read().clone();
-            let f_cl = csv_classification.read().clone();
-            let rows = run_sync(&rt, async {
-                let db = state.db.read().await;
-                query_filtered_records(
-                    &*db,
-                    Some(f_from.as_str()),
-                    Some(f_to.as_str()),
-                    f_st,
-                    Some(f_q.as_str()),
-                    Some(f_wp.as_str()),
-                    Some(f_cl.as_str()),
-                    None,
-                    None,
-                    true,
-                )
+    pub fn handle_his_push_event(&mut self, ma_bn: &str, cx: &mut Context<Self>) {
+        tracing::info!("GUI nhan su kien HIS Push cho ma_bn={}", ma_bn);
+        let state = self.state.clone();
+        let rows = self.run_sync(async move {
+            let pool = state.db.read().await;
+            query_filtered_records(&pool, None, None, None, None, None, None, None, Some(200), true)
                 .await
-            });
-            csv_rows.set(rows);
-            csv_selected_ids.write().clear();
+        });
+        self.records = rows;
+        if let Some(rec) = self
+            .records
+            .iter()
+            .find(|r| r.ma_y_te == ma_bn || r.ma_tiep_nhan == ma_bn)
+            .cloned()
+        {
+            self.load_record_map(&rec);
+            self.form_inputs.clear();
+            self.form_subs.clear();
+            let disp = if rec.ho_ten.is_empty() {
+                ma_bn.to_string()
+            } else {
+                rec.ho_ten.clone()
+            };
+            self.show_toast(&format!("Đã nhận bệnh nhân từ HIS: {}", disp), false, cx);
+        } else {
+            self.show_toast(&format!("HIS vừa đẩy hồ sơ {}", ma_bn), false, cx);
         }
-    };
+        cx.notify();
+    }
 
-    let export_csv = move |only_selected: bool| {
-        let sel = csv_selected_ids.read().clone();
-        let rows: Vec<KskRecordRow> = if only_selected {
-            csv_rows
-                .read()
+    fn load_record_map(&mut self, rec: &KskRecordRow) {
+        self.selected_record_id = Some(rec.id);
+        self.is_creating_new = false;
+        self.current_record_status = rec.status;
+        self.editing_section = None;
+        self.form_values.clear();
+        if let Ok(map) = serde_json::from_str::<Map<String, Value>>(&rec.payload_json) {
+            for (k, v) in map {
+                let s = match v {
+                    Value::String(s) => s,
+                    Value::Number(n) => n.to_string(),
+                    Value::Bool(b) => {
+                        if b { "1".into() } else { "0".into() }
+                    }
+                    _ => String::new(),
+                };
+                self.form_values.insert(k, s);
+            }
+        }
+    }
+
+    pub fn refresh_records(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let q = self.sidebar_search.read(cx).value().trim().to_string();
+        let from_d = self.sidebar_from_date.read(cx).value().trim().to_string();
+        let to_d = self.sidebar_to_date.read(cx).value().trim().to_string();
+        let st = self.sidebar_status_filter;
+        let state = self.state.clone();
+
+        let rows = self.run_sync(async move {
+            let pool = state.db.read().await;
+            query_filtered_records(
+                &pool,
+                if from_d.is_empty() { None } else { Some(from_d.as_str()) },
+                if to_d.is_empty() { None } else { Some(to_d.as_str()) },
+                st,
+                if q.is_empty() { None } else { Some(q.as_str()) },
+                None,
+                None,
+                None,
+                Some(200),
+                false,
+            )
+            .await
+        });
+        self.records = rows;
+        cx.notify();
+    }
+
+    pub fn load_record_into_form(
+        &mut self,
+        record_id: i64,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let state = self.state.clone();
+        let rec_opt = self.run_sync(async move {
+            let pool = state.db.read().await;
+            sqlx::query_as::<_, KskRecordRow>(
+                "SELECT id, ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, payload_json, updated_by, created_at, updated_at FROM ksk_records WHERE id = ?",
+            )
+            .bind(record_id)
+            .fetch_optional(&*pool)
+            .await
+            .ok()
+            .flatten()
+        });
+
+        if let Some(rec) = rec_opt {
+            self.load_record_map(&rec);
+            self.form_inputs.clear();
+            self.form_subs.clear();
+            cx.notify();
+        }
+    }
+
+    pub fn start_new_patient(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.selected_record_id = None;
+        self.is_creating_new = true;
+        self.current_record_status = 0;
+        self.editing_section = Some("reception".into());
+        self.active_exam_tab = "reception".into();
+        self.form_values.clear();
+        self.form_inputs.clear();
+        self.form_subs.clear();
+        let now_str = chrono::Local::now().format("%Y%m%d%H%M").to_string();
+        self.form_values.insert("NGAY_VAO".into(), now_str);
+        self.form_values
+            .insert("MA_CSKCB".into(), self.cfg.ma_cskcb.clone());
+        self.form_values.insert("GIOI_TINH".into(), "1".into());
+        self.form_values.insert("MA_LOAI_KCB".into(), "1".into());
+        cx.notify();
+    }
+
+    pub fn save_section(
+        &mut self,
+        section: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(user) = &self.current_user else {
+            return;
+        };
+        let roles_str = user.role.clone();
+        let mut incoming = Map::new();
+        for (k, v) in &self.form_values {
+            incoming.insert(k.clone(), Value::String(v.clone()));
+        }
+
+        let state = self.state.clone();
+        let cfg_ma = self.cfg.ma_cskcb.clone();
+        let cfg_gtin = self.cfg.ma_gtin_cskcb.clone();
+        let rec_id_opt = self.selected_record_id;
+        let sec_owned = section.to_string();
+
+        let updated_by = user.username.clone();
+        let res: Result<i64, String> = self.run_sync(async move {
+            let pool = state.db.read().await;
+            if let Some(rid) = rec_id_opt {
+                let existing: Option<(String, i64)> = sqlx::query_as(
+                    "SELECT payload_json, status FROM ksk_records WHERE id = ?",
+                )
+                .bind(rid)
+                .fetch_optional(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                let (ext_json, st) = existing.ok_or("Không tìm thấy hồ sơ")?;
+                if st == 2 {
+                    return Err("Hồ sơ đã ký khóa, không thể chỉnh sửa".into());
+                }
+                let merged = merge_payload_by_roles(
+                    Some(&ext_json),
+                    &incoming,
+                    &roles_str,
+                    &cfg_ma,
+                    &cfg_gtin,
+                    Some(&sec_owned),
+                );
+                let ho_ten = merged.get("HO_TEN").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let ma_y_te = merged.get("MA_Y_TE").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let ma_tn = merged.get("MA_TIEP_NHAN").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let gioi_tinh = merged.get("GIOI_TINH").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let ngay_sinh = merged.get("NGAY_SINH").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let so_cccd = merged.get("SO_CCCD").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let ngay_vao = merged.get("NGAY_VAO").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let json_str = serde_json::to_string(&merged).map_err(|e| e.to_string())?;
+                sqlx::query(
+                    "UPDATE ksk_records SET ma_tiep_nhan = ?, ma_y_te = ?, ho_ten = ?, gioi_tinh = ?, ngay_sinh = ?, so_cccd = ?, ngay_vao = ?, payload_json = ?, updated_by = ?, updated_at = datetime('now','localtime') WHERE id = ?",
+                )
+                .bind(&ma_tn)
+                .bind(&ma_y_te)
+                .bind(&ho_ten)
+                .bind(&gioi_tinh)
+                .bind(&ngay_sinh)
+                .bind(&so_cccd)
+                .bind(&ngay_vao)
+                .bind(&json_str)
+                .bind(&updated_by)
+                .bind(rid)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(rid)
+            } else {
+                let merged = merge_payload_by_roles(
+                    None,
+                    &incoming,
+                    &roles_str,
+                    &cfg_ma,
+                    &cfg_gtin,
+                    Some(&sec_owned),
+                );
+                let ho_ten = merged.get("HO_TEN").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let ma_y_te = merged.get("MA_Y_TE").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let ma_tn = merged.get("MA_TIEP_NHAN").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let gioi_tinh = merged.get("GIOI_TINH").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let ngay_sinh = merged.get("NGAY_SINH").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let so_cccd = merged.get("SO_CCCD").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let ngay_vao = merged.get("NGAY_VAO").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let json_str = serde_json::to_string(&merged).map_err(|e| e.to_string())?;
+                let r = sqlx::query(
+                    "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                )
+                .bind(&ma_tn)
+                .bind(&ma_y_te)
+                .bind(&ho_ten)
+                .bind(&gioi_tinh)
+                .bind(&ngay_sinh)
+                .bind(&so_cccd)
+                .bind(&ngay_vao)
+                .bind(&json_str)
+                .bind(&updated_by)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(r.last_insert_rowid())
+            }
+        });
+
+        match res {
+            Ok(rid) => {
+                self.editing_section = None;
+                self.is_creating_new = false;
+                self.refresh_records(window, cx);
+                self.load_record_into_form(rid, window, cx);
+                self.show_toast("Đã lưu thông tin thành công!", false, cx);
+            }
+            Err(e) => {
+                self.show_toast(&format!("Lỗi lưu dữ liệu: {}", e), true, cx);
+            }
+        }
+    }
+
+    pub fn set_record_status(
+        &mut self,
+        new_status: i64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(rid) = self.selected_record_id else {
+            return;
+        };
+        let state = self.state.clone();
+        let res = self.run_sync(async move {
+            let pool = state.db.read().await;
+            sqlx::query("UPDATE ksk_records SET status = ?, updated_at = datetime('now','localtime') WHERE id = ?")
+                .bind(new_status)
+                .bind(rid)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())
+        });
+        match res {
+            Ok(_) => {
+                self.current_record_status = new_status;
+                self.editing_section = None;
+                self.refresh_records(window, cx);
+                self.show_toast(
+                    if new_status == 2 {
+                        "Đã ký khóa hồ sơ!"
+                    } else {
+                        "Đã mở khóa hồ sơ!"
+                    },
+                    false,
+                    cx,
+                );
+            }
+            Err(e) => self.show_toast(&format!("Lỗi cập nhật trạng thái: {}", e), true, cx),
+        }
+    }
+
+    pub fn export_docx(&mut self, is_reception: bool, cx: &mut Context<Self>) {
+        let Some(rid) = self.selected_record_id else {
+            return;
+        };
+        let state = self.state.clone();
+        let cfg = self.cfg.clone();
+        let res = self.run_sync(async move {
+            let pool = state.db.read().await;
+            generate_docx_bytes(&pool, &cfg, rid, is_reception).await
+        });
+        match res {
+            Ok((filename, bytes)) => {
+                if let Some(path) = rfd::FileDialog::new()
+                    .set_file_name(&filename)
+                    .add_filter("Word Document", &["docx"])
+                    .save_file()
+                {
+                    if let Err(e) = std::fs::write(&path, bytes) {
+                        self.show_toast(&format!("Lỗi ghi file: {}", e), true, cx);
+                    } else {
+                        self.show_toast(
+                            &format!("Đã xuất file: {}", path.display()),
+                            false,
+                            cx,
+                        );
+                    }
+                }
+            }
+            Err(e) => self.show_toast(&format!("Lỗi xuất DOCX: {}", e), true, cx),
+        }
+    }
+
+    pub fn refresh_export_rows(&mut self, cx: &mut Context<Self>) {
+        let from_d = self.exp_from_date.read(cx).value().trim().to_string();
+        let to_d = self.exp_to_date.read(cx).value().trim().to_string();
+        let q = self.exp_q.read(cx).value().trim().to_string();
+        let wp = self.exp_workplace.read(cx).value().trim().to_string();
+        let st = self.exp_status_filter;
+        let state = self.state.clone();
+
+        let rows = self.run_sync(async move {
+            let pool = state.db.read().await;
+            query_filtered_records(
+                &pool,
+                if from_d.is_empty() { None } else { Some(from_d.as_str()) },
+                if to_d.is_empty() { None } else { Some(to_d.as_str()) },
+                st,
+                if q.is_empty() { None } else { Some(q.as_str()) },
+                if wp.is_empty() { None } else { Some(wp.as_str()) },
+                None,
+                None,
+                Some(2000),
+                false,
+            )
+            .await
+        });
+        self.export_rows = rows;
+        self.export_selected_ids.clear();
+        cx.notify();
+    }
+
+    pub fn execute_csv_export(&mut self, cx: &mut Context<Self>) {
+        let rows: Vec<KskRecordRow> = if self.export_selected_ids.is_empty() {
+            self.export_rows.clone()
+        } else {
+            self.export_rows
                 .iter()
-                .filter(|r| sel.contains(&r.id))
+                .filter(|r| self.export_selected_ids.contains(&r.id))
                 .cloned()
                 .collect()
-        } else {
-            csv_rows.read().clone()
         };
         if rows.is_empty() {
-            toast.set(Some(("Không có hồ sơ nào để xuất CSV!".to_string(), true)));
+            self.show_toast("Không có hồ sơ nào để xuất CSV!", true, cx);
             return;
         }
-        match generate_csv_bytes(&cfg.read(), rows) {
+        match generate_csv_bytes(&self.cfg, rows) {
             Ok(bytes) => {
                 let default_name = format!(
-                    "KSK_QD3176_{}.csv",
-                    chrono::Local::now().format("%Y%m%d_%H%M%S")
+                    "KSK_Export_3176_{}.csv",
+                    chrono::Local::now().format("%Y%m%d_%H%M")
                 );
                 if let Some(path) = rfd::FileDialog::new()
                     .set_file_name(&default_name)
                     .add_filter("CSV (UTF-8 BOM)", &["csv"])
                     .save_file()
                 {
-                    match fs::write(&path, &bytes) {
-                        Ok(_) => toast.set(Some((format!("Đã xuất CSV: {}", path.display()), false))),
-                        Err(e) => toast.set(Some((format!("Lỗi lưu CSV: {}", e), true))),
+                    if let Err(e) = std::fs::write(&path, bytes) {
+                        self.show_toast(&format!("Lỗi ghi file CSV: {}", e), true, cx);
+                    } else {
+                        self.show_toast(
+                            &format!("Đã xuất CSV thành công: {}", path.display()),
+                            false,
+                            cx,
+                        );
                     }
                 }
             }
-            Err(e) => toast.set(Some((e, true))),
+            Err(e) => self.show_toast(&format!("Lỗi tạo CSV: {}", e), true, cx),
         }
-    };
+    }
 
-    let cur_tab = *active_tab.read();
-    let cfg_snap = cfg.read().clone();
-    let toast_snap = toast.read().clone();
-    let upd_snap = update_available.read().clone();
-    let user_full_name = user_opt
-        .as_ref()
-        .map(|u| u.full_name.clone())
-        .unwrap_or_default();
+    pub fn save_admin_config(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let mut new_cfg = self.cfg.clone();
+        new_cfg.ten_cskcb = self.adm_cskcb.read(cx).value().trim().to_string();
+        new_cfg.ma_cskcb = self.adm_ma_cskcb.read(cx).value().trim().to_string();
+        new_cfg.database_path = self.adm_db_path.read(cx).value().trim().to_string();
+        new_cfg.update_dir_path = self.adm_update_dir.read(cx).value().trim().to_string();
+        new_cfg.auto_check_update = self.adm_auto_check_update;
 
-    let mut refresh_csv_nav = refresh_csv.clone();
-    let mut refresh_users_nav = refresh_users.clone();
-    let mut refresh_users_btn = refresh_users.clone();
-    let mut refresh_admin_cats_btn = refresh_admin_catalogs.clone();
-
-    rsx! {
-        style { "{STYLES_CSS}" }
-        div { class: "app-shell",
-            // Top Navigation
-            div { class: "top-nav",
-                div { style: "display: flex; align-items: center; gap: 12px;",
-                    span { class: "brand", "🏥 {cfg_snap.ten_cskcb} (v{CURRENT_VERSION})" }
-                    div { class: "nav-tabs",
-                        for (t, lbl) in [
-                            (AppTab::Reception, "1. Tiếp nhận"),
-                            (AppTab::History, "2. Tiền sử"),
-                            (AppTab::Physical, "3. Thể lực"),
-                            (AppTab::Clinical, "4. Lâm sàng"),
-                            (AppTab::Paraclinical, "5. Cận lâm sàng"),
-                            (AppTab::Conclusion, "6. Kết luận & In"),
-                            (AppTab::ExportCsv, "7. Xuất CSV"),
-                        ] {
-                            {
-                                let mut r_csv = refresh_csv_nav.clone();
-                                rsx! {
-                                    button {
-                                        class: if cur_tab == t { "nav-tab active" } else { "nav-tab" },
-                                        onclick: move |_| {
-                                            active_tab.set(t);
-                                            if t == AppTab::ExportCsv && csv_rows.read().is_empty() {
-                                                r_csv(());
-                                            }
-                                        },
-                                        "{lbl}"
-                                    }
-                                }
-                            }
-                        }
-                        if is_admin {
-                            button {
-                                class: if cur_tab == AppTab::Admin { "nav-tab active" } else { "nav-tab" },
-                                onclick: move |_| {
-                                    active_tab.set(AppTab::Admin);
-                                    refresh_db_info();
-                                    refresh_users_nav();
-                                },
-                                "⚙️ Quản trị"
-                            }
-                        }
-                    }
-                }
-
-                div { class: "nav-right",
-                    if let Some(m) = upd_snap {
-                        button {
-                            class: "btn btn-amber",
-                            onclick: move |_| {
-                                if let Err(e) = updater::apply_update_and_restart(&cfg.read().update_dir_path, &m) {
-                                    toast.set(Some((e, true)));
-                                }
-                            },
-                            "🆕 Cập nhật v{m.version}"
-                        }
-                    }
-                    button {
-                        class: "btn",
-                        onclick: move |_| {
-                            profile_full_name.set(user_full_name.clone());
-                            show_profile_modal.set(true);
-                        },
-                        "👤 {user_full_name}"
-                    }
-                    button {
-                        class: "btn",
-                        onclick: move |_| {
-                            current_user.set(None);
-                            selected_record_id.set(None);
-                            form.write().clear();
-                        },
-                        "Đăng xuất"
-                    }
-                }
+        if let Err(e) = new_cfg.save() {
+            self.show_toast(&format!("Lỗi lưu config.toml: {}", e), true, cx);
+            return;
+        }
+        let db_path = new_cfg.database_path.clone();
+        let state = self.state.clone();
+        let cfg_clone = new_cfg.clone();
+        let res = self.run_sync(async move {
+            let pool = db::init_db(&db_path).await.map_err(|e| e.to_string())?;
+            *state.db.write().await = pool;
+            *state.config.write().await = cfg_clone;
+            Ok::<(), String>(())
+        });
+        match res {
+            Ok(_) => {
+                self.cfg = new_cfg.clone();
+                self.login_db_path
+                    .update(cx, |s, cx| s.set_value(new_cfg.database_path, window, cx));
+                self.refresh_records(window, cx);
+                self.show_toast("Đã lưu cấu hình và kết nối lại CSDL!", false, cx);
             }
+            Err(e) => self.show_toast(&format!("Lỗi kết nối CSDL mới: {}", e), true, cx),
+        }
+    }
 
-            // Main Body
-            div { class: "main-body",
-                if cur_tab != AppTab::ExportCsv && cur_tab != AppTab::Admin {
-                    Sidebar {
-                        open: sidebar_open,
-                        can_create: can_create,
-                        from_date: filter_from_date,
-                        to_date: filter_to_date,
-                        status_filter: filter_status,
-                        search_q: filter_q,
-                        records: records,
-                        selected_id: selected_record_id,
-                        on_refresh: move |_| refresh_records(),
-                        on_new_record: move |_| {
-                            selected_record_id.set(None);
-                            selected_record_status.set(0);
-                            editing_sections.write().clear();
-                            editing_sections.write().insert("reception".to_string(), true);
-                            let mut m = Map::new();
-                            m.insert("GIOI_TINH".to_string(), json!("1"));
-                            m.insert("MA_DAN_TOC".to_string(), json!("01"));
-                            m.insert("MA_NGHE_NGHIEP".to_string(), json!("00"));
-                            m.insert("DOI_TUONG".to_string(), json!("13"));
-                            m.insert("NGUON_CHI_TRA".to_string(), json!("9"));
-                            m.insert("MATINH_CU_TRU".to_string(), json!("11221"));
-                            m.insert("NGAY_VAO".to_string(), json!(chrono::Local::now().format("%d/%m/%Y").to_string()));
-                            form.set(m);
-                            active_tab.set(AppTab::Reception);
-                        },
-                        on_select_record: move |id| load_record(id),
-                    }
-                }
+    pub fn publish_update(&mut self, cx: &mut Context<Self>) {
+        let dir = self.adm_update_dir.read(cx).value().trim().to_string();
+        let log = self.adm_changelog.read(cx).value().trim().to_string();
+        if dir.is_empty() {
+            self.show_toast("Vui lòng nhập thư mục cập nhật trên ổ chung!", true, cx);
+            return;
+        }
+        match updater::publish_update_to_share(&dir, &log) {
+            Ok(m) => self.show_toast(
+                &format!("Đã phát hành v{} lên {}", m.version, dir),
+                false,
+                cx,
+            ),
+            Err(e) => self.show_toast(&format!("Lỗi phát hành: {}", e), true, cx),
+        }
+    }
 
-                div { class: "content-area",
-                    if let Some((msg, is_err)) = toast_snap {
-                        div { class: if is_err { "toast toast-err" } else { "toast toast-ok" },
-                            span { "{msg}" }
-                            button {
-                                style: "border: none; background: transparent; cursor: pointer; font-weight: 700;",
-                                onclick: move |_| toast.set(None),
-                                "✕"
-                            }
-                        }
-                    }
+    pub fn refresh_users(&mut self, cx: &mut Context<Self>) {
+        let state = self.state.clone();
+        let list = self.run_sync(async move {
+            let pool = state.db.read().await;
+            sqlx::query_as::<_, User>(
+                "SELECT id, username, password_hash, full_name, role, is_locked, created_at FROM users ORDER BY id ASC",
+            )
+            .fetch_all(&*pool)
+            .await
+            .unwrap_or_default()
+        });
+        self.users_list = list;
+        cx.notify();
+    }
 
-                    match cur_tab {
-                        AppTab::Reception => rsx! {
-                            TabReception {
-                                user: user_opt.clone(),
-                                selected_record_id: selected_record_id,
-                                selected_record_status: selected_record_status,
-                                form: form,
-                                editing_sections: editing_sections,
-                                catalogs_cache: catalogs_cache,
-                                on_save_section: save_section,
-                                on_cancel_section: cancel_section,
-                                on_fetch_his: fetch_his,
-                                on_export_docx: export_docx,
-                            }
-                        },
-                        AppTab::History => rsx! {
-                            TabHistory {
-                                user: user_opt.clone(),
-                                selected_record_id: selected_record_id,
-                                selected_record_status: selected_record_status,
-                                form: form,
-                                editing_sections: editing_sections,
-                                catalogs_cache: catalogs_cache,
-                                on_save_section: save_section,
-                                on_cancel_section: cancel_section,
-                            }
-                        },
-                        AppTab::Physical => rsx! {
-                            TabPhysical {
-                                user: user_opt.clone(),
-                                selected_record_id: selected_record_id,
-                                selected_record_status: selected_record_status,
-                                form: form,
-                                editing_sections: editing_sections,
-                                on_save_section: save_section,
-                                on_cancel_section: cancel_section,
-                            }
-                        },
-                        AppTab::Clinical => rsx! {
-                            TabClinical {
-                                user: user_opt.clone(),
-                                selected_record_id: selected_record_id,
-                                selected_record_status: selected_record_status,
-                                form: form,
-                                editing_sections: editing_sections,
-                                clinical_full_mode: clinical_full_mode,
-                                on_save_section: save_section,
-                                on_cancel_section: cancel_section,
-                            }
-                        },
-                        AppTab::Paraclinical => rsx! {
-                            TabParaclinical {
-                                user: user_opt.clone(),
-                                selected_record_id: selected_record_id,
-                                selected_record_status: selected_record_status,
-                                form: form,
-                                editing_sections: editing_sections,
-                                on_save_section: save_section,
-                                on_cancel_section: cancel_section,
-                            }
-                        },
-                        AppTab::Conclusion => rsx! {
-                            TabConclusion {
-                                user: user_opt.clone(),
-                                selected_record_id: selected_record_id,
-                                selected_record_status: selected_record_status,
-                                form: form,
-                                editing_sections: editing_sections,
-                                catalogs_cache: catalogs_cache,
-                                on_save_section: save_section,
-                                on_cancel_section: cancel_section,
-                                on_lock_toggle: lock_toggle,
-                                on_export_docx: export_docx,
-                            }
-                        },
-                        AppTab::ExportCsv => rsx! {
-                            TabExportCsv {
-                                csv_from_date: csv_from_date,
-                                csv_to_date: csv_to_date,
-                                csv_status: csv_status,
-                                csv_q: csv_q,
-                                csv_workplace: csv_workplace,
-                                csv_classification: csv_classification,
-                                csv_rows: csv_rows,
-                                csv_selected_ids: csv_selected_ids,
-                                on_filter: refresh_csv,
-                                on_export: export_csv,
-                            }
-                        },
-                        AppTab::Admin => rsx! {
-                            TabAdmin {
-                                user: user_opt.clone(),
-                                cfg: cfg,
-                                db_info: db_info,
-                                publish_changelog: publish_changelog,
-                                users_list: users_list,
-                                new_user_username: new_user_username,
-                                new_user_password: new_user_password,
-                                new_user_fullname: new_user_fullname,
-                                new_user_roles: new_user_roles,
-                                catalog_type_filter: catalog_type_filter,
-                                catalog_search: catalog_search,
-                                catalog_rows: catalog_rows,
-                                on_switch_db: move |p| switch_database(p),
-                                on_save_cfg: {
-                                    let rt = ctx.rt.clone();
-                                    let state = ctx.state.clone();
-                                    move |_| {
-                                        let c = cfg.read().clone();
-                                        if let Err(e) = c.save() {
-                                            toast.set(Some((format!("Lỗi lưu config.toml: {}", e), true)));
-                                            return;
-                                        }
-                                        run_sync(&rt, async { *state.config.write().await = c; });
-                                        toast.set(Some(("Đã lưu cấu hình vào config.toml!".to_string(), false)));
-                                    }
-                                },
-                                on_publish_update: move |_| {
-                                    let dir = cfg.read().update_dir_path.clone();
-                                    let log = publish_changelog.read().clone();
-                                    match updater::publish_update_to_share(&dir, &log) {
-                                        Ok(m) => toast.set(Some((format!("Đã phát hành v{} lên {}", m.version, dir), false))),
-                                        Err(e) => toast.set(Some((e, true))),
-                                    }
-                                },
-                                on_create_user: {
-                                    let rt = ctx.rt.clone();
-                                    let state = ctx.state.clone();
-                                    let mut r_usr = refresh_users.clone();
-                                    move |_| {
-                                        let u = new_user_username.read().trim().to_string();
-                                        let p = new_user_password.read().trim().to_string();
-                                        let f = new_user_fullname.read().trim().to_string();
-                                        let roles = new_user_roles.read().clone();
-                                        if u.is_empty() || p.is_empty() || f.is_empty() || roles.is_empty() {
-                                            toast.set(Some(("Vui lòng nhập đủ thông tin và chọn ít nhất 1 vai trò!".to_string(), true)));
-                                            return;
-                                        }
-                                        let role_str = roles.join(",");
-                                        let p_hash = hash_password(&p);
-                                        let res = run_sync(&rt, async {
-                                            let db = state.db.read().await;
-                                            sqlx::query("INSERT INTO users (username, password_hash, full_name, role, is_locked) VALUES (?, ?, ?, ?, 0)")
-                                                .bind(&u).bind(&p_hash).bind(&f).bind(&role_str)
-                                                .execute(&*db).await.map_err(|e| e.to_string())
-                                        });
-                                        match res {
-                                            Ok(_) => {
-                                                new_user_username.set(String::new());
-                                                new_user_password.set(String::new());
-                                                new_user_fullname.set(String::new());
-                                                r_usr();
-                                                toast.set(Some(("Đã tạo tài khoản mới!".to_string(), false)));
-                                            }
-                                            Err(e) => toast.set(Some((format!("Lỗi tạo tài khoản: {}", e), true))),
-                                        }
-                                    }
-                                },
-                                on_toggle_lock_user: {
-                                    let rt = ctx.rt.clone();
-                                    let state = ctx.state.clone();
-                                    let mut r_usr = refresh_users.clone();
-                                    move |uid| {
-                                        let _ = run_sync(&rt, async {
-                                            let db = state.db.read().await;
-                                            sqlx::query("UPDATE users SET is_locked = CASE WHEN is_locked = 1 THEN 0 ELSE 1 END WHERE id = ?")
-                                                .bind(uid).execute(&*db).await
-                                        });
-                                        r_usr();
-                                    }
-                                },
-                                on_refresh_users: move |_| refresh_users_btn(),
-                                on_refresh_catalogs: move |_| refresh_admin_cats_btn(),
-                                on_set_default_cat: {
-                                    let rt = ctx.rt.clone();
-                                    let state = ctx.state.clone();
-                                    let mut r_cat = refresh_admin_catalogs.clone();
-                                    move |cid| {
-                                        let ct = catalog_type_filter.read().clone();
-                                        let _ = run_sync(&rt, async {
-                                            let db = state.db.read().await;
-                                            let _ = sqlx::query("UPDATE catalogs SET is_default = 0 WHERE cat_type = ?").bind(&ct).execute(&*db).await;
-                                            let _ = sqlx::query("UPDATE catalogs SET is_default = 1 WHERE id = ?").bind(cid).execute(&*db).await;
-                                        });
-                                        r_cat();
-                                        catalogs_cache.set(load_catalogs_sync(&rt, &state));
-                                    }
-                                },
-                                on_toggle_active_cat: {
-                                    let rt = ctx.rt.clone();
-                                    let state = ctx.state.clone();
-                                    let mut r_cat = refresh_admin_catalogs.clone();
-                                    move |cid| {
-                                        let _ = run_sync(&rt, async {
-                                            let db = state.db.read().await;
-                                            sqlx::query("UPDATE catalogs SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?")
-                                                .bind(cid).execute(&*db).await
-                                        });
-                                        r_cat();
-                                        catalogs_cache.set(load_catalogs_sync(&rt, &state));
-                                    }
-                                },
-                                on_reload_asset_cats: {
-                                    let rt = ctx.rt.clone();
-                                    let state = ctx.state.clone();
-                                    let mut r_cat = refresh_admin_catalogs.clone();
-                                    move |_| {
-                                        let res = run_sync(&rt, async {
-                                            let db = state.db.read().await;
-                                            seed_catalogs_from_asset(&*db).await.map_err(|e| e.to_string())
-                                        });
-                                        match res {
-                                            Ok(n) => {
-                                                r_cat();
-                                                catalogs_cache.set(load_catalogs_sync(&rt, &state));
-                                                toast.set(Some((format!("Đã nạp lại {} mục danh mục chuẩn!", n), false)));
-                                            }
-                                            Err(e) => toast.set(Some((e, true))),
-                                        }
-                                    }
-                                },
-                            }
-                        },
-                    }
-                }
+    pub fn create_admin_user(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let username = self.adm_new_user.read(cx).value().trim().to_string();
+        let pw = self.adm_new_pw.read(cx).value().to_string();
+        let full_name = self.adm_new_fullname.read(cx).value().trim().to_string();
+        if username.is_empty() || pw.is_empty() || full_name.is_empty() {
+            self.show_toast("Vui lòng nhập đủ tên đăng nhập, mật khẩu, họ tên!", true, cx);
+            return;
+        }
+        let roles_csv = if self.adm_new_roles.is_empty() {
+            "reception".to_string()
+        } else {
+            self.adm_new_roles.join(",")
+        };
+        let hash = db::hash_password(&pw);
+        let state = self.state.clone();
+        let res = self.run_sync(async move {
+            let pool = state.db.read().await;
+            sqlx::query(
+                "INSERT INTO users (username, password_hash, full_name, role, is_locked) VALUES (?, ?, ?, ?, 0)",
+            )
+            .bind(&username)
+            .bind(&hash)
+            .bind(&full_name)
+            .bind(&roles_csv)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())
+        });
+        match res {
+            Ok(_) => {
+                self.adm_new_user.update(cx, |s, cx| s.set_value("", window, cx));
+                self.adm_new_pw.update(cx, |s, cx| s.set_value("", window, cx));
+                self.adm_new_fullname.update(cx, |s, cx| s.set_value("", window, cx));
+                self.refresh_users(cx);
+                self.show_toast("Đã tạo tài khoản mới!", false, cx);
             }
+            Err(e) => self.show_toast(&format!("Lỗi tạo tài khoản: {}", e), true, cx),
+        }
+    }
 
-            // Profile Modal
-            if *show_profile_modal.read() {
-                div { class: "modal-backdrop",
-                    div { class: "modal-box",
-                        div { style: "display: flex; justify-content: space-between; align-items: center;",
-                            span { style: "font-weight: 700; font-size: 15px; color: #0f766e;", "👤 Thông tin tài khoản" }
-                            button { class: "btn", onclick: move |_| show_profile_modal.set(false), "✕" }
-                        }
-                        div { class: "field",
-                            label { "Họ tên / Chức danh hiển thị trên phiếu" }
-                            if !is_admin {
-                                span { style: "font-size: 11.5px; color: #b45309;", "🔒 Chỉ Quản trị viên được phép đổi Họ tên" }
-                            }
-                            input {
-                                r#type: "text",
-                                value: "{profile_full_name}",
-                                disabled: !is_admin,
-                                oninput: move |e| profile_full_name.set(e.value()),
-                            }
-                        }
-                        if is_admin {
-                            button {
-                                class: "btn btn-primary",
-                                onclick: {
-                                    let rt = ctx.rt.clone();
-                                    let state = ctx.state.clone();
-                                    move |_| {
-                                        if let Some(ref mut u) = *current_user.write() {
-                                            let uid = u.id;
-                                            let new_name = profile_full_name.read().trim().to_string();
-                                            let _ = run_sync(&rt, async {
-                                                let db = state.db.read().await;
-                                                sqlx::query("UPDATE users SET full_name = ? WHERE id = ?")
-                                                    .bind(&new_name).bind(uid).execute(&*db).await
+    pub fn toggle_user_active(&mut self, user_id: i64, lock: bool, cx: &mut Context<Self>) {
+        let val = if lock { 1i64 } else { 0i64 };
+        let state = self.state.clone();
+        let _ = self.run_sync(async move {
+            let pool = state.db.read().await;
+            sqlx::query("UPDATE users SET is_locked = ? WHERE id = ?")
+                .bind(val)
+                .bind(user_id)
+                .execute(&*pool)
+                .await
+        });
+        self.refresh_users(cx);
+    }
+
+    pub fn refresh_catalogs(&mut self, cx: &mut Context<Self>) {
+        let state = self.state.clone();
+        let list = self.run_sync(async move {
+            let pool = state.db.read().await;
+            sqlx::query_as::<_, CatalogItem>(
+                "SELECT id, cat_type, code, name, extra FROM catalogs ORDER BY id ASC",
+            )
+            .fetch_all(&*pool)
+            .await
+            .unwrap_or_default()
+        });
+        self.catalogs = list;
+        cx.notify();
+    }
+
+    pub fn add_catalog_item(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let code = self.adm_cat_code.read(cx).value().trim().to_string();
+        let name = self.adm_cat_name.read(cx).value().trim().to_string();
+        let ct = self.adm_cat_type.clone();
+        if code.is_empty() || name.is_empty() {
+            self.show_toast("Vui lòng nhập Mã và Tên danh mục!", true, cx);
+            return;
+        }
+        let state = self.state.clone();
+        let _ = self.run_sync(async move {
+            let pool = state.db.read().await;
+            sqlx::query("INSERT INTO catalogs (cat_type, code, name, extra) VALUES (?, ?, ?, '')")
+                .bind(&ct)
+                .bind(&code)
+                .bind(&name)
+                .execute(&*pool)
+                .await
+        });
+        self.adm_cat_code.update(cx, |s, cx| s.set_value("", window, cx));
+        self.adm_cat_name.update(cx, |s, cx| s.set_value("", window, cx));
+        self.refresh_catalogs(cx);
+        self.show_toast("Đã thêm danh mục!", false, cx);
+    }
+
+    pub fn delete_catalog_item(&mut self, id: i64, cx: &mut Context<Self>) {
+        let state = self.state.clone();
+        let _ = self.run_sync(async move {
+            let pool = state.db.read().await;
+            sqlx::query("DELETE FROM catalogs WHERE id = ?")
+                .bind(id)
+                .execute(&*pool)
+                .await
+        });
+        self.refresh_catalogs(cx);
+    }
+
+    pub fn do_login(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let username = self.login_username.read(cx).value().trim().to_string();
+        let password = self.login_password.read(cx).value().to_string();
+        let db_path = self.login_db_path.read(cx).value().trim().to_string();
+
+        if db_path != self.cfg.database_path && !db_path.is_empty() {
+            let mut new_cfg = self.cfg.clone();
+            new_cfg.database_path = db_path.clone();
+            let _ = new_cfg.save();
+            let state = self.state.clone();
+            let cfg_c = new_cfg.clone();
+            if let Err(e) = self.run_sync(async move {
+                let pool = db::init_db(&db_path).await.map_err(|e| e.to_string())?;
+                *state.db.write().await = pool;
+                *state.config.write().await = cfg_c;
+                Ok::<(), String>(())
+            }) {
+                self.login_error = Some(format!("Lỗi kết nối DB: {}", e));
+                cx.notify();
+                return;
+            }
+            self.cfg = new_cfg;
+        }
+
+        let hash = db::hash_password(&password);
+        let state = self.state.clone();
+        let user_opt = self.run_sync(async move {
+            let pool = state.db.read().await;
+            sqlx::query_as::<_, User>(
+                "SELECT id, username, password_hash, full_name, role, is_locked, created_at FROM users WHERE username = ?",
+            )
+            .bind(&username)
+            .fetch_optional(&*pool)
+            .await
+            .ok()
+            .flatten()
+        });
+
+        match user_opt {
+            Some(u) if u.password_hash == hash => {
+                if u.is_locked != 0 {
+                    self.login_error = Some("Tài khoản đã bị khóa!".into());
+                    cx.notify();
+                    return;
+                }
+                self.login_error = None;
+                self.prof_full_name
+                    .update(cx, |s, cx| s.set_value(u.full_name.clone(), window, cx));
+                self.current_user = Some(u);
+                self.refresh_catalogs(cx);
+                self.refresh_records(window, cx);
+                cx.notify();
+            }
+            _ => {
+                self.login_error = Some("Sai tên đăng nhập hoặc mật khẩu!".into());
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn save_profile(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(u) = self.current_user.clone() else {
+            return;
+        };
+        let is_admin = u.has_role("admin");
+        let new_name = self.prof_full_name.read(cx).value().trim().to_string();
+        let old_pw = self.prof_old_pw.read(cx).value().to_string();
+        let new_pw = self.prof_new_pw.read(cx).value().to_string();
+
+        if !new_pw.is_empty() && db::hash_password(&old_pw) != u.password_hash {
+            self.show_toast("Mật khẩu cũ không chính xác!", true, cx);
+            return;
+        }
+
+        let state = self.state.clone();
+        let uid = u.id;
+        let final_name = if is_admin && !new_name.is_empty() {
+            new_name
+        } else {
+            u.full_name.clone()
+        };
+        let new_hash = if !new_pw.is_empty() {
+            Some(db::hash_password(&new_pw))
+        } else {
+            None
+        };
+
+        let name_c = final_name.clone();
+        let hash_c = new_hash.clone();
+        let _ = self.run_sync(async move {
+            let pool = state.db.read().await;
+            let _ = sqlx::query("UPDATE users SET full_name = ? WHERE id = ?")
+                .bind(&name_c)
+                .bind(uid)
+                .execute(&*pool)
+                .await;
+            if let Some(h) = hash_c {
+                let _ = sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
+                    .bind(&h)
+                    .bind(uid)
+                    .execute(&*pool)
+                    .await;
+            }
+        });
+
+        if let Some(ref mut cur) = self.current_user {
+            cur.full_name = final_name;
+            if let Some(h) = new_hash {
+                cur.password_hash = h;
+            }
+        }
+        self.prof_old_pw.update(cx, |s, cx| s.set_value("", window, cx));
+        self.prof_new_pw.update(cx, |s, cx| s.set_value("", window, cx));
+        self.show_profile_modal = false;
+        self.show_toast("Đã cập nhật thông tin tài khoản!", false, cx);
+    }
+
+    pub fn apply_update_now(&mut self, cx: &mut Context<Self>) {
+        if let Some(ref m) = self.available_update {
+            if let Err(e) = updater::apply_update_and_restart(&self.cfg.update_dir_path, m) {
+                self.show_toast(&format!("Lỗi cập nhật: {}", e), true, cx);
+            }
+        }
+    }
+
+    fn render_login(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        div()
+            .size_full()
+            .bg(rgb(BG_APP))
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .p(px(24.0))
+            .child(
+                card_box()
+                    .w(px(440.0))
+                    .p(px(24.0))
+                    .gap(px(14.0))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.0))
+                            .child(
+                                div()
+                                    .text_xl()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(rgb(PRIMARY_COL))
+                                    .child("Hệ thống Khám Sức Khỏe (KSK)"),
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(rgb(TEXT_MUTED))
+                                    .child(format!(
+                                        "{} — Phiên bản v{}",
+                                        self.cfg.ten_cskcb,
+                                        updater::CURRENT_VERSION
+                                    )),
+                            ),
+                    )
+                    .when_some(self.available_update.clone(), |el, m| {
+                        el.child(
+                            div()
+                                .p(px(10.0))
+                                .rounded(px(6.0))
+                                .bg(rgb(WARN_BG))
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(WARN_COL))
+                                        .child(format!("Có bản cập nhật mới v{}!", m.version)),
+                                )
+                                .child(
+                                    Button::new("btn-upd-login")
+                                        .label("Cập nhật ngay")
+                                        .small()
+                                        .primary()
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.apply_update_now(cx);
+                                        })),
+                                ),
+                        )
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.0))
+                            .child(field_label("Tên đăng nhập", true))
+                            .child(Input::new(&self.login_username).small()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.0))
+                            .child(field_label("Mật khẩu", true))
+                            .child(Input::new(&self.login_password).small().mask_toggle()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_end()
+                            .gap(px(6.0))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(4.0))
+                                    .child(field_label("File CSDL SQLite (LAN / Nội bộ)", false))
+                                    .child(Input::new(&self.login_db_path).small()),
+                            )
+                            .child(
+                                Button::new("btn-login-browse-db")
+                                    .label("Chọn...")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        if let Some(p) = rfd::FileDialog::new()
+                                            .add_filter("SQLite DB", &["db", "sqlite"])
+                                            .pick_file()
+                                        {
+                                            let s = p.to_string_lossy().to_string();
+                                            this.login_db_path.update(cx, |inp, cx| {
+                                                inp.set_value(s, window, cx);
                                             });
-                                            u.full_name = new_name;
-                                            toast.set(Some(("Đã cập nhật họ tên!".to_string(), false)));
                                         }
-                                    }
-                                },
-                                "Lưu họ tên"
-                            }
-                        }
-                        div { style: "border-top: 1px solid #e2e8f0; padding-top: 10px; display: flex; flex-direction: column; gap: 8px;",
-                            label { style: "font-weight: 700; font-size: 12.5px;", "Đổi mật khẩu" }
-                            input { r#type: "password", placeholder: "Mật khẩu cũ", value: "{profile_old_pw}", oninput: move |e| profile_old_pw.set(e.value()) }
-                            input { r#type: "password", placeholder: "Mật khẩu mới", value: "{profile_new_pw}", oninput: move |e| profile_new_pw.set(e.value()) }
-                            button {
-                                class: "btn btn-blue",
-                                onclick: {
-                                    let rt = ctx.rt.clone();
-                                    let state = ctx.state.clone();
-                                    move |_| {
-                                        let Some(u) = current_user.read().clone() else { return; };
-                                        let old_h = hash_password(profile_old_pw.read().trim());
-                                        let new_h = hash_password(profile_new_pw.read().trim());
-                                        let res = run_sync(&rt, async {
-                                            let db = state.db.read().await;
-                                            let row: Option<(String,)> = sqlx::query_as("SELECT password_hash FROM users WHERE id = ?")
-                                                .bind(u.id).fetch_optional(&*db).await.map_err(|e| e.to_string())?;
-                                            if row.map(|r| r.0) != Some(old_h) {
-                                                return Err("Mật khẩu cũ không đúng!".to_string());
-                                            }
-                                            sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
-                                                .bind(&new_h).bind(u.id).execute(&*db).await.map_err(|e| e.to_string())?;
-                                            Ok(())
-                                        });
-                                        match res {
-                                            Ok(_) => {
-                                                profile_old_pw.set(String::new());
-                                                profile_new_pw.set(String::new());
-                                                toast.set(Some(("Đã đổi mật khẩu thành công!".to_string(), false)));
-                                            }
-                                            Err(e) => toast.set(Some((e, true))),
-                                        }
-                                    }
-                                },
-                                "Đổi mật khẩu"
-                            }
-                        }
-                    }
-                }
-            }
+                                    })),
+                            ),
+                    )
+                    .when_some(self.login_error.clone(), |el, err| {
+                        el.child(
+                            div()
+                                .p(px(8.0))
+                                .rounded(px(6.0))
+                                .bg(rgb(DANGER_BG))
+                                .text_xs()
+                                .text_color(rgb(DANGER_COL))
+                                .child(err),
+                        )
+                    })
+                    .child(
+                        Button::new("btn-login-submit")
+                            .label("Đăng nhập")
+                            .primary()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.do_login(window, cx);
+                            })),
+                    ),
+            )
+            .into_any_element()
+    }
+}
+
+impl Render for KskGpuiApp {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.current_user.is_none() {
+            return self.render_login(window, cx);
         }
+
+        let user = self.current_user.clone().unwrap();
+        let is_admin = user.has_role("admin");
+        let can_export = user.has_role("admin")
+            || user.has_role("reception")
+            || user.has_role("bs_ketluan");
+
+        let active_nav = self.active_nav.clone();
+        let main_body = match active_nav.as_str() {
+            "export" => self.render_export_tab(window, cx),
+            "admin" => self.render_admin_tab(window, cx),
+            _ => div()
+                .flex_1()
+                .h_full()
+                .flex()
+                .flex_row()
+                .overflow_hidden()
+                .child(self.render_sidebar(window, cx))
+                .child(self.render_exam_workspace(window, cx))
+                .into_any_element(),
+        };
+
+        div()
+            .relative()
+            .size_full()
+            .bg(rgb(BG_APP))
+            .text_color(rgb(TEXT_MAIN))
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .child(
+                // Top Nav Bar
+                div()
+                    .h(px(52.0))
+                    .px(px(16.0))
+                    .bg(rgb(BG_CARD))
+                    .border_b_1()
+                    .border_color(rgb(BORDER_COL))
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(12.0))
+                            .child(
+                                div()
+                                    .text_base()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(rgb(PRIMARY_COL))
+                                    .child("KSK Native"),
+                            )
+                            .child(
+                                Button::new("nav-exam")
+                                    .label("Khám bệnh")
+                                    .small()
+                                    .when(active_nav == "exam", |b| b.primary())
+                                    .when(active_nav != "exam", |b| b.secondary())
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.active_nav = "exam".into();
+                                        cx.notify();
+                                    })),
+                            )
+                            .when(can_export, |el| {
+                                el.child(
+                                    Button::new("nav-export")
+                                        .label("Xuất CSV 123 cột")
+                                        .small()
+                                        .when(active_nav == "export", |b| b.primary())
+                                        .when(active_nav != "export", |b| b.secondary())
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.active_nav = "export".into();
+                                            this.refresh_export_rows(cx);
+                                        })),
+                                )
+                            })
+                            .when(is_admin, |el| {
+                                el.child(
+                                    Button::new("nav-admin")
+                                        .label("Quản trị")
+                                        .small()
+                                        .when(active_nav == "admin", |b| b.primary())
+                                        .when(active_nav != "admin", |b| b.secondary())
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.active_nav = "admin".into();
+                                            cx.notify();
+                                        })),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(10.0))
+                            .when_some(self.available_update.clone(), |el, m| {
+                                el.child(
+                                    Button::new("btn-upd-top")
+                                        .label(format!("Cập nhật v{}", m.version))
+                                        .small()
+                                        .primary()
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.apply_update_now(cx);
+                                        })),
+                                )
+                            })
+                            .child(badge(
+                                format!(
+                                    "{} ({})",
+                                    user.full_name,
+                                    user.roles()
+                                        .into_iter()
+                                        .map(|r| role_label_vi(&r))
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                ),
+                                PRIMARY_LIGHT,
+                                PRIMARY_COL,
+                            ))
+                            .child(
+                                Button::new("btn-profile")
+                                    .label("Tài khoản")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.show_profile_modal = true;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("btn-logout")
+                                    .label("Đăng xuất")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.current_user = None;
+                                        this.selected_record_id = None;
+                                        this.records.clear();
+                                        cx.notify();
+                                    })),
+                            ),
+                    ),
+            )
+            .when_some(self.toast.clone(), |el, (msg, is_err)| {
+                el.child(
+                    div()
+                        .px(px(16.0))
+                        .py(px(8.0))
+                        .bg(rgb(if is_err { DANGER_BG } else { SUCCESS_BG }))
+                        .border_b_1()
+                        .border_color(rgb(BORDER_COL))
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(rgb(if is_err { DANGER_COL } else { SUCCESS_COL }))
+                                .child(msg),
+                        )
+                        .child(
+                            Button::new("btn-close-toast")
+                                .label("✕")
+                                .small()
+                                .secondary()
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.toast = None;
+                                    cx.notify();
+                                })),
+                        ),
+                )
+            })
+            .child(main_body)
+            .when(self.show_profile_modal, |el| {
+                el.child(
+                    div()
+                        .id("profile-modal-backdrop")
+                        .absolute()
+                        .inset_0()
+                        .bg(gpui::hsla(0., 0., 0., 0.45))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(
+                            card_box()
+                                .w(px(400.0))
+                                .child(
+                                    div()
+                                        .text_base()
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .child("Thông tin tài khoản"),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(4.0))
+                                        .child(field_label(
+                                            if is_admin {
+                                                "Họ tên (Admin được sửa)"
+                                            } else {
+                                                "Họ tên (Chỉ Admin được sửa)"
+                                            },
+                                            false,
+                                        ))
+                                        .child(
+                                            Input::new(&self.prof_full_name)
+                                                .small()
+                                                .disabled(!is_admin),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(4.0))
+                                        .child(field_label("Mật khẩu cũ (nếu đổi mật khẩu)", false))
+                                        .child(Input::new(&self.prof_old_pw).small()),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(4.0))
+                                        .child(field_label("Mật khẩu mới", false))
+                                        .child(Input::new(&self.prof_new_pw).small()),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .justify_end()
+                                        .gap(px(8.0))
+                                        .child(
+                                            Button::new("btn-prof-close")
+                                                .label("Đóng")
+                                                .small()
+                                                .secondary()
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.show_profile_modal = false;
+                                                    cx.notify();
+                                                })),
+                                        )
+                                        .child(
+                                            Button::new("btn-prof-save")
+                                                .label("Lưu thay đổi")
+                                                .small()
+                                                .primary()
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    this.save_profile(window, cx);
+                                                })),
+                                        ),
+                                ),
+                        ),
+                )
+            })
+            .into_any_element()
     }
 }

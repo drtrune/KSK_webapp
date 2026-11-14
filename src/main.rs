@@ -88,7 +88,7 @@ fn main() {
     setup_logging_and_panic_hook();
     updater::cleanup_old_exe_on_startup();
 
-    tracing::info!("=== Khoi dong KSK Native Desktop (Dioxus 0.6) ===");
+    tracing::info!("=== Khoi dong KSK Native Desktop (GPUI) ===");
 
     let cfg = AppConfig::load();
     tracing::info!("Database path: {}", cfg.database_path);
@@ -148,17 +148,35 @@ fn main() {
         initial_cfg: cfg.clone(),
     };
 
-    let win_cfg = dioxus::desktop::Config::new().with_window(
-        dioxus::desktop::WindowBuilder::new()
-            .with_title(format!("Quản Lý Khám Sức Khỏe (KSK) - {}", cfg.ten_cskcb))
-            .with_inner_size(dioxus::desktop::LogicalSize::new(1360.0, 840.0))
-            .with_min_inner_size(dioxus::desktop::LogicalSize::new(1024.0, 680.0)),
-    );
+    let window_title = format!("Quản Lý Khám Sức Khỏe (KSK) - {}", cfg.ten_cskcb);
 
-    dioxus::LaunchBuilder::desktop()
-        .with_context(launch_ctx)
-        .with_cfg(win_cfg)
-        .launch(gui::App);
+    use gpui::AppContext as _;
+    gpui_kit::application().run(move |cx| {
+        gpui_kit::init(cx);
+
+        let bounds = gpui::Bounds::centered(
+            None,
+            gpui::size(gpui::px(1360.0), gpui::px(840.0)),
+            cx,
+        );
+        let options = gpui::WindowOptions {
+            window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
+            titlebar: Some(gpui::TitlebarOptions {
+                title: Some(window_title.clone().into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let ctx = launch_ctx.clone();
+        if let Err(e) = gpui_kit::open_window(options, cx, move |window, cx| {
+            let app_view = cx.new(|cx| gui::KskGpuiApp::new(ctx, window, cx));
+            cx.new(|cx| gpui_component::Root::new(app_view, window, cx))
+        }) {
+            tracing::error!("Khong the mo cua so GPUI: {:?}", e);
+        }
+        cx.activate(true);
+    });
 
     drop(rt);
 }
