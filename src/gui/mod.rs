@@ -15,7 +15,7 @@ use gpui::{
 use gpui_component::{
     Sizable,
     button::{Button, ButtonVariants},
-    input::{Input, InputEvent, InputState},
+    input::{Input, InputEvent, InputState, TextareaState},
 };
 use serde_json::{Map, Value};
 use tokio::sync::broadcast;
@@ -89,9 +89,11 @@ pub struct KskGpuiApp {
     pub editing_section: Option<String>,
     pub form_values: HashMap<String, String>,
     pub form_inputs: HashMap<String, Entity<InputState>>,
+    pub form_textareas: HashMap<String, Entity<TextareaState>>,
     pub form_subs: HashMap<String, Subscription>,
 
-    // Clinical Disease Tree
+    // Clinical Disease Tree & Subtab
+    pub active_clinical_subtab: String,
     pub clinical_tree_mode: bool,
     pub disease_search_input: Entity<InputState>,
     pub selected_specialty_filter: String,
@@ -312,7 +314,9 @@ impl KskGpuiApp {
             editing_section: None,
             form_values: HashMap::new(),
             form_inputs: HashMap::new(),
+            form_textareas: HashMap::new(),
             form_subs: HashMap::new(),
+            active_clinical_subtab: "noi".into(),
             clinical_tree_mode: false,
             disease_search_input,
             selected_specialty_filter: String::new(),
@@ -400,6 +404,79 @@ impl KskGpuiApp {
         entity
     }
 
+    pub fn get_or_create_form_textarea(
+        &mut self,
+        key: &str,
+        placeholder: &str,
+        rows: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<TextareaState> {
+        if let Some(existing) = self.form_textareas.get(key) {
+            return existing.clone();
+        }
+        let initial = self.form_values.get(key).cloned().unwrap_or_default();
+        let ph = placeholder.to_string();
+        let entity = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .placeholder(ph)
+                .default_value(initial)
+                .rows(rows)
+                .auto_grow(rows, 8)
+        });
+
+        let key_owned = key.to_string();
+        let sub = cx.subscribe_in(&entity, window, move |this, ent, ev, _window, cx| {
+            if matches!(ev, InputEvent::Change) {
+                let val = ent.read(cx).value().to_string();
+                this.form_values.insert(key_owned.clone(), val);
+            }
+        });
+        self.form_subs
+            .insert(format!("ta-{}", key), sub);
+        self.form_textareas.insert(key.to_string(), entity.clone());
+        entity
+    }
+
+    pub fn section_doctor_field(section: &str) -> Option<&'static str> {
+        match section {
+            "physical" => Some("BS_THE_LUC"),
+            "clin_noi" => Some("BS_NOI"),
+            "clin_ngoai" => Some("BS_NGOAI"),
+            "clin_dalieu" => Some("BS_DA_LIEU"),
+            "clin_san" => Some("BS_SAN"),
+            "clin_mat" => Some("BS_MAT"),
+            "clin_tmh" => Some("BS_TMH"),
+            "clin_rhm" => Some("BS_RHM"),
+            "paraclinical" => Some("BS_CLS"),
+            "conclusion" => Some("BS_KET_LUAN"),
+            _ => None,
+        }
+    }
+
+    pub fn enter_edit_section(
+        &mut self,
+        section: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.editing_section = Some(section.to_string());
+        if let (Some(doc_field), Some(user)) =
+            (Self::section_doctor_field(section), self.current_user.as_ref())
+        {
+            let cur = self.get_form_val(doc_field);
+            if cur.trim().is_empty() && !user.full_name.trim().is_empty() {
+                let name = user.full_name.clone();
+                self.form_values
+                    .insert(doc_field.to_string(), name.clone());
+                if let Some(inp) = self.form_inputs.get(doc_field) {
+                    inp.update(cx, |s, cx| s.set_value(name, window, cx));
+                }
+            }
+        }
+        cx.notify();
+    }
+
     fn recompute_bmi(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let h_cm = self
             .get_form_val("CHIEU_CAO")
@@ -445,6 +522,7 @@ impl KskGpuiApp {
         {
             self.load_record_map(&rec);
             self.form_inputs.clear();
+            self.form_textareas.clear();
             self.form_subs.clear();
             let disp = if rec.ho_ten.is_empty() {
                 ma_bn.to_string()
@@ -528,6 +606,7 @@ impl KskGpuiApp {
         if let Some(rec) = rec_opt {
             self.load_record_map(&rec);
             self.form_inputs.clear();
+            self.form_textareas.clear();
             self.form_subs.clear();
             cx.notify();
         }
@@ -541,6 +620,7 @@ impl KskGpuiApp {
         self.active_exam_tab = "reception".into();
         self.form_values.clear();
         self.form_inputs.clear();
+        self.form_textareas.clear();
         self.form_subs.clear();
         let now_str = chrono::Local::now().format("%Y%m%d%H%M").to_string();
         self.form_values.insert("NGAY_VAO".into(), now_str);
@@ -557,9 +637,16 @@ impl KskGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(user) = &self.current_user else {
+        let Some(user) = self.current_user.clone() else {
             return;
         };
+        if let Some(doc_field) = Self::section_doctor_field(section) {
+            if self.get_form_val(doc_field).trim().is_empty() && !user.full_name.trim().is_empty()
+            {
+                self.form_values
+                    .insert(doc_field.to_string(), user.full_name.clone());
+            }
+        }
         let roles_str = user.role.clone();
         let mut incoming = Map::new();
         for (k, v) in &self.form_values {

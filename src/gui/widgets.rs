@@ -5,7 +5,7 @@ use gpui::{
 use gpui_component::{
     Sizable,
     button::{Button, ButtonVariants},
-    input::Input,
+    input::{Input, Textarea},
 };
 
 use super::KskGpuiApp;
@@ -110,6 +110,131 @@ impl KskGpuiApp {
                     .small()
                     .disabled(!editable)
                     .cleanable(editable),
+            )
+            .into_any_element()
+    }
+
+    pub fn render_form_textarea(
+        &mut self,
+        key: &str,
+        label: &str,
+        placeholder: &str,
+        rows: usize,
+        editable: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let state = self.get_or_create_form_textarea(key, placeholder, rows, window, cx);
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(4.0))
+            .min_w(px(260.0))
+            .flex_1()
+            .child(field_label(label.to_string(), false))
+            .child(Textarea::new(&state).small().disabled(!editable))
+            .into_any_element()
+    }
+
+    pub fn render_pl_radio_group(
+        &mut self,
+        id_prefix: &str,
+        field_key: &str,
+        label: &str,
+        editable: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let current_val = self.get_form_val(field_key);
+        let opts = [
+            ("1", "Loại 1"),
+            ("2", "Loại 2"),
+            ("3", "Loại 3"),
+            ("4", "Loại 4"),
+            ("5", "Loại 5"),
+        ];
+        let fk = field_key.to_string();
+        let prefix = id_prefix.to_string();
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(4.0))
+            .when(!label.is_empty(), |el| {
+                el.child(field_label(label.to_string(), false))
+            })
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(px(6.0))
+                    .children(opts.iter().map(|(val, lbl)| {
+                        let is_sel = current_val == *val;
+                        let v_owned = (*val).to_string();
+                        let fk_c = fk.clone();
+                        div()
+                            .id(SharedString::from(format!("rad-{}-{}", prefix, val)))
+                            .h(px(28.0))
+                            .px(px(10.0))
+                            .rounded(px(999.0))
+                            .border_1()
+                            .border_color(rgb(if is_sel { PRIMARY_COL } else { BORDER_COL }))
+                            .bg(rgb(if is_sel {
+                                PRIMARY_LIGHT
+                            } else if editable {
+                                BG_CARD
+                            } else {
+                                BG_SUBTLE
+                            }))
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(5.0))
+                            .text_xs()
+                            .font_weight(if is_sel {
+                                gpui::FontWeight::SEMIBOLD
+                            } else {
+                                gpui::FontWeight::NORMAL
+                            })
+                            .text_color(rgb(if is_sel {
+                                PRIMARY_COL
+                            } else if editable {
+                                TEXT_MAIN
+                            } else {
+                                TEXT_MUTED
+                            }))
+                            .when(editable, |el| {
+                                el.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| {
+                                    if this.get_form_val(&fk_c) == v_owned {
+                                        this.form_values.insert(fk_c.clone(), String::new());
+                                    } else {
+                                        this.form_values.insert(fk_c.clone(), v_owned.clone());
+                                    }
+                                    cx.notify();
+                                }))
+                            })
+                            .child(
+                                div()
+                                    .w(px(12.0))
+                                    .h(px(12.0))
+                                    .rounded(px(999.0))
+                                    .border_1()
+                                    .border_color(rgb(if is_sel { PRIMARY_COL } else { TEXT_MUTED }))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .when(is_sel, |el| {
+                                        el.child(
+                                            div()
+                                                .w(px(6.0))
+                                                .h(px(6.0))
+                                                .rounded(px(999.0))
+                                                .bg(rgb(PRIMARY_COL)),
+                                        )
+                                    }),
+                            )
+                            .child(*lbl)
+                    })),
             )
             .into_any_element()
     }
@@ -277,9 +402,8 @@ impl KskGpuiApp {
                                 .label("Chỉnh sửa")
                                 .small()
                                 .secondary()
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.editing_section = Some(s.clone());
-                                    cx.notify();
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    this.enter_edit_section(&s, window, cx);
                                 })),
                         )
                     })

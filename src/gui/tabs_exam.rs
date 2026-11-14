@@ -43,17 +43,6 @@ const TIEN_SU_21_ITEMS: &[(&str, &str)] = &[
     ("TSBT_MA_TUY", "21. Sử dụng ma túy"),
 ];
 
-fn pl_options() -> Vec<(String, String)> {
-    vec![
-        ("".to_string(), "-- Chưa phân loại --".to_string()),
-        ("1".to_string(), "Loại 1 (Rất khỏe)".to_string()),
-        ("2".to_string(), "Loại 2 (Khỏe)".to_string()),
-        ("3".to_string(), "Loại 3 (Trung bình)".to_string()),
-        ("4".to_string(), "Loại 4 (Yếu)".to_string()),
-        ("5".to_string(), "Loại 5 (Rất yếu)".to_string()),
-    ]
-}
-
 impl KskGpuiApp {
     pub fn render_exam_workspace(
         &mut self,
@@ -436,9 +425,17 @@ impl KskGpuiApp {
                                 },
                                 cx,
                             ))
-                            .child(self.render_form_input("TSBT_MA_BENH", "Mã bệnh đang điều trị", "", false, editable, window, cx))
-                            .child(self.render_form_input("TSBT_TEN_THUOC_LIEU_LUONG", "Thuốc & liều lượng đang dùng", "", false, editable, window, cx)),
-                    ),
+                            .child(self.render_form_input("TSBT_MA_BENH", "Mã bệnh đang điều trị", "", false, editable, window, cx)),
+                    )
+                    .child(self.render_form_textarea(
+                        "TSBT_TEN_THUOC_LIEU_LUONG",
+                        "Thuốc & liều lượng đang dùng",
+                        "Ghi chi tiết tên thuốc, liều lượng đang điều trị...",
+                        3,
+                        editable,
+                        window,
+                        cx,
+                    )),
             )
             .into_any_element()
     }
@@ -451,7 +448,6 @@ impl KskGpuiApp {
     ) -> AnyElement {
         let can_role = self.has_any_role(&["admin", "bs_theluc", "bs_noi"]);
         let editable = !is_locked && can_role && self.editing_section.as_deref() == Some("physical");
-        let pl = self.get_form_val("KHAM_THE_LUC_PL");
 
         div()
             .flex()
@@ -484,19 +480,15 @@ impl KskGpuiApp {
                             .gap(px(12.0))
                             .child(self.render_form_input("MACH", "Mạch (lần/phút)", "75", false, editable, window, cx))
                             .child(self.render_form_input("HUYET_AP", "Huyết áp (mmHg)", "120/80", false, editable, window, cx))
-                            .child(self.render_select_dropdown(
-                                "phys-pl",
-                                "Phân loại thể lực",
-                                &pl,
-                                pl_options(),
-                                editable,
-                                |this, val, _, _| {
-                                    this.form_values.insert("KHAM_THE_LUC_PL".into(), val);
-                                },
-                                cx,
-                            ))
                             .child(self.render_form_input("BS_THE_LUC", "Người khám thể lực", "", false, editable, window, cx)),
-                    ),
+                    )
+                    .child(self.render_pl_radio_group(
+                        "phys",
+                        "KHAM_THE_LUC_PL",
+                        "Phân loại thể lực",
+                        editable,
+                        cx,
+                    )),
             )
             .into_any_element()
     }
@@ -507,202 +499,118 @@ impl KskGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let mode_btn_quick = Button::new("btn-clin-quick")
-            .label("Khám chuyên khoa")
-            .small()
-            .when(!self.clinical_tree_mode, |b| b.primary())
-            .when(self.clinical_tree_mode, |b| b.secondary())
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.clinical_tree_mode = false;
-                cx.notify();
-            }));
-
-        let mode_btn_tree = Button::new("btn-clin-tree")
-            .label("Tra cứu phân loại bệnh (110+ bệnh)")
-            .small()
-            .when(self.clinical_tree_mode, |b| b.primary())
-            .when(!self.clinical_tree_mode, |b| b.secondary())
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.clinical_tree_mode = true;
-                cx.notify();
-            }));
-
-        let header = div()
-            .flex()
-            .flex_row()
-            .items_center()
-            .justify_between()
-            .child(
-                div()
-                    .text_base()
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(rgb(TEXT_MAIN))
-                    .child("Khám Lâm sàng Chuyên khoa"),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .gap(px(8.0))
-                    .child(mode_btn_quick)
-                    .child(mode_btn_tree),
-            );
-
-        if self.clinical_tree_mode {
-            return div()
-                .flex()
-                .flex_col()
-                .gap(px(14.0))
-                .child(header)
-                .child(self.render_disease_classification_tree(window, cx))
-                .into_any_element();
-        }
-
-        let can_noi = self.has_any_role(&["admin", "bs_noi"]);
-        let edit_noi = !is_locked && can_noi && self.editing_section.as_deref() == Some("clin_noi");
-
-        let can_ngoai = self.has_any_role(&["admin", "bs_ngoai"]);
-        let edit_ngoai = !is_locked && can_ngoai && self.editing_section.as_deref() == Some("clin_ngoai");
-
-        let can_dalieu = self.has_any_role(&["admin", "bs_dalieu"]);
-        let edit_dalieu = !is_locked && can_dalieu && self.editing_section.as_deref() == Some("clin_dalieu");
-
-        let can_san = self.has_any_role(&["admin", "bs_san"]);
-        let edit_san = !is_locked && can_san && self.editing_section.as_deref() == Some("clin_san");
-
-        let can_mat = self.has_any_role(&["admin", "bs_mat"]);
-        let edit_mat = !is_locked && can_mat && self.editing_section.as_deref() == Some("clin_mat");
-
-        let can_tmh = self.has_any_role(&["admin", "bs_tmh"]);
-        let edit_tmh = !is_locked && can_tmh && self.editing_section.as_deref() == Some("clin_tmh");
-
-        let can_rhm = self.has_any_role(&["admin", "bs_rhm"]);
-        let edit_rhm = !is_locked && can_rhm && self.editing_section.as_deref() == Some("clin_rhm");
-
-        let noi_fields = [
-            ("NOI_KHOA_TUAN_HOAN", "NOI_KHOA_TUAN_HOAN_PL", "Tuần hoàn"),
-            ("NOI_KHOA_HO_HAP", "NOI_KHOA_HO_HAP_PL", "Hô hấp"),
-            ("NOI_KHOA_TIEU_HOA", "NOI_KHOA_TIEU_HOA_PL", "Tiêu hóa"),
-            ("NOI_KHOA_THAN_TN_SD", "NOI_KHOA_THAN_TIETNIEU_PL", "Thận - Tiết niệu"),
-            ("NOI_KHOA_NOI_TIET", "NOI_KHOA_NOI_TIET_PL", "Nội tiết"),
-            ("NOI_KHOA_CO_XUONG_KHOP", "NOI_KHOA_CO_XUONG_KHOP_PL", "Cơ xương khớp"),
-            ("NOI_KHOA_THAN_KINH", "NOI_KHOA_THAN_KINH_PL", "Thần kinh"),
-            ("NOI_KHOA_TAM_THAN", "NOI_KHOA_TAM_THAN_PL", "Tâm thần"),
+        let subtabs = [
+            ("noi", "1. Nội khoa"),
+            ("ngoai", "2. Ngoại khoa"),
+            ("dalieu", "3. Da liễu"),
+            ("san", "4. Sản phụ khoa"),
+            ("mat", "5. Mắt"),
+            ("tmh", "6. Tai - Mũi - Họng"),
+            ("rhm", "7. Răng - Hàm - Mặt"),
+            ("tree", "Tra cứu 110+ bệnh"),
         ];
 
-        div()
+        let active_sub = self.active_clinical_subtab.clone();
+
+        let subtab_bar = div()
+            .bg(rgb(BG_CARD))
+            .border_1()
+            .border_color(rgb(BORDER_COL))
+            .rounded(px(8.0))
+            .p(px(8.0))
             .flex()
-            .flex_col()
-            .gap(px(14.0))
-            .child(header)
-            .child({
-                let mut box_noi = card_box().child(self.render_section_action_bar(
-                    "clin_noi",
-                    "1. Nội khoa & Tâm thần",
-                    can_noi,
+            .flex_row()
+            .flex_wrap()
+            .gap(px(6.0))
+            .children(subtabs.iter().map(|(key, lbl)| {
+                let is_act = active_sub == *key;
+                let k = key.to_string();
+                Button::new(SharedString::from(format!("clin-sub-{}", key)))
+                    .label(*lbl)
+                    .small()
+                    .when(is_act, |b| b.primary())
+                    .when(!is_act, |b| b.secondary())
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.active_clinical_subtab = k.clone();
+                        cx.notify();
+                    }))
+            }));
+
+        let body = match active_sub.as_str() {
+            "ngoai" => {
+                let can = self.has_any_role(&["admin", "bs_ngoai"]);
+                let ed = !is_locked && can && self.editing_section.as_deref() == Some("clin_ngoai");
+                self.render_simple_specialty_card(
+                    "clin_ngoai",
+                    "Chuyên khoa Ngoại",
+                    "KET_QUA_KHAM_NGOAI_KHOA",
+                    "KHAM_NGOAI_KHOA_PL",
+                    "BS_NGOAI",
+                    can,
+                    ed,
                     is_locked,
+                    window,
                     cx,
-                ));
-                for (f_kq, f_pl, lbl) in noi_fields {
-                    let pl_val = self.get_form_val(f_pl);
-                    let f_pl_owned = f_pl.to_string();
-                    box_noi = box_noi.child(
-                        div()
-                            .flex()
-                            .flex_row()
-                            .gap(px(12.0))
-                            .child(self.render_form_input(f_kq, lbl, "Bình thường", false, edit_noi, window, cx))
-                            .child(self.render_select_dropdown(
-                                &format!("dd-{}", f_pl),
-                                "Phân loại",
-                                &pl_val,
-                                pl_options(),
-                                edit_noi,
-                                move |this, val, _, _| {
-                                    this.form_values.insert(f_pl_owned.clone(), val);
-                                },
-                                cx,
-                            )),
-                    );
-                }
-                box_noi.child(self.render_form_input("BS_NOI", "Bác sĩ Nội khoa", "", false, edit_noi, window, cx))
-            })
-            .child(self.render_simple_specialty_card(
-                "clin_ngoai",
-                "2. Ngoại khoa",
-                "KET_QUA_KHAM_NGOAI_KHOA",
-                "KHAM_NGOAI_KHOA_PL",
-                "BS_NGOAI",
-                can_ngoai,
-                edit_ngoai,
-                is_locked,
-                window,
-                cx,
-            ))
-            .child(self.render_simple_specialty_card(
-                "clin_dalieu",
-                "3. Da liễu",
-                "KET_QUA_KHAM_DA_LIEU",
-                "KHAM_DA_LIEU_PL",
-                "BS_DA_LIEU",
-                can_dalieu,
-                edit_dalieu,
-                is_locked,
-                window,
-                cx,
-            ))
-            .child(self.render_simple_specialty_card(
-                "clin_san",
-                "4. Sản phụ khoa",
-                "KET_QUA_KHAM_SAN_PHU_KHOA",
-                "KHAM_SAN_PHU_KHOA_PL",
-                "BS_SAN",
-                can_san,
-                edit_san,
-                is_locked,
-                window,
-                cx,
-            ))
-            .child({
-                let pl = self.get_form_val("KHAM_MAT_PL");
+                )
+            }
+            "dalieu" => {
+                let can = self.has_any_role(&["admin", "bs_dalieu"]);
+                let ed = !is_locked && can && self.editing_section.as_deref() == Some("clin_dalieu");
+                self.render_simple_specialty_card(
+                    "clin_dalieu",
+                    "Chuyên khoa Da liễu",
+                    "KET_QUA_KHAM_DA_LIEU",
+                    "KHAM_DA_LIEU_PL",
+                    "BS_DA_LIEU",
+                    can,
+                    ed,
+                    is_locked,
+                    window,
+                    cx,
+                )
+            }
+            "san" => {
+                let can = self.has_any_role(&["admin", "bs_san"]);
+                let ed = !is_locked && can && self.editing_section.as_deref() == Some("clin_san");
+                self.render_simple_specialty_card(
+                    "clin_san",
+                    "Chuyên khoa Sản phụ khoa",
+                    "KET_QUA_KHAM_SAN_PHU_KHOA",
+                    "KHAM_SAN_PHU_KHOA_PL",
+                    "BS_SAN",
+                    can,
+                    ed,
+                    is_locked,
+                    window,
+                    cx,
+                )
+            }
+            "mat" => {
+                let can_mat = self.has_any_role(&["admin", "bs_mat"]);
+                let edit_mat = !is_locked && can_mat && self.editing_section.as_deref() == Some("clin_mat");
                 card_box()
-                    .child(self.render_section_action_bar("clin_mat", "5. Mắt", can_mat, is_locked, cx))
+                    .child(self.render_section_action_bar("clin_mat", "Chuyên khoa Mắt", can_mat, is_locked, cx))
                     .child(
                         div()
                             .flex()
                             .flex_row()
                             .flex_wrap()
                             .gap(px(12.0))
-                            .child(self.render_form_input("KHONG_KINH_MAT_PHAI", "Không kính MP", "10/10", false, edit_mat, window, cx))
-                            .child(self.render_form_input("KHONG_KINH_MAT_TRAI", "Không kính MT", "10/10", false, edit_mat, window, cx))
-                            .child(self.render_form_input("CO_KINH_MAT_PHAI", "Có kính MP", "10/10", false, edit_mat, window, cx))
-                            .child(self.render_form_input("CO_KINH_MAT_TRAI", "Có kính MT", "10/10", false, edit_mat, window, cx)),
+                            .child(self.render_form_input("KHONG_KINH_MAT_PHAI", "Thị lực không kính MP", "10/10", false, edit_mat, window, cx))
+                            .child(self.render_form_input("KHONG_KINH_MAT_TRAI", "Thị lực không kính MT", "10/10", false, edit_mat, window, cx))
+                            .child(self.render_form_input("CO_KINH_MAT_PHAI", "Thị lực có kính MP", "10/10", false, edit_mat, window, cx))
+                            .child(self.render_form_input("CO_KINH_MAT_TRAI", "Thị lực có kính MT", "10/10", false, edit_mat, window, cx)),
                     )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_row()
-                            .flex_wrap()
-                            .gap(px(12.0))
-                            .child(self.render_form_input("BENH_KHAC_MAT", "Bệnh về mắt", "Không", false, edit_mat, window, cx))
-                            .child(self.render_select_dropdown(
-                                "dd-KHAM_MAT_PL",
-                                "Phân loại Mắt",
-                                &pl,
-                                pl_options(),
-                                edit_mat,
-                                |this, val, _, _| {
-                                    this.form_values.insert("KHAM_MAT_PL".into(), val);
-                                },
-                                cx,
-                            ))
-                            .child(self.render_form_input("BS_MAT", "Bác sĩ Mắt", "", false, edit_mat, window, cx)),
-                    )
-            })
-            .child({
-                let pl = self.get_form_val("KHAM_TAI_MUI_HONG_PL");
+                    .child(self.render_form_textarea("BENH_KHAC_MAT", "Kết quả khám & Các bệnh về mắt", "Bình thường / Không có bệnh lý...", 3, edit_mat, window, cx))
+                    .child(self.render_pl_radio_group("mat", "KHAM_MAT_PL", "Phân loại Mắt", edit_mat, cx))
+                    .child(self.render_form_input("BS_MAT", "Bác sĩ khám Mắt", "", false, edit_mat, window, cx))
+                    .into_any_element()
+            }
+            "tmh" => {
+                let can_tmh = self.has_any_role(&["admin", "bs_tmh"]);
+                let edit_tmh = !is_locked && can_tmh && self.editing_section.as_deref() == Some("clin_tmh");
                 card_box()
-                    .child(self.render_section_action_bar("clin_tmh", "6. Tai - Mũi - Họng", can_tmh, is_locked, cx))
+                    .child(self.render_section_action_bar("clin_tmh", "Chuyên khoa Tai - Mũi - Họng", can_tmh, is_locked, cx))
                     .child(
                         div()
                             .flex()
@@ -714,54 +622,78 @@ impl KskGpuiApp {
                             .child(self.render_form_input("TAI_TRAI_NOI_THUONG", "Tai trái nói thường (m)", "5m", false, edit_tmh, window, cx))
                             .child(self.render_form_input("TAI_TRAI_NOI_THAM", "Tai trái nói thầm (m)", "0.5m", false, edit_tmh, window, cx)),
                     )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_row()
-                            .flex_wrap()
-                            .gap(px(12.0))
-                            .child(self.render_form_input("BENH_KHAC_TAI_MUI_HONG", "Bệnh TMH", "Bình thường", false, edit_tmh, window, cx))
-                            .child(self.render_select_dropdown(
-                                "dd-KHAM_TAI_MUI_HONG_PL",
-                                "Phân loại TMH",
-                                &pl,
-                                pl_options(),
-                                edit_tmh,
-                                |this, val, _, _| {
-                                    this.form_values.insert("KHAM_TAI_MUI_HONG_PL".into(), val);
-                                },
-                                cx,
-                            ))
-                            .child(self.render_form_input("BS_TMH", "Bác sĩ TMH", "", false, edit_tmh, window, cx)),
-                    )
-            })
-            .child({
-                let pl = self.get_form_val("KHAM_RANG_HAM_MAT_PL");
+                    .child(self.render_form_textarea("BENH_KHAC_TAI_MUI_HONG", "Kết quả khám & Bệnh Tai - Mũi - Họng", "Bình thường...", 3, edit_tmh, window, cx))
+                    .child(self.render_pl_radio_group("tmh", "KHAM_TAI_MUI_HONG_PL", "Phân loại TMH", edit_tmh, cx))
+                    .child(self.render_form_input("BS_TMH", "Bác sĩ khám TMH", "", false, edit_tmh, window, cx))
+                    .into_any_element()
+            }
+            "rhm" => {
+                let can_rhm = self.has_any_role(&["admin", "bs_rhm"]);
+                let edit_rhm = !is_locked && can_rhm && self.editing_section.as_deref() == Some("clin_rhm");
                 card_box()
-                    .child(self.render_section_action_bar("clin_rhm", "7. Răng - Hàm - Mặt", can_rhm, is_locked, cx))
+                    .child(self.render_section_action_bar("clin_rhm", "Chuyên khoa Răng - Hàm - Mặt", can_rhm, is_locked, cx))
                     .child(
                         div()
                             .flex()
                             .flex_row()
                             .flex_wrap()
                             .gap(px(12.0))
-                            .child(self.render_form_input("HAM_TREN", "Hàm trên", "Bình thường", false, edit_rhm, window, cx))
-                            .child(self.render_form_input("HAM_DUOI", "Hàm dưới", "Bình thường", false, edit_rhm, window, cx))
-                            .child(self.render_form_input("BENH_KHAC_RANG_HAM_MAT", "Bệnh RHM", "Không", false, edit_rhm, window, cx))
-                            .child(self.render_select_dropdown(
-                                "dd-KHAM_RANG_HAM_MAT_PL",
-                                "Phân loại RHM",
-                                &pl,
-                                pl_options(),
-                                edit_rhm,
-                                |this, val, _, _| {
-                                    this.form_values.insert("KHAM_RANG_HAM_MAT_PL".into(), val);
-                                },
-                                cx,
-                            ))
-                            .child(self.render_form_input("BS_RHM", "Bác sĩ RHM", "", false, edit_rhm, window, cx)),
+                            .child(self.render_form_textarea("HAM_TREN", "Hàm trên", "Bình thường", 2, edit_rhm, window, cx))
+                            .child(self.render_form_textarea("HAM_DUOI", "Hàm dưới", "Bình thường", 2, edit_rhm, window, cx)),
                     )
-            })
+                    .child(self.render_form_textarea("BENH_KHAC_RANG_HAM_MAT", "Kết quả khám & Bệnh Răng - Hàm - Mặt", "Bình thường...", 3, edit_rhm, window, cx))
+                    .child(self.render_pl_radio_group("rhm", "KHAM_RANG_HAM_MAT_PL", "Phân loại RHM", edit_rhm, cx))
+                    .child(self.render_form_input("BS_RHM", "Bác sĩ khám RHM", "", false, edit_rhm, window, cx))
+                    .into_any_element()
+            }
+            "tree" => self.render_disease_classification_tree(window, cx),
+            _ => {
+                let can_noi = self.has_any_role(&["admin", "bs_noi"]);
+                let edit_noi = !is_locked && can_noi && self.editing_section.as_deref() == Some("clin_noi");
+                let noi_fields = [
+                    ("NOI_KHOA_TUAN_HOAN", "NOI_KHOA_TUAN_HOAN_PL", "Tuần hoàn"),
+                    ("NOI_KHOA_HO_HAP", "NOI_KHOA_HO_HAP_PL", "Hô hấp"),
+                    ("NOI_KHOA_TIEU_HOA", "NOI_KHOA_TIEU_HOA_PL", "Tiêu hóa"),
+                    ("NOI_KHOA_THAN_TN_SD", "NOI_KHOA_THAN_TIETNIEU_PL", "Thận - Tiết niệu"),
+                    ("NOI_KHOA_NOI_TIET", "NOI_KHOA_NOI_TIET_PL", "Nội tiết"),
+                    ("NOI_KHOA_CO_XUONG_KHOP", "NOI_KHOA_CO_XUONG_KHOP_PL", "Cơ xương khớp"),
+                    ("NOI_KHOA_THAN_KINH", "NOI_KHOA_THAN_KINH_PL", "Thần kinh"),
+                    ("NOI_KHOA_TAM_THAN", "NOI_KHOA_TAM_THAN_PL", "Tâm thần"),
+                ];
+                let mut box_noi = card_box().child(self.render_section_action_bar(
+                    "clin_noi",
+                    "Chuyên khoa Nội & Tâm thần",
+                    can_noi,
+                    is_locked,
+                    cx,
+                ));
+                for (f_kq, f_pl, lbl) in noi_fields {
+                    box_noi = box_noi.child(
+                        div()
+                            .p(px(10.0))
+                            .rounded(px(6.0))
+                            .bg(rgb(BG_SUBTLE))
+                            .border_1()
+                            .border_color(rgb(BORDER_COL))
+                            .flex()
+                            .flex_col()
+                            .gap(px(8.0))
+                            .child(self.render_form_textarea(f_kq, lbl, "Bình thường...", 2, edit_noi, window, cx))
+                            .child(self.render_pl_radio_group(f_pl, f_pl, "Phân loại", edit_noi, cx)),
+                    );
+                }
+                box_noi
+                    .child(self.render_form_input("BS_NOI", "Bác sĩ Nội khoa", "", false, edit_noi, window, cx))
+                    .into_any_element()
+            }
+        };
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(14.0))
+            .child(subtab_bar)
+            .child(body)
             .into_any_element()
     }
 
@@ -779,30 +711,19 @@ impl KskGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let pl_val = self.get_form_val(f_pl);
-        let f_pl_owned = f_pl.to_string();
         card_box()
             .child(self.render_section_action_bar(sec_key, title, can_role, is_locked, cx))
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_wrap()
-                    .gap(px(12.0))
-                    .child(self.render_form_input(f_kq, "Kết quả khám", "Bình thường", false, editable, window, cx))
-                    .child(self.render_select_dropdown(
-                        &format!("dd-{}", f_pl),
-                        "Phân loại",
-                        &pl_val,
-                        pl_options(),
-                        editable,
-                        move |this, val, _, _| {
-                            this.form_values.insert(f_pl_owned.clone(), val);
-                        },
-                        cx,
-                    ))
-                    .child(self.render_form_input(f_bs, "Bác sĩ khám", "", false, editable, window, cx)),
-            )
+            .child(self.render_form_textarea(
+                f_kq,
+                "Kết quả khám chuyên khoa",
+                "Nhập chi tiết kết quả khám...",
+                4,
+                editable,
+                window,
+                cx,
+            ))
+            .child(self.render_pl_radio_group(f_pl, f_pl, "Phân loại sức khỏe chuyên khoa", editable, cx))
+            .child(self.render_form_input(f_bs, "Bác sĩ khám", "", false, editable, window, cx))
             .into_any_element()
     }
 
@@ -902,7 +823,10 @@ impl KskGpuiApp {
                                         };
                                         this.form_values.insert("CAC_BENH_TAT_NEU_CO".into(), next.clone());
                                         if let Some(inp) = this.form_inputs.get("CAC_BENH_TAT_NEU_CO") {
-                                            inp.update(cx, |s, cx| s.set_value(next, window, cx));
+                                            inp.update(cx, |s, cx| s.set_value(next.clone(), window, cx));
+                                        }
+                                        if let Some(ta) = this.form_textareas.get("CAC_BENH_TAT_NEU_CO") {
+                                            ta.update(cx, |s, cx| s.set_value(next, window, cx));
                                         }
                                         this.show_toast(&format!("Đã thêm: {}", append_text), false, cx);
                                     }))
@@ -935,21 +859,11 @@ impl KskGpuiApp {
                     .flex_row()
                     .flex_wrap()
                     .gap(px(12.0))
-                    .child(self.render_form_input("CLS_HUYET_HOC", "Công thức máu", "Bình thường", false, editable, window, cx))
                     .child(self.render_form_input("CLS_DUONG_MAU", "Đường máu (mmol/L)", "", false, editable, window, cx))
                     .child(self.render_form_input("CLS_URE", "Urê (mmol/L)", "", false, editable, window, cx))
-                    .child(self.render_form_input("CLS_CREATININ", "Creatinin (µmol/L)", "", false, editable, window, cx)),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_wrap()
-                    .gap(px(12.0))
+                    .child(self.render_form_input("CLS_CREATININ", "Creatinin (µmol/L)", "", false, editable, window, cx))
                     .child(self.render_form_input("CLS_ASAT_GOT", "AST / GOT (U/L)", "", false, editable, window, cx))
-                    .child(self.render_form_input("CLS_ALAT_GPT", "ALT / GPT (U/L)", "", false, editable, window, cx))
-                    .child(self.render_form_input("CLS_NUOC_TIEU", "Tổng phân tích nước tiểu", "Bình thường", false, editable, window, cx))
-                    .child(self.render_form_input("CLS_XQ_TIM_PHOI", "X-Quang tim phổi", "Bình thường", false, editable, window, cx)),
+                    .child(self.render_form_input("CLS_ALAT_GPT", "ALT / GPT (U/L)", "", false, editable, window, cx)),
             )
             .child(
                 div()
@@ -957,10 +871,28 @@ impl KskGpuiApp {
                     .flex_row()
                     .flex_wrap()
                     .gap(px(12.0))
-                    .child(self.render_form_input("CLS_KHAC_MO_TA", "Cận lâm sàng khác (Siêu âm, ECG...)", "", false, editable, window, cx))
-                    .child(self.render_form_input("CLS_DINH_KY_KET_QUA", "Kết luận Cận lâm sàng", "Bình thường", false, editable, window, cx))
-                    .child(self.render_form_input("BS_CLS", "Bác sĩ CLS", "", false, editable, window, cx)),
+                    .child(self.render_form_textarea("CLS_HUYET_HOC", "Công thức máu (Huyết học)", "Bình thường...", 3, editable, window, cx))
+                    .child(self.render_form_textarea("CLS_NUOC_TIEU", "Tổng phân tích nước tiểu", "Bình thường...", 3, editable, window, cx)),
             )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(px(12.0))
+                    .child(self.render_form_textarea("CLS_XQ_TIM_PHOI", "X-Quang tim phổi", "Bình thường...", 3, editable, window, cx))
+                    .child(self.render_form_textarea("CLS_KHAC_MO_TA", "Cận lâm sàng khác (Siêu âm, ECG...)", "Nhập kết quả siêu âm, điện tim...", 3, editable, window, cx)),
+            )
+            .child(self.render_form_textarea(
+                "CLS_DINH_KY_KET_QUA",
+                "Kết luận Cận lâm sàng",
+                "Bình thường...",
+                3,
+                editable,
+                window,
+                cx,
+            ))
+            .child(self.render_form_input("BS_CLS", "Bác sĩ CLS", "", false, editable, window, cx))
             .into_any_element()
     }
 
@@ -973,7 +905,6 @@ impl KskGpuiApp {
         let can_role = self.has_any_role(&["admin", "bs_ketluan"]);
         let is_admin = self.has_any_role(&["admin"]);
         let editable = !is_locked && can_role && self.editing_section.as_deref() == Some("conclusion");
-        let pl = self.get_form_val("PHAN_LOAI_SK");
 
         card_box()
             .child(self.render_section_action_bar(
@@ -983,27 +914,32 @@ impl KskGpuiApp {
                 is_locked,
                 cx,
             ))
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_wrap()
-                    .gap(px(12.0))
-                    .child(self.render_select_dropdown(
-                        "conc-phan-loai",
-                        "Phân loại sức khỏe chung",
-                        &pl,
-                        pl_options(),
-                        editable,
-                        |this, val, _, _| {
-                            this.form_values.insert("PHAN_LOAI_SK".into(), val);
-                        },
-                        cx,
-                    ))
-                    .child(self.render_form_input("KET_LUAN_BENH", "Kết luận đủ sức khỏe / Bệnh tật", "Đủ sức khỏe làm việc/học tập", false, editable, window, cx))
-                    .child(self.render_form_input("BS_KET_LUAN", "Bác sĩ kết luận", "", false, editable, window, cx)),
-            )
-            .child(self.render_form_input("CAC_BENH_TAT_NEU_CO", "Các bệnh tật nếu có", "", false, editable, window, cx))
+            .child(self.render_pl_radio_group(
+                "conc",
+                "PHAN_LOAI_SK",
+                "Phân loại sức khỏe chung",
+                editable,
+                cx,
+            ))
+            .child(self.render_form_textarea(
+                "KET_LUAN_BENH",
+                "Kết luận đủ sức khỏe / Bệnh tật",
+                "Đủ sức khỏe làm việc / học tập...",
+                3,
+                editable,
+                window,
+                cx,
+            ))
+            .child(self.render_form_textarea(
+                "CAC_BENH_TAT_NEU_CO",
+                "Các bệnh tật nếu có",
+                "Ghi rõ tên bệnh / mã phân loại nếu có...",
+                3,
+                editable,
+                window,
+                cx,
+            ))
+            .child(self.render_form_input("BS_KET_LUAN", "Bác sĩ kết luận", "", false, editable, window, cx))
             .child(
                 div()
                     .pt(px(10.0))
