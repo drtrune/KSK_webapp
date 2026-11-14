@@ -862,6 +862,87 @@ impl KskGpuiApp {
             .into_any_element()
     }
 
+    fn auto_scores_from_form(&self) -> std::collections::HashMap<String, (String, i64)> {
+        use crate::models::{
+            auto_classify_bmi, auto_classify_bp, auto_classify_hearing, auto_classify_pulse,
+            auto_classify_vision, calc_patient_age,
+        };
+        let mut map = std::collections::HashMap::new();
+        let (v_id, v_sc) = auto_classify_vision(
+            &self.get_form_val("KHONG_KINH_MAT_PHAI"),
+            &self.get_form_val("KHONG_KINH_MAT_TRAI"),
+            &self.get_form_val("CO_KINH_MAT_PHAI"),
+            &self.get_form_val("CO_KINH_MAT_TRAI"),
+        );
+        map.insert("BT_MAT_THI_LUC".to_string(), (v_id.to_string(), v_sc));
+
+        let (h_id, h_sc) = auto_classify_hearing(
+            &self.get_form_val("TAI_PHAI_NOI_THUONG"),
+            &self.get_form_val("TAI_PHAI_NOI_THAM"),
+            &self.get_form_val("TAI_TRAI_NOI_THUONG"),
+            &self.get_form_val("TAI_TRAI_NOI_THAM"),
+        );
+        map.insert("BT_TMH_TAI_TRONG".to_string(), (h_id.to_string(), h_sc));
+
+        let age = calc_patient_age(&self.get_form_val("NGAY_SINH"));
+        let (bp_id, bp_sc) = auto_classify_bp(&self.get_form_val("HUYET_AP"), age);
+        map.insert("BT_TM_HUYET_AP".to_string(), (bp_id.to_string(), bp_sc));
+
+        let (p_id, p_sc) = auto_classify_pulse(&self.get_form_val("MACH"));
+        map.insert("BT_TM_MACH".to_string(), (p_id.to_string(), p_sc));
+
+        let (b_id, b_sc) = auto_classify_bmi(
+            &self.get_form_val("CHI_SO_BMI"),
+            &self.get_form_val("CHIEU_CAO"),
+            &self.get_form_val("CAN_NANG"),
+        );
+        map.insert("BT_NT_BEO_PHE".to_string(), (b_id.to_string(), b_sc));
+        map
+    }
+
+    fn auto_disease_detail(&self, disease_id: &str) -> Option<String> {
+        match disease_id {
+            "BT_MAT_THI_LUC" => Some(format!(
+                "Không kính: MP {} — MT {} | Có kính: MP {} — MT {}",
+                self.get_form_val("KHONG_KINH_MAT_PHAI"),
+                self.get_form_val("KHONG_KINH_MAT_TRAI"),
+                self.get_form_val("CO_KINH_MAT_PHAI"),
+                self.get_form_val("CO_KINH_MAT_TRAI"),
+            )),
+            "BT_TMH_TAI_TRONG" => Some(format!(
+                "Tai phải: {}m (thầm {}m) | Tai trái: {}m (thầm {}m)",
+                self.get_form_val("TAI_PHAI_NOI_THUONG"),
+                self.get_form_val("TAI_PHAI_NOI_THAM"),
+                self.get_form_val("TAI_TRAI_NOI_THUONG"),
+                self.get_form_val("TAI_TRAI_NOI_THAM"),
+            )),
+            "BT_TM_HUYET_AP" => {
+                let bp = self.get_form_val("HUYET_AP");
+                let age = crate::models::calc_patient_age(&self.get_form_val("NGAY_SINH"));
+                Some(format!(
+                    "Huyết áp đo: {} mmHg{}",
+                    if bp.is_empty() { "Chưa đo" } else { &bp },
+                    age.map(|a| format!(" ({} tuổi)", a)).unwrap_or_default()
+                ))
+            }
+            "BT_TM_MACH" => {
+                let m = self.get_form_val("MACH");
+                Some(format!(
+                    "Tần số mạch: {} lần/phút",
+                    if m.is_empty() { "Chưa đo" } else { &m }
+                ))
+            }
+            "BT_NT_BEO_PHE" => {
+                let bmi = self.get_form_val("CHI_SO_BMI");
+                Some(format!(
+                    "Chỉ số BMI: {}",
+                    if bmi.is_empty() { "Chưa tính" } else { &bmi }
+                ))
+            }
+            _ => None,
+        }
+    }
+
     fn parse_cls_score(name: &str, fallback: Option<i64>) -> i64 {
         if let Some(sc) = fallback {
             return sc;
@@ -882,7 +963,13 @@ impl KskGpuiApp {
         }
     }
 
-    fn load_specialty_diseases(&self, spec_id: &str) -> Vec<(String, String, Vec<(String, String, i64)>)> {
+    /// Returns `(disease_code, disease_name, Vec<(cls_code, cls_name, resolved_score, ref_rule, is_ref)>)`
+    fn load_specialty_diseases(
+        &self,
+        spec_id: &str,
+        auto_scores: &std::collections::HashMap<String, (String, i64)>,
+    ) -> Vec<(String, String, Vec<(String, String, i64, Option<String>, bool)>)> {
+        let cfg = phan_loai_config();
         let db_diseases = self.query_catalog_items("BENH_TAT", Some(spec_id));
         let db_classes = self.query_catalog_items("TIEU_CHUAN_PL", None);
 
@@ -895,15 +982,26 @@ impl KskGpuiApp {
                         .iter()
                         .filter(|c| c.parent_code == d.code)
                         .map(|c| {
-                            let sc = Self::parse_cls_score(&c.name, None);
-                            (c.code.clone(), c.name.clone(), sc)
+                            let cfg_cls = cfg.classifications.iter().find(|x| x.id == c.code);
+                            let is_ref = cfg_cls.and_then(|x| x.ref_disease_id.as_ref()).is_some();
+                            let ref_rule = cfg_cls.and_then(|x| x.ref_rule.clone());
+                            let sc = if cfg_cls.is_some() {
+                                crate::models::resolve_classification_score(
+                                    &c.code,
+                                    &self.selected_classifications,
+                                    auto_scores,
+                                    0,
+                                )
+                            } else {
+                                Self::parse_cls_score(&c.name, None)
+                            };
+                            (c.code.clone(), c.name.clone(), sc, ref_rule, is_ref)
                         })
                         .collect();
                     (d.code, d.name, classes)
                 })
                 .collect()
         } else {
-            let cfg = phan_loai_config();
             cfg.diseases
                 .iter()
                 .filter(|d| d.specialty_id == spec_id)
@@ -913,8 +1011,14 @@ impl KskGpuiApp {
                         .iter()
                         .filter(|c| c.disease_id == d.id)
                         .map(|c| {
-                            let sc = Self::parse_cls_score(&c.name, c.score);
-                            (c.id.clone(), c.name.clone(), sc)
+                            let is_ref = c.ref_disease_id.is_some();
+                            let sc = crate::models::resolve_classification_score(
+                                &c.id,
+                                &self.selected_classifications,
+                                auto_scores,
+                                0,
+                            );
+                            (c.id.clone(), c.name.clone(), sc, c.ref_rule.clone(), is_ref)
                         })
                         .collect();
                     (d.id.clone(), d.name.clone(), classes)
@@ -929,20 +1033,33 @@ impl KskGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let diseases = self.load_specialty_diseases(spec_id);
+        let auto_scores = self.auto_scores_from_form();
+        for (did, (cid, _)) in &auto_scores {
+            self.selected_classifications.insert(did.clone(), cid.clone());
+        }
+        let diseases = self.load_specialty_diseases(spec_id, &auto_scores);
         let mut max_score: i64 = 1;
         let mut abn_names: Vec<String> = Vec::new();
 
         for (d_code, d_name, classes) in &diseases {
-            let sel_id = self.selected_classifications.get(d_code);
-            let sel_cls = sel_id
-                .and_then(|cid| classes.iter().find(|(c, _, _)| c == cid))
-                .or_else(|| classes.first());
-            if let Some((_, c_name, sc)) = sel_cls {
-                if *sc > max_score {
-                    max_score = *sc;
+            let sel_cls = if let Some((auto_cid, auto_sc)) = auto_scores.get(d_code) {
+                classes
+                    .iter()
+                    .find(|(c, _, _, _, _)| c == auto_cid)
+                    .map(|(_, n, _, _, _)| (n.clone(), *auto_sc))
+                    .or_else(|| Some((d_name.clone(), *auto_sc)))
+            } else {
+                let sel_id = self.selected_classifications.get(d_code);
+                sel_id
+                    .and_then(|cid| classes.iter().find(|(c, _, _, _, _)| c == cid))
+                    .or_else(|| classes.first())
+                    .map(|(_, n, sc, _, _)| (n.clone(), *sc))
+            };
+            if let Some((c_name, sc)) = sel_cls {
+                if sc > max_score {
+                    max_score = sc;
                 }
-                if *sc > 1 {
+                if sc > 1 {
                     abn_names.push(format!("{}: {}", d_name, c_name));
                 }
             }
@@ -994,21 +1111,31 @@ impl KskGpuiApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let diseases = self.load_specialty_diseases(spec_id);
+        let auto_scores = self.auto_scores_from_form();
+        let diseases = self.load_specialty_diseases(spec_id, &auto_scores);
         let mut max_score: i64 = 1;
         let mut abnormal_rows: Vec<(String, String, i64)> = Vec::new();
 
         for (d_code, d_name, classes) in &diseases {
-            let sel_id = self.selected_classifications.get(d_code);
-            let sel_cls = sel_id
-                .and_then(|cid| classes.iter().find(|(c, _, _)| c == cid))
-                .or_else(|| classes.first());
-            if let Some((_, c_name, sc)) = sel_cls {
-                if *sc > max_score {
-                    max_score = *sc;
+            let sel_cls = if let Some((auto_cid, auto_sc)) = auto_scores.get(d_code) {
+                classes
+                    .iter()
+                    .find(|(c, _, _, _, _)| c == auto_cid)
+                    .map(|(_, n, _, _, _)| (n.clone(), *auto_sc))
+                    .or_else(|| Some((d_name.clone(), *auto_sc)))
+            } else {
+                let sel_id = self.selected_classifications.get(d_code);
+                sel_id
+                    .and_then(|cid| classes.iter().find(|(c, _, _, _, _)| c == cid))
+                    .or_else(|| classes.first())
+                    .map(|(_, n, sc, _, _)| (n.clone(), *sc))
+            };
+            if let Some((c_name, sc)) = sel_cls {
+                if sc > max_score {
+                    max_score = sc;
                 }
-                if *sc > 1 {
-                    abnormal_rows.push((d_name.clone(), c_name.clone(), *sc));
+                if sc > 1 {
+                    abnormal_rows.push((d_name.clone(), c_name, sc));
                 }
             }
         }
@@ -1136,14 +1263,67 @@ impl KskGpuiApp {
                 )
             })
             .children(diseases.into_iter().map(|(d_code, d_name, classes)| {
+                if let Some((auto_cid, auto_sc)) = auto_scores.get(&d_code) {
+                    let (a_bg, a_col) = Self::score_badge_colors(*auto_sc);
+                    let std_name = classes
+                        .iter()
+                        .find(|(c, _, _, _, _)| c == auto_cid)
+                        .map(|(_, n, _, _, _)| n.clone())
+                        .unwrap_or_else(|| format!("Tự động xếp Loại {}", auto_sc));
+                    let detail = self.auto_disease_detail(&d_code).unwrap_or_default();
+
+                    return div()
+                        .rounded(px(8.0))
+                        .border_1()
+                        .border_color(rgb(PRIMARY_COL))
+                        .bg(rgb(bg_card()))
+                        .px(px(12.0))
+                        .py(px(8.0))
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(8.0))
+                        .child(
+                            div()
+                                .flex_1()
+                                .flex()
+                                .flex_col()
+                                .gap(px(2.0))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .gap(px(6.0))
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .font_weight(gpui::FontWeight::BOLD)
+                                                .text_color(rgb(text_main()))
+                                                .child(d_name),
+                                        )
+                                        .child(badge("TỰ ĐỘNG", primary_light(), PRIMARY_COL)),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(text_muted()))
+                                        .child(format!("{} • {}", detail, std_name)),
+                                ),
+                        )
+                        .child(badge(&format!("Loại {}", auto_sc), a_bg, a_col))
+                        .into_any_element();
+                }
+
                 let is_open = expand_all || self.expanded_diseases.contains(&d_code);
                 let sel_id = self.selected_classifications.get(&d_code).cloned();
                 let current_cls = sel_id
                     .as_ref()
-                    .and_then(|cid| classes.iter().find(|(c, _, _)| c == cid))
+                    .and_then(|cid| classes.iter().find(|(c, _, _, _, _)| c == cid))
                     .or_else(|| classes.first());
                 let (cur_cls_code, cur_cls_name, cur_score) = current_cls
-                    .map(|(c, n, s)| (c.clone(), n.clone(), *s))
+                    .map(|(c, n, s, _, _)| (c.clone(), n.clone(), *s))
                     .unwrap_or_else(|| (String::new(), "Mặc định: Bình thường (Loại 1)".into(), 1));
                 let (s_bg, s_col) = Self::score_badge_colors(cur_score);
                 let d_code_toggle = d_code.clone();
@@ -1219,12 +1399,17 @@ impl KskGpuiApp {
                                 .flex()
                                 .flex_col()
                                 .gap(px(4.0))
-                                .children(classes.into_iter().map(|(c_code, c_name, sc)| {
+                                .children(classes.into_iter().map(|(c_code, c_name, sc, ref_rule, is_ref)| {
                                     let checked = c_code == cur_cls_code;
                                     let (c_bg, c_col) = Self::score_badge_colors(sc);
                                     let d_c = d_code.clone();
                                     let c_c = c_code.clone();
                                     let sp_c = spec_own.clone();
+                                    let badge_txt = if is_ref {
+                                        format!("Loại {} *", sc)
+                                    } else {
+                                        format!("Loại {}", sc)
+                                    };
 
                                     div()
                                         .id(SharedString::from(format!("cls-opt-{}-{}", d_code, c_code)))
@@ -1288,15 +1473,30 @@ impl KskGpuiApp {
                                                 .child(
                                                     div()
                                                         .flex_1()
-                                                        .text_xs()
-                                                        .text_color(rgb(text_main()))
-                                                        .child(c_name),
+                                                        .flex()
+                                                        .flex_col()
+                                                        .gap(px(2.0))
+                                                        .child(
+                                                            div()
+                                                                .text_xs()
+                                                                .text_color(rgb(text_main()))
+                                                                .child(c_name),
+                                                        )
+                                                        .when_some(ref_rule, |r_el, rr| {
+                                                            r_el.child(
+                                                                div()
+                                                                    .text_xs()
+                                                                    .text_color(rgb(WARN_COL))
+                                                                    .child(format!("↳ {}", rr)),
+                                                            )
+                                                        }),
                                                 ),
                                         )
-                                        .child(badge(&format!("Loại {}", sc), c_bg, c_col))
+                                        .child(badge(&badge_txt, c_bg, c_col))
                                 })),
                         )
                     })
+                    .into_any_element()
             }))
             .into_any_element()
     }

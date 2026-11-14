@@ -938,6 +938,219 @@ pub fn phan_loai_config() -> &'static PhanLoaiConfig {
     })
 }
 
+pub fn parse_adjust_delta(adjust: &Option<Value>) -> i64 {
+    match adjust {
+        Some(Value::Number(n)) => n.as_i64().unwrap_or(0),
+        Some(Value::String(s)) => {
+            let digits: String = s
+                .chars()
+                .filter(|c| c.is_ascii_digit() || *c == '-' || *c == '+')
+                .collect();
+            digits.parse::<i64>().unwrap_or(0)
+        }
+        _ => 0,
+    }
+}
+
+pub fn parse_first_number(raw: &str) -> Option<f64> {
+    let trimmed = raw.trim().replace(',', ".");
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut num = String::new();
+    let mut started = false;
+    for ch in trimmed.chars() {
+        if ch.is_ascii_digit() || (ch == '.' && started) {
+            num.push(ch);
+            started = true;
+        } else if started {
+            break;
+        }
+    }
+    num.parse::<f64>().ok()
+}
+
+pub fn parse_bp_values(raw: &str) -> Option<(i32, i32)> {
+    let parts: Vec<&str> = raw.split('/').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let sys = parse_first_number(parts[0])? as i32;
+    let dia = parse_first_number(parts[1])? as i32;
+    if sys > 30 && dia > 20 {
+        Some((sys, dia))
+    } else {
+        None
+    }
+}
+
+pub fn calc_patient_age(ngay_sinh: &str) -> Option<i32> {
+    let s = ngay_sinh.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let year: i32 = if s.len() >= 8 && s.chars().take(4).all(|c| c.is_ascii_digit()) {
+        s[0..4].parse().ok()?
+    } else if let Some(last) = s.split('/').last().filter(|p| p.len() == 4) {
+        last.parse().ok()?
+    } else {
+        return None;
+    };
+    let cur_year = chrono::Local::now().format("%Y").to_string().parse::<i32>().ok()?;
+    Some((cur_year - year).max(0))
+}
+
+pub fn auto_classify_vision(
+    r_nokinh: &str,
+    l_nokinh: &str,
+    r_kinh: &str,
+    l_kinh: &str,
+) -> (&'static str, i64) {
+    let r_nk = parse_first_number(r_nokinh).unwrap_or(10.0);
+    let l_nk = parse_first_number(l_nokinh).unwrap_or(10.0);
+    let r_k = parse_first_number(r_kinh).filter(|&v| v > 0.0);
+    let l_k = parse_first_number(l_kinh).filter(|&v| v > 0.0);
+    let best_r = r_k.unwrap_or(r_nk);
+    let best_l = l_k.unwrap_or(l_nk);
+    let total = best_r + best_l;
+    let min_eye = best_r.min(best_l);
+
+    if total >= 19.0 && min_eye >= 9.0 {
+        ("CT_TL_01", 1)
+    } else if total >= 16.0 && min_eye >= 6.0 {
+        ("CT_TL_02", 2)
+    } else if total >= 14.0 && min_eye >= 5.0 {
+        ("CT_TL_03", 3)
+    } else if total >= 11.0 && min_eye >= 3.0 {
+        ("CT_TL_04", 4)
+    } else {
+        ("CT_TL_05", 5)
+    }
+}
+
+pub fn auto_classify_hearing(
+    r_norm: &str,
+    r_whisp: &str,
+    l_norm: &str,
+    l_whisp: &str,
+) -> (&'static str, i64) {
+    let rn = parse_first_number(r_norm).unwrap_or(5.0);
+    let ln = parse_first_number(l_norm).unwrap_or(5.0);
+    let rw = parse_first_number(r_whisp).unwrap_or(0.5);
+    let lw = parse_first_number(l_whisp).unwrap_or(0.5);
+    let min_norm = rn.min(ln);
+    let min_whisp = rw.min(lw);
+
+    if min_norm >= 5.0 && min_whisp >= 0.5 {
+        ("CT_TT_01", 1)
+    } else if min_norm >= 4.0 {
+        ("CT_TT_02", 2)
+    } else if min_norm >= 2.5 {
+        ("CT_TT_03", 3)
+    } else if min_norm >= 1.0 {
+        ("CT_TT_04", 4)
+    } else {
+        ("CT_TT_05", 5)
+    }
+}
+
+pub fn auto_classify_bp(bp_str: &str, age: Option<i32>) -> (&'static str, i64) {
+    let Some((sys, dia)) = parse_bp_values(bp_str) else {
+        return ("CT_HA_01", 1);
+    };
+    let is_30_plus = age.unwrap_or(25) >= 30;
+    if !is_30_plus {
+        if sys > 140 || dia > 95 {
+            ("CT_HA_04", 4)
+        } else if sys < 100 || dia < 60 {
+            ("CT_HA_05", 4)
+        } else if sys >= 136 || dia >= 90 {
+            ("CT_HA_03", 3)
+        } else if sys >= 126 || dia > 85 {
+            ("CT_HA_02", 2)
+        } else {
+            ("CT_HA_01", 1)
+        }
+    } else if sys > 150 || dia >= 96 {
+        ("CT_HA_08", 4)
+    } else if sys >= 140 || dia >= 90 {
+        ("CT_HA_07", 3)
+    } else {
+        ("CT_HA_06", 1)
+    }
+}
+
+pub fn auto_classify_pulse(mach_str: &str) -> (&'static str, i64) {
+    let Some(bpm) = parse_first_number(mach_str) else {
+        return ("CT_MC_01", 1);
+    };
+    let b = bpm as i32;
+    if (60..=75).contains(&b) {
+        ("CT_MC_01", 1)
+    } else if (76..=85).contains(&b) {
+        ("CT_MC_02", 2)
+    } else if (86..=95).contains(&b) || (55..=59).contains(&b) {
+        ("CT_MC_03", 3)
+    } else {
+        ("CT_MC_04", 4)
+    }
+}
+
+pub fn auto_classify_bmi(bmi_str: &str, height_str: &str, weight_str: &str) -> (&'static str, i64) {
+    let bmi = parse_first_number(bmi_str).or_else(|| {
+        let h = parse_first_number(height_str)?;
+        let w = parse_first_number(weight_str)?;
+        if h > 30.0 && w > 2.0 {
+            let hm = h / 100.0;
+            Some(w / (hm * hm))
+        } else {
+            None
+        }
+    });
+    let Some(val) = bmi else {
+        return ("CT_BP_01", 1);
+    };
+    if val >= 28.0 {
+        ("CT_BP_04", 4)
+    } else if val >= 26.0 {
+        ("CT_BP_03", 3)
+    } else if val >= 25.0 {
+        ("CT_BP_02", 2)
+    } else {
+        ("CT_BP_01", 1)
+    }
+}
+
+pub fn resolve_classification_score(
+    cls_id: &str,
+    selected: &std::collections::HashMap<String, String>,
+    auto_scores: &std::collections::HashMap<String, (String, i64)>,
+    depth: u8,
+) -> i64 {
+    if depth > 5 {
+        return 1;
+    }
+    let cfg = phan_loai_config();
+    let Some(c) = cfg.classifications.iter().find(|x| x.id == cls_id) else {
+        return 1;
+    };
+    if let Some(sc) = c.score {
+        return sc;
+    }
+    if let Some(ref ref_did) = c.ref_disease_id {
+        let base = if let Some((_, sc)) = auto_scores.get(ref_did.as_str()) {
+            *sc
+        } else if let Some(ref_cls_id) = selected.get(ref_did.as_str()) {
+            resolve_classification_score(ref_cls_id, selected, auto_scores, depth + 1)
+        } else {
+            1
+        };
+        let delta = parse_adjust_delta(&c.adjust);
+        return (base + delta).clamp(1, 6);
+    }
+    1
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -948,5 +1161,27 @@ mod tests {
         assert!(!cfg.specialties.is_empty());
         assert!(!cfg.diseases.is_empty());
         assert!(!cfg.classifications.is_empty());
+    }
+
+    #[test]
+    fn test_auto_classification_and_ref_rules() {
+        assert_eq!(auto_classify_vision("10/10", "10/10", "", ""), ("CT_TL_01", 1));
+        assert_eq!(auto_classify_vision("8/10", "8/10", "", ""), ("CT_TL_02", 2));
+        assert_eq!(auto_classify_bp("145/95", Some(25)), ("CT_HA_04", 4));
+        assert_eq!(auto_classify_bp("120/80", Some(25)), ("CT_HA_01", 1));
+        assert_eq!(auto_classify_pulse("100"), ("CT_MC_04", 4));
+        assert_eq!(auto_classify_hearing("5m", "0.5m", "5m", "0.5m"), ("CT_TT_01", 1));
+        assert_eq!(auto_classify_bmi("26.5", "", ""), ("CT_BP_03", 3));
+
+        let mut selected = std::collections::HashMap::new();
+        let mut auto_scores = std::collections::HashMap::new();
+        auto_scores.insert("BT_MAT_THI_LUC".to_string(), ("CT_TL_02".to_string(), 2));
+        // CT_SGM_02: "Theo thị lực chuẩn hạ 1 loại", adjust: "+1 loại" => 2 + 1 = 3
+        assert_eq!(resolve_classification_score("CT_SGM_02", &selected, &auto_scores, 0), 3);
+        // CT_MT_02: "Theo thị lực chuẩn 2 mắt", adjust: 0 => 2
+        assert_eq!(resolve_classification_score("CT_MT_02", &selected, &auto_scores, 0), 2);
+        selected.insert("BT_RHM_MAT_RANG".to_string(), "CT_MR_02".to_string());
+        let mr_score = resolve_classification_score("CT_MR_02", &selected, &auto_scores, 0);
+        assert_eq!(resolve_classification_score("CT_VQR_05", &selected, &auto_scores, 0), mr_score);
     }
 }
