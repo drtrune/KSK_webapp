@@ -397,9 +397,19 @@ impl KskGpuiApp {
                                 .flex()
                                 .flex_row()
                                 .justify_end()
+                                .gap(px(8.0))
+                                .child(
+                                    Button::new("btn-print-reception-html")
+                                        .label("In Phiếu Tiếp Nhận (A4)")
+                                        .small()
+                                        .primary()
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.print_record_html(true, cx);
+                                        })),
+                                )
                                 .child(
                                     Button::new("btn-print-reception-docx")
-                                        .label("In Phiếu Tiếp Nhận (DOCX)")
+                                        .label("Xuất DOCX")
                                         .small()
                                         .secondary()
                                         .on_click(cx.listener(|this, _, _, cx| {
@@ -1966,8 +1976,17 @@ impl KskGpuiApp {
                     )
                     .when(self.selected_record_id.is_some(), |el| {
                         el.child(
+                            Button::new("btn-print-full-html")
+                                .label("In Giấy KSK (A4)")
+                                .small()
+                                .primary()
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.print_record_html(false, cx);
+                                })),
+                        )
+                        .child(
                             Button::new("btn-export-docx")
-                                .label("Xuất Giấy KSK (DOCX)")
+                                .label("Xuất DOCX")
                                 .small()
                                 .secondary()
                                 .on_click(cx.listener(|this, _, _, cx| {

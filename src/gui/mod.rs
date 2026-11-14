@@ -26,7 +26,8 @@ use crate::{
     config::AppConfig,
     db,
     handlers::{
-        AppState, generate_csv_bytes, generate_docx_bytes, query_filtered_records,
+        AppState, generate_csv_bytes, generate_docx_bytes, generate_print_html,
+        query_filtered_records,
     },
     models::{
         CatalogItem, Company, ExamContractSummary, GroupImportRow, KskRecordRow, UpdateManifest,
@@ -1172,6 +1173,37 @@ impl KskGpuiApp {
                 );
             }
             Err(e) => self.show_toast(&format!("Lỗi cập nhật trạng thái: {}", e), true, cx),
+        }
+    }
+
+    pub fn print_record_html(&mut self, is_reception: bool, cx: &mut Context<Self>) {
+        let Some(rid) = self.selected_record_id else {
+            return;
+        };
+        let state = self.state.clone();
+        let cfg = self.cfg.clone();
+        let mk = self.master_key;
+        let res = self.run_sync(async move {
+            let pool = state.db.read().await;
+            generate_print_html(&pool, &cfg, rid, is_reception, mk.as_ref()).await
+        });
+        match res {
+            Ok((filename, html)) => {
+                let path = std::env::temp_dir().join(filename);
+                if let Err(e) = std::fs::write(&path, html.as_bytes()) {
+                    self.show_toast(&format!("Lỗi tạo file in: {}", e), true, cx);
+                    return;
+                }
+                let path_str = path.to_string_lossy().to_string();
+                match std::process::Command::new("cmd")
+                    .args(["/C", "start", "", &path_str])
+                    .spawn()
+                {
+                    Ok(_) => self.show_toast("Đã mở giao diện in A4!", false, cx),
+                    Err(e) => self.show_toast(&format!("Không mở được trình duyệt in: {}", e), true, cx),
+                }
+            }
+            Err(e) => self.show_toast(&format!("Lỗi tạo mẫu in: {}", e), true, cx),
         }
     }
 

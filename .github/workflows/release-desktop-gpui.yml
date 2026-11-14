@@ -1,0 +1,90 @@
+name: Release Desktop GPUI
+
+on:
+  push:
+    branches:
+      - desktop-gpui
+    tags:
+      - 'desktop-gpui-v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag release tùy chọn (để trống sẽ tự sinh desktop-gpui-v<run_number>)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-release:
+    name: Build Windows Release (desktop-gpui)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry & target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-desktop-gpui-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-gpui-
+
+      - name: Run unit tests
+        run: cargo test --message-format=short
+
+      - name: Build Release binary
+        run: cargo build --release --verbose
+
+      - name: Prepare release package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item target/release/ksk_webapp.exe dist/ksk_webapp.exe
+          Compress-Archive -Path dist/ksk_webapp.exe -DestinationPath dist/KSK_Desktop_GPUI-windows-x64.zip -Force
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KSK_Desktop_GPUI-windows
+          path: |
+            dist/ksk_webapp.exe
+            dist/KSK_Desktop_GPUI-windows-x64.zip
+
+      - name: Determine Release Tag
+        id: tag
+        shell: pwsh
+        run: |
+          if ("${{ github.event.inputs.release_tag }}" -ne "") {
+            $t = "${{ github.event.inputs.release_tag }}"
+          } elseif ("${{ github.ref }}".StartsWith("refs/tags/")) {
+            $t = "${{ github.ref_name }}"
+          } else {
+            $t = "desktop-gpui-v1.1.${{ github.run_number }}"
+          }
+          echo "tag_name=$t" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag_name }}
+          target_commitish: ${{ github.sha }}
+          name: "KSK Desktop GPUI (${{ steps.tag.outputs.tag_name }})"
+          generate_release_notes: true
+          files: |
+            dist/ksk_webapp.exe
+            dist/KSK_Desktop_GPUI-windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
