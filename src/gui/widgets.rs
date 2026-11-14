@@ -288,8 +288,7 @@ impl KskGpuiApp {
         on_select: impl Fn(&mut Self, String, &mut Window, &mut Context<Self>) + 'static,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let non_empty_count = options.iter().filter(|(v, _)| !v.is_empty()).count();
-        if non_empty_count > 0 && non_empty_count < 4 {
+        if !options.is_empty() && options.len() < 4 {
             let on_select_rc = std::rc::Rc::new(on_select);
             let id_owned = dropdown_id.to_string();
             return div()
@@ -894,7 +893,7 @@ impl KskGpuiApp {
             inp,
             editable,
             required,
-            DateStoreFmt::Compact(include_hhmm),
+            DateStoreFmt::DmySlash,
             move |this, formatted, window, cx| {
                 this.form_values.insert(fk_owned.clone(), formatted.clone());
                 inp_for_cb.update(cx, |s, cx| s.set_value(formatted, window, cx));
@@ -919,7 +918,7 @@ impl KskGpuiApp {
             inp,
             true,
             false,
-            DateStoreFmt::IsoDash,
+            DateStoreFmt::DmySlash,
             move |_this, formatted, window, cx| {
                 inp_for_cb.update(cx, |s, cx| s.set_value(formatted, window, cx));
             },
@@ -952,7 +951,7 @@ impl KskGpuiApp {
             .flex()
             .flex_col()
             .gap(px(4.0))
-            .min_w(px(150.0))
+            .min_w(px(105.0))
             .flex_1()
             .when(!label.is_empty(), |el| {
                 el.child(field_label(label.to_string(), required))
@@ -1203,8 +1202,7 @@ impl KskGpuiApp {
 
 #[derive(Clone, Copy)]
 enum DateStoreFmt {
-    IsoDash,
-    Compact(bool),
+    DmySlash,
 }
 
 fn days_in_ym(y: i32, m: u32) -> u32 {
@@ -1231,19 +1229,9 @@ fn parse_any_date(raw: &str) -> Option<NaiveDate> {
     None
 }
 
-fn format_picked_date(d: NaiveDate, fmt: DateStoreFmt, existing: &str) -> String {
+fn format_picked_date(d: NaiveDate, fmt: DateStoreFmt, _existing: &str) -> String {
     match fmt {
-        DateStoreFmt::IsoDash => d.format("%Y-%m-%d").to_string(),
-        DateStoreFmt::Compact(false) => d.format("%Y%m%d").to_string(),
-        DateStoreFmt::Compact(true) => {
-            let ex = existing.trim();
-            let hhmm = if ex.len() >= 12 && ex[8..12].chars().all(|c| c.is_ascii_digit()) {
-                ex[8..12].to_string()
-            } else {
-                chrono::Local::now().format("%H%M").to_string()
-            };
-            format!("{}{}", d.format("%Y%m%d"), hhmm)
-        }
+        DateStoreFmt::DmySlash => d.format("%d/%m/%Y").to_string(),
     }
 }
 

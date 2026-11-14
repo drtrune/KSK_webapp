@@ -80,7 +80,7 @@ impl KskGpuiApp {
                             .gap(px(10.0))
                             .child(
                                 div()
-                                    .w(px(170.0))
+                                    .w(px(140.0))
                                     .child(self.render_date_picker_entity(
                                         "exp-from",
                                         "Từ ngày",
@@ -90,7 +90,7 @@ impl KskGpuiApp {
                             )
                             .child(
                                 div()
-                                    .w(px(170.0))
+                                    .w(px(140.0))
                                     .child(self.render_date_picker_entity(
                                         "exp-to",
                                         "Đến ngày",

@@ -261,7 +261,7 @@ impl KskGpuiApp {
                             .child(self.render_form_input("HO_TEN", "Họ và tên", "NGUYỄN VĂN A", true, editable, window, cx))
                             .child(self.render_form_input("MA_Y_TE", "Mã bệnh nhân (HIS)", "BN...", true, editable, window, cx))
                             .child(self.render_form_input("MA_TIEP_NHAN", "Số tiếp nhận", "TN...", false, editable, window, cx))
-                            .child(self.render_date_picker_form("rec-ngay-sinh", "NGAY_SINH", "Ngày sinh (YYYYMMDD)", "19900101", true, editable, false, window, cx)),
+                            .child(self.render_date_picker_form("rec-ngay-sinh", "NGAY_SINH", "Ngày sinh (dd/mm/yyyy)", "01/01/1990", true, editable, false, window, cx)),
                     )
                     .child(
                         div()
@@ -281,7 +281,7 @@ impl KskGpuiApp {
                                 cx,
                             ))
                             .child(self.render_form_input("SO_CCCD", "Số CCCD / CMND", "052...", false, editable, window, cx))
-                            .child(self.render_date_picker_form("rec-ngaycap-cccd", "NGAYCAP_CCCD", "Ngày cấp CCCD", "20210501", false, editable, false, window, cx))
+                            .child(self.render_date_picker_form("rec-ngaycap-cccd", "NGAYCAP_CCCD", "Ngày cấp CCCD (dd/mm/yyyy)", "01/05/2021", false, editable, false, window, cx))
                             .child(self.render_form_input("NOICAP_CCCD", "Nơi cấp CCCD", "Cục CSQLHC...", false, editable, window, cx)),
                     )
                     .child(
@@ -364,7 +364,7 @@ impl KskGpuiApp {
                                 },
                                 cx,
                             ))
-                            .child(self.render_date_picker_form("rec-ngay-vao", "NGAY_VAO", "Ngày vào khám (YYYYMMDDHHMM)", "", false, editable, true, window, cx))
+                            .child(self.render_date_picker_form("rec-ngay-vao", "NGAY_VAO", "Ngày vào khám (dd/mm/yyyy)", "dd/mm/yyyy", false, editable, false, window, cx))
                             .child(self.render_select_dropdown(
                                 "rec-nhom-mau",
                                 "Nhóm máu",

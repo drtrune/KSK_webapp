@@ -178,7 +178,7 @@ impl KskGpuiApp {
                                     .secondary()
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         let today =
-                                            chrono::Local::now().format("%Y-%m-%d").to_string();
+                                            chrono::Local::now().format("%d/%m/%Y").to_string();
                                         this.sidebar_from_date.update(cx, |s, cx| {
                                             s.set_value(today.clone(), window, cx);
                                         });

@@ -165,7 +165,7 @@ pub struct KskGpuiApp {
 
 impl KskGpuiApp {
     pub fn new(launch_ctx: AppLaunchCtx, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let today = chrono::Local::now().format("%d/%m/%Y").to_string();
         let cfg = launch_ctx.initial_cfg.clone();
 
         let login_username = cx.new(|cx| {
@@ -216,12 +216,12 @@ impl KskGpuiApp {
         });
         let sidebar_from_date = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("YYYY-MM-DD")
+                .placeholder("dd/mm/yyyy")
                 .default_value(today.clone())
         });
         let sidebar_to_date = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("YYYY-MM-DD")
+                .placeholder("dd/mm/yyyy")
                 .default_value(today.clone())
         });
 
@@ -239,12 +239,12 @@ impl KskGpuiApp {
 
         let exp_from_date = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("YYYY-MM-DD")
+                .placeholder("dd/mm/yyyy")
                 .default_value(today.clone())
         });
         let exp_to_date = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("YYYY-MM-DD")
+                .placeholder("dd/mm/yyyy")
                 .default_value(today)
         });
         let exp_q = cx.new(|cx| InputState::new(window, cx).placeholder("Tên / Mã BN / CCCD"));
