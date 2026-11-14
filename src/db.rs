@@ -1,4 +1,6 @@
-use crate::models::DbInfo;
+use crate::config::AppConfig;
+use crate::models::{DbInfo, HisPushRequest};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
@@ -6,6 +8,7 @@ use sqlx::{
 };
 use std::fs;
 use std::str::FromStr;
+use std::time::Duration;
 
 const SEED_CATALOGS_TSV: &str = include_str!("../asset/seed_catalogs.tsv");
 
@@ -16,14 +19,23 @@ pub fn hash_password(password: &str) -> String {
 }
 
 pub async fn init_db(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
+    if let Some(parent) = std::path::Path::new(db_path).parent() {
+        if !parent.as_os_str().is_empty() {
+            let _ = fs::create_dir_all(parent);
+        }
+    }
+
     let conn_str = format!("sqlite:{}", db_path);
+    // Dùng JournalMode::Delete + Synchronous::Full + busy_timeout(15s) để an toàn khi nhiều máy trạm
+    // cùng truy cập file SQLite trên ổ đĩa mạng chung (LAN / SMB) mà không bị lỗi -shm locking.
     let options = SqliteConnectOptions::from_str(&conn_str)?
         .create_if_missing(true)
-        .journal_mode(SqliteJournalMode::Wal)
-        .synchronous(SqliteSynchronous::Normal);
+        .journal_mode(SqliteJournalMode::Delete)
+        .synchronous(SqliteSynchronous::Full)
+        .busy_timeout(Duration::from_secs(15));
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(10)
+        .max_connections(3)
         .connect_with(options)
         .await?;
 
@@ -154,8 +166,14 @@ pub async fn init_db(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
     .execute(&pool)
     .await;
 
-    // Seed danh mục chuẩn từ SEED_CATALOGS_TSV nếu bảng catalogs đang trống
-    seed_catalogs_from_asset(&pool).await?;
+    // Seed danh mục chuẩn từ SEED_CATALOGS_TSV CHỈ KHI bảng catalogs đang trống (tránh ghi đè/lock DB trên ổ đĩa chung)
+    let (cat_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM catalogs")
+        .fetch_one(&pool)
+        .await
+        .unwrap_or((0,));
+    if cat_count == 0 {
+        seed_catalogs_from_asset(&pool).await?;
+    }
 
     Ok(pool)
 }
@@ -274,4 +292,248 @@ pub async fn get_db_info(pool: &SqlitePool, current_db_path: &str) -> DbInfo {
         catalogs_count,
         available_db_files,
     }
+}
+
+fn normalize_vi_match(s: &str) -> String {
+    s.trim()
+        .to_lowercase()
+        .replace("tỉnh ", "")
+        .replace("thành phố ", "")
+        .replace("tp. ", "")
+        .replace("tp ", "")
+        .replace("phường ", "")
+        .replace("xã ", "")
+        .replace("thị trấn ", "")
+        .trim()
+        .to_string()
+}
+
+async fn find_catalog_code_by_name(
+    pool: &SqlitePool,
+    cat_type: &str,
+    name_query: &str,
+    parent_code: Option<&str>,
+) -> Option<String> {
+    let q = name_query.trim();
+    if q.is_empty() {
+        return None;
+    }
+
+    let rows: Vec<(String, String)> = if let Some(pc) = parent_code {
+        sqlx::query_as(
+            "SELECT code, name FROM catalogs WHERE cat_type = ? AND parent_code = ? AND is_active = 1",
+        )
+        .bind(cat_type)
+        .bind(pc)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
+    } else {
+        sqlx::query_as("SELECT code, name FROM catalogs WHERE cat_type = ? AND is_active = 1")
+            .bind(cat_type)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+    };
+
+    let q_lower = q.to_lowercase();
+    for (code, name) in &rows {
+        if name.trim().to_lowercase() == q_lower {
+            return Some(code.clone());
+        }
+    }
+
+    let q_norm = normalize_vi_match(q);
+    for (code, name) in &rows {
+        if normalize_vi_match(name) == q_norm {
+            return Some(code.clone());
+        }
+    }
+
+    for (code, name) in &rows {
+        let n_norm = normalize_vi_match(name);
+        if !q_norm.is_empty() && (n_norm.contains(&q_norm) || q_norm.contains(&n_norm)) {
+            return Some(code.clone());
+        }
+    }
+
+    None
+}
+
+/// Upsert thông tin hành chính từ HIS (hoặc AutoHotkey v2 UIA Bridge) vào bảng ksk_records
+pub async fn upsert_patient_from_his(
+    pool: &SqlitePool,
+    cfg: &AppConfig,
+    req: &HisPushRequest,
+) -> Result<(i64, Value), String> {
+    let ma_tn = req.ma_tiep_nhan.trim().to_string();
+    if ma_tn.is_empty() {
+        return Err("Thiếu mã tiếp nhận (ma_tiep_nhan)".to_string());
+    }
+
+    // Kiểm tra hồ sơ đã tồn tại chưa để giữ nguyên dữ liệu khám lâm sàng/CLS nếu có
+    let existing: Option<(i64, String, i64)> = sqlx::query_as(
+        "SELECT id, payload_json, status FROM ksk_records WHERE ma_tiep_nhan = ?",
+    )
+    .bind(&ma_tn)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut payload_map: Map<String, Value> = if let Some((_, ref raw_json, _)) = existing {
+        serde_json::from_str(raw_json).unwrap_or_default()
+    } else {
+        Map::new()
+    };
+
+    // Chuẩn hóa ngày vào (dd/MM/yyyy)
+    let ngay_vao = if !req.ngay_vao.trim().is_empty() {
+        req.ngay_vao.trim().chars().take(10).collect::<String>()
+    } else {
+        chrono::Local::now().format("%d/%m/%Y").to_string()
+    };
+
+    // Chuẩn hóa giới tính ("1" Nam, "2" Nữ)
+    let gioi_tinh = match req.gioi_tinh.trim().to_lowercase().as_str() {
+        "2" | "nữ" | "nu" | "female" | "f" => "2".to_string(),
+        _ => "1".to_string(),
+    };
+
+    // Resolve Dân tộc, Nghề nghiệp, Tỉnh/TP, Xã/Phường từ catalogs
+    let ma_dan_toc = find_catalog_code_by_name(pool, "DAN_TOC", &req.ten_dan_toc, None)
+        .await
+        .unwrap_or_else(|| "01".to_string());
+
+    let ma_nghe_nghiep = find_catalog_code_by_name(pool, "NGHE_NGHIEP", &req.ten_nghe_nghiep, None)
+        .await
+        .unwrap_or_else(|| "00".to_string());
+
+    let mut ma_tinh = "11221".to_string(); // Mặc định Gia Lai
+    let mut ma_xa = String::new();
+    let xp_tinh = req.ten_xa_phuong_tinh.trim();
+    if !xp_tinh.is_empty() {
+        let parts: Vec<&str> = xp_tinh.split(',').map(|s| s.trim()).collect();
+        if parts.len() >= 2 {
+            let xa_part = parts[0];
+            let tinh_part = parts[parts.len() - 1];
+            if let Some(t_code) = find_catalog_code_by_name(pool, "TINH_TP", tinh_part, None).await
+            {
+                ma_tinh = t_code;
+            }
+            if let Some(x_code) =
+                find_catalog_code_by_name(pool, "XA_PHUONG", xa_part, Some(&ma_tinh)).await
+            {
+                ma_xa = x_code;
+            } else if let Some(x_code) =
+                find_catalog_code_by_name(pool, "XA_PHUONG", xa_part, None).await
+            {
+                ma_xa = x_code;
+            }
+        } else if let Some(x_code) =
+            find_catalog_code_by_name(pool, "XA_PHUONG", xp_tinh, Some(&ma_tinh)).await
+        {
+            ma_xa = x_code;
+        }
+    }
+
+    let dia_chi = if !req.dia_chi.trim().is_empty() {
+        req.dia_chi.trim().to_string()
+    } else if !req.so_nha.trim().is_empty() && !xp_tinh.is_empty() {
+        format!("{}, {}", req.so_nha.trim(), xp_tinh)
+    } else {
+        req.so_nha.trim().to_string()
+    };
+
+    let noicap_cccd = if !req.noicap_cccd.trim().is_empty() {
+        req.noicap_cccd.trim().to_string()
+    } else {
+        "Cục Cảnh sát QLHCVTTXH".to_string()
+    };
+
+    let ngaycap_cccd = req.ngaycap_cccd.trim().chars().take(10).collect::<String>();
+
+    let ho_ten = req.ho_ten.trim().to_uppercase();
+    let ma_y_te = req.ma_y_te.trim().to_string();
+    let ngay_sinh = req.ngay_sinh.trim().chars().take(10).collect::<String>();
+    let so_cccd = req.so_cccd.trim().to_string();
+
+    // Cập nhật các trường hành chính vào payload_map
+    payload_map.insert("MA_TIEP_NHAN".to_string(), json!(ma_tn));
+    payload_map.insert("MA_LK".to_string(), json!(ma_tn));
+    payload_map.insert("MA_Y_TE".to_string(), json!(ma_y_te));
+    payload_map.insert("HO_TEN".to_string(), json!(ho_ten));
+    payload_map.insert("GIOI_TINH".to_string(), json!(gioi_tinh));
+    payload_map.insert("NGAY_SINH".to_string(), json!(ngay_sinh));
+    payload_map.insert("MA_DAN_TOC".to_string(), json!(ma_dan_toc));
+    payload_map.insert("SO_CCCD".to_string(), json!(so_cccd));
+    payload_map.insert("NGAYCAP_CCCD".to_string(), json!(ngaycap_cccd));
+    payload_map.insert("NOICAP_CCCD".to_string(), json!(noicap_cccd));
+    payload_map.insert("DIA_CHI".to_string(), json!(dia_chi));
+    payload_map.insert("MATINH_CU_TRU".to_string(), json!(ma_tinh));
+    if !ma_xa.is_empty() {
+        payload_map.insert("MAXA_CU_TRU".to_string(), json!(ma_xa));
+    }
+    payload_map.insert("MA_NGHE_NGHIEP".to_string(), json!(ma_nghe_nghiep));
+    payload_map.insert("DIEN_THOAI".to_string(), json!(req.so_dien_thoai.trim()));
+    payload_map.insert("NGAY_VAO".to_string(), json!(ngay_vao));
+    payload_map.insert("MA_CSKCB".to_string(), json!(cfg.ma_cskcb));
+    payload_map.insert("MA_GTIN_CSKCB".to_string(), json!(cfg.ma_gtin_cskcb));
+    if !req.ly_do_vv.trim().is_empty() {
+        payload_map.insert("LY_DO_VV".to_string(), json!(req.ly_do_vv.trim()));
+    }
+    if !req.tien_su_benh_raw.trim().is_empty() {
+        payload_map.insert("HIS_TIEN_SU_RAW".to_string(), json!(req.tien_su_benh_raw.trim()));
+    }
+    payload_map
+        .entry("DOI_TUONG".to_string())
+        .or_insert_with(|| json!("13"));
+    payload_map
+        .entry("NGUON_CHI_TRA".to_string())
+        .or_insert_with(|| json!("9"));
+    payload_map
+        .entry("MA_LOAI_KCB".to_string())
+        .or_insert_with(|| json!("01"));
+
+    let payload_val = Value::Object(payload_map);
+    let payload_str = serde_json::to_string(&payload_val).map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO ksk_records (
+            ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao,
+            status, payload_json, updated_by, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'his_bridge', datetime('now', 'localtime'))
+        ON CONFLICT(ma_tiep_nhan) DO UPDATE SET
+            ma_y_te = excluded.ma_y_te,
+            ho_ten = excluded.ho_ten,
+            gioi_tinh = excluded.gioi_tinh,
+            ngay_sinh = excluded.ngay_sinh,
+            so_cccd = excluded.so_cccd,
+            ngay_vao = excluded.ngay_vao,
+            payload_json = excluded.payload_json,
+            updated_by = 'his_bridge',
+            updated_at = datetime('now', 'localtime')
+        "#,
+    )
+    .bind(&ma_tn)
+    .bind(&ma_y_te)
+    .bind(&ho_ten)
+    .bind(&gioi_tinh)
+    .bind(&ngay_sinh)
+    .bind(&so_cccd)
+    .bind(&ngay_vao)
+    .bind(&payload_str)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let (id,): (i64,) =
+        sqlx::query_as("SELECT id FROM ksk_records WHERE ma_tiep_nhan = ?")
+            .bind(&ma_tn)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+    Ok((id, payload_val))
 }

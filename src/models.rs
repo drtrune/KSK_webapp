@@ -523,7 +523,7 @@ pub fn merge_payload_by_roles(
 // BẢNG USERS & AUTHENTICATION
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: i64,
     pub username: String,
@@ -747,7 +747,7 @@ pub struct CsvExportFilterQuery {
 // BẢNG CATALOGS
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct CatalogItem {
     pub id: i64,
     pub cat_type: String,
@@ -811,7 +811,7 @@ pub struct SwitchDbRequest {
     pub create_if_missing: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DbInfo {
     pub current_db_path: String,
     pub file_size_bytes: u64,
@@ -819,4 +819,113 @@ pub struct DbInfo {
     pub users_count: i64,
     pub catalogs_count: i64,
     pub available_db_files: Vec<String>,
+}
+
+// ============================================================================
+// HIS AHK V2 UIA BRIDGE PAYLOAD
+// ============================================================================
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HisPushRequest {
+    #[serde(default, alias = "ma_tn", alias = "MA_TIEP_NHAN")]
+    pub ma_tiep_nhan: String,
+    #[serde(default, alias = "MA_Y_TE")]
+    pub ma_y_te: String,
+    #[serde(default, alias = "HO_TEN")]
+    pub ho_ten: String,
+    #[serde(default, alias = "GIOI_TINH")]
+    pub gioi_tinh: String,
+    #[serde(default, alias = "NGAY_SINH")]
+    pub ngay_sinh: String,
+    #[serde(default, alias = "SO_CCCD")]
+    pub so_cccd: String,
+    #[serde(default, alias = "NGAYCAP_CCCD")]
+    pub ngaycap_cccd: String,
+    #[serde(default, alias = "NOICAP_CCCD")]
+    pub noicap_cccd: String,
+    #[serde(default, alias = "DIEN_THOAI", alias = "dien_thoai")]
+    pub so_dien_thoai: String,
+    #[serde(default, alias = "DIA_CHI")]
+    pub dia_chi: String,
+    #[serde(default)]
+    pub so_nha: String,
+    #[serde(default)]
+    pub ten_dan_toc: String,
+    #[serde(default)]
+    pub ten_nghe_nghiep: String,
+    #[serde(default)]
+    pub ten_xa_phuong_tinh: String,
+    #[serde(default, alias = "NGAY_VAO")]
+    pub ngay_vao: String,
+    #[serde(default, alias = "LY_DO_VV")]
+    pub ly_do_vv: String,
+    #[serde(default)]
+    pub tien_su_benh_raw: String,
+}
+
+// ============================================================================
+// AUTO-UPDATE MANIFEST (SHARED NETWORK DRIVE)
+// ============================================================================
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpdateManifest {
+    pub version: String,
+    #[serde(default = "default_exe_name")]
+    pub exe_name: String,
+    #[serde(default)]
+    pub changelog: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+fn default_exe_name() -> String {
+    "ksk_webapp.exe".to_string()
+}
+
+// ============================================================================
+// BẢNG PHÂN LOẠI SỨC KHỎE (TỪ asset/phan_loai_config.json)
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecialtyDef {
+    pub id: String,
+    pub name: String,
+    pub parent_id: Option<String>,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiseaseDef {
+    pub id: String,
+    pub name: String,
+    pub specialty_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassificationDef {
+    pub id: String,
+    pub disease_id: String,
+    pub name: String,
+    pub score: i64,
+    pub ref_rule: Option<String>,
+    pub ref_disease_id: Option<String>,
+    pub adjust: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhanLoaiConfig {
+    pub specialties: Vec<SpecialtyDef>,
+    pub diseases: Vec<DiseaseDef>,
+    pub classifications: Vec<ClassificationDef>,
+}
+
+pub fn phan_loai_config() -> &'static PhanLoaiConfig {
+    static CONFIG: std::sync::OnceLock<PhanLoaiConfig> = std::sync::OnceLock::new();
+    CONFIG.get_or_init(|| {
+        let raw = include_str!("../asset/phan_loai_config.json");
+        serde_json::from_str(raw).expect("Invalid embedded asset/phan_loai_config.json")
+    })
 }

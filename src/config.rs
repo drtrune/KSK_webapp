@@ -1,11 +1,17 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(default = "default_database_path")]
     pub database_path: String,
+    #[serde(default = "default_update_dir_path")]
+    pub update_dir_path: String,
+    #[serde(default = "default_auto_check_update")]
+    pub auto_check_update: bool,
+    #[serde(default = "default_local_ipc_port")]
+    pub local_ipc_port: u16,
     #[serde(default = "default_server_host")]
     pub server_host: String,
     #[serde(default = "default_server_port")]
@@ -39,11 +45,20 @@ pub struct AppConfig {
 fn default_database_path() -> String {
     "ksk_data.db".to_string()
 }
+fn default_update_dir_path() -> String {
+    "".to_string()
+}
+fn default_auto_check_update() -> bool {
+    true
+}
+fn default_local_ipc_port() -> u16 {
+    18080
+}
 fn default_server_host() -> String {
-    "0.0.0.0".to_string()
+    "127.0.0.1".to_string()
 }
 fn default_server_port() -> u16 {
-    8080
+    18080
 }
 fn default_ma_cskcb() -> String {
     "52208".to_string()
@@ -61,7 +76,7 @@ fn default_his_use_mock() -> bool {
     true
 }
 fn default_his_api_url() -> String {
-    "http://127.0.0.1:8080/api/his/mock".to_string()
+    "http://127.0.0.1:18080/api/his/mock".to_string()
 }
 fn default_his_http_method() -> String {
     "POST".to_string()
@@ -86,6 +101,9 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             database_path: default_database_path(),
+            update_dir_path: default_update_dir_path(),
+            auto_check_update: default_auto_check_update(),
+            local_ipc_port: default_local_ipc_port(),
             server_host: default_server_host(),
             server_port: default_server_port(),
             ma_cskcb: default_ma_cskcb(),
@@ -105,10 +123,27 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    /// Tìm đường dẫn config.toml: ưu tiên thư mục hiện tại, sau đó đến thư mục chứa file .exe
+    pub fn config_file_path() -> PathBuf {
+        let cwd_cfg = Path::new("config.toml");
+        if cwd_cfg.exists() {
+            return cwd_cfg.to_path_buf();
+        }
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                let exe_cfg = exe_dir.join("config.toml");
+                if exe_cfg.exists() {
+                    return exe_cfg;
+                }
+            }
+        }
+        cwd_cfg.to_path_buf()
+    }
+
     pub fn load() -> Self {
-        let config_path = Path::new("config.toml");
+        let config_path = Self::config_file_path();
         if config_path.exists() {
-            match fs::read_to_string(config_path) {
+            match fs::read_to_string(&config_path) {
                 Ok(content) => toml::from_str(&content).unwrap_or_default(),
                 Err(_) => AppConfig::default(),
             }
@@ -120,7 +155,8 @@ impl AppConfig {
     }
 
     pub fn save(&self) -> Result<(), String> {
+        let config_path = Self::config_file_path();
         let toml_str = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
-        fs::write("config.toml", toml_str).map_err(|e| e.to_string())
+        fs::write(config_path, toml_str).map_err(|e| e.to_string())
     }
 }

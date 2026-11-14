@@ -1,5 +1,7 @@
 use crate::config::AppConfig;
-use crate::db::{get_db_info, hash_password, init_db, seed_catalogs_from_asset};
+use crate::db::{
+    get_db_info, hash_password, init_db, seed_catalogs_from_asset, upsert_patient_from_his,
+};
 use crate::models::*;
 use axum::{
     extract::{Path, Query, State},
@@ -31,6 +33,7 @@ pub struct AppState {
     pub db: RwLock<SqlitePool>,
     pub config: RwLock<AppConfig>,
     pub http_client: reqwest::Client,
+    pub his_push_tx: Option<tokio::sync::broadcast::Sender<String>>,
 }
 
 pub type SharedState = Arc<AppState>;
@@ -643,6 +646,57 @@ pub async fn mock_his_api_handler(
     execute_mock_his(req.ma_tiep_nhan.trim())
 }
 
+/// Endpoint nội bộ (127.0.0.1:18080) nhận dữ liệu bệnh nhân từ AutoHotkey v2 UIA Bridge (HIS Bình Định)
+pub async fn push_his_patient_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(req): Json<HisPushRequest>,
+) -> Response {
+    let cfg = state.config.read().await.clone();
+    let provided_key = headers
+        .get("x-api-key")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| {
+            headers
+                .get(header::AUTHORIZATION)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.strip_prefix("Bearer "))
+        })
+        .unwrap_or("");
+
+    if !cfg.his_api_key.is_empty() && provided_key != cfg.his_api_key {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "status": 401,
+                "message": "Invalid API Key"
+            })),
+        )
+            .into_response();
+    }
+
+    let db = state.db.read().await;
+    match upsert_patient_from_his(&*db, &cfg, &req).await {
+        Ok((id, payload_val)) => {
+            if let Some(ref tx) = state.his_push_tx {
+                let _ = tx.send(req.ma_tiep_nhan.trim().to_string());
+            }
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "status": 200,
+                    "message": "Đã tiếp nhận bệnh nhân từ HIS Bridge",
+                    "record_id": id,
+                    "ma_tiep_nhan": req.ma_tiep_nhan.trim(),
+                    "data": payload_val
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => api_error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
 pub async fn test_his_connection_handler(
     State(state): State<SharedState>,
     headers: HeaderMap,
@@ -731,7 +785,7 @@ fn json_val_to_string(v: &Value) -> String {
     }
 }
 
-async fn query_filtered_records(
+pub async fn query_filtered_records(
     db: &SqlitePool,
     from_date: Option<&str>,
     to_date: Option<&str>,
@@ -1344,17 +1398,46 @@ pub async fn export_record_docx_handler(
         Err(resp) => return resp,
     };
 
+    let cfg = state.config.read().await.clone();
+    let is_reception_print = query.mode.as_deref() == Some("reception");
+
+    match generate_docx_bytes(&*db, &cfg, record_id, is_reception_print).await {
+        Ok((filename, docx_bytes)) => (
+            StatusCode::OK,
+            [
+                (
+                    header::CONTENT_TYPE,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        .to_string(),
+                ),
+                (
+                    header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{}\"", filename),
+                ),
+            ],
+            docx_bytes,
+        )
+            .into_response(),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+pub async fn generate_docx_bytes(
+    pool: &SqlitePool,
+    cfg: &AppConfig,
+    record_id: i64,
+    is_reception_print: bool,
+) -> Result<(String, Vec<u8>), String> {
     let row: Option<KskRecordRow> = sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
         .bind(record_id)
-        .fetch_optional(&*db)
+        .fetch_optional(pool)
         .await
         .unwrap_or(None);
 
     let Some(record) = row else {
-        return api_error(StatusCode::NOT_FOUND, "Không tìm thấy hồ sơ KSK");
+        return Err("Không tìm thấy hồ sơ KSK".to_string());
     };
 
-    let cfg = state.config.read().await.clone();
     let payload: Map<String, Value> =
         serde_json::from_str(&record.payload_json).unwrap_or_default();
     let get = |k: &str| -> String {
@@ -1366,16 +1449,14 @@ pub async fn export_record_docx_handler(
             .to_string()
     };
 
-    let is_reception_print = query.mode.as_deref() == Some("reception");
-
-    let dan_toc_name = lookup_catalog_name(&*db, "DAN_TOC", &get("MA_DAN_TOC")).await;
-    let doi_tuong_name = lookup_catalog_name(&*db, "DOI_TUONG", &get("DOI_TUONG")).await;
+    let dan_toc_name = lookup_catalog_name(pool, "DAN_TOC", &get("MA_DAN_TOC")).await;
+    let doi_tuong_name = lookup_catalog_name(pool, "DOI_TUONG", &get("DOI_TUONG")).await;
     let nguon_chi_tra_name =
-        lookup_catalog_name(&*db, "NGUON_CHI_TRA", &get("NGUON_CHI_TRA")).await;
-    let tinh_name = lookup_catalog_name(&*db, "TINH_TP", &get("MATINH_CU_TRU")).await;
-    let xa_name = lookup_catalog_name(&*db, "XA_PHUONG", &get("MAXA_CU_TRU")).await;
+        lookup_catalog_name(pool, "NGUON_CHI_TRA", &get("NGUON_CHI_TRA")).await;
+    let tinh_name = lookup_catalog_name(pool, "TINH_TP", &get("MATINH_CU_TRU")).await;
+    let xa_name = lookup_catalog_name(pool, "XA_PHUONG", &get("MAXA_CU_TRU")).await;
     let nghe_nghiep_name =
-        lookup_catalog_name(&*db, "NGHE_NGHIEP", &get("MA_NGHE_NGHIEP")).await;
+        lookup_catalog_name(pool, "NGHE_NGHIEP", &get("MA_NGHE_NGHIEP")).await;
 
     let ngay_sinh = get("NGAY_SINH");
     let tuoi_str = ngay_sinh
@@ -1721,27 +1802,9 @@ pub async fn export_record_docx_handler(
                 .collect::<String>();
             let prefix = if is_reception_print { "Phieu_TiepNhan" } else { "Phieu_KSK" };
             let filename = format!("{}_{}.docx", prefix, safe_ma_tn);
-            (
-                StatusCode::OK,
-                [
-                    (
-                        header::CONTENT_TYPE,
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                            .to_string(),
-                    ),
-                    (
-                        header::CONTENT_DISPOSITION,
-                        format!("attachment; filename=\"{}\"", filename),
-                    ),
-                ],
-                docx_bytes,
-            )
-                .into_response()
+            Ok((filename, docx_bytes))
         }
-        Err(e) => api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Lỗi tạo file Word từ template18.docx: {}", e),
-        ),
+        Err(e) => Err(format!("Lỗi tạo file Word từ template18.docx: {}", e)),
     }
 }
 
@@ -1878,7 +1941,7 @@ fn extract_map_str(map: &Map<String, Value>, key: &str) -> String {
     map.get(key).map(json_val_to_string).unwrap_or_default()
 }
 
-fn build_cls_summary(map: &Map<String, Value>) -> (String, String, String, String, String, String) {
+pub fn build_cls_summary(map: &Map<String, Value>) -> (String, String, String, String, String, String) {
     let cls_items: [(&str, &str, &str, &str); 10] = [
         ("CLS_HH", "Huyết học", "CLS_HUYET_HOC", ""),
         ("CLS_GLU", "Đường máu", "CLS_DUONG_MAU", "mmol/L"),
@@ -1972,18 +2035,35 @@ pub async fn export_csv_handler(
     )
     .await;
 
+    let output = match generate_csv_bytes(&cfg, rows) {
+        Ok(bytes) => bytes,
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    };
+
+    let filename = format!("KSK_QD3176_{}.csv", Local::now().format("%Y%m%d_%H%M%S"));
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", filename),
+            ),
+        ],
+        output,
+    )
+        .into_response()
+}
+
+pub fn generate_csv_bytes(cfg: &AppConfig, rows: Vec<KskRecordRow>) -> Result<Vec<u8>, String> {
     let mut output: Vec<u8> = vec![0xEF, 0xBB, 0xBF];
     {
         let mut wtr = csv::WriterBuilder::new()
             .has_headers(true)
             .from_writer(&mut output);
 
-        if let Err(e) = wtr.write_record(CSV_EXPORT_COLUMNS) {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Lỗi ghi header CSV: {}", e),
-            );
-        }
+        wtr.write_record(CSV_EXPORT_COLUMNS)
+            .map_err(|e| format!("Lỗi ghi header CSV: {}", e))?;
 
         for row in rows {
             let map: Map<String, Value> =
@@ -2134,30 +2214,14 @@ pub async fn export_csv_handler(
                 })
                 .collect();
 
-            if let Err(e) = wtr.write_record(&record_values) {
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Lỗi ghi dòng CSV: {}", e),
-                );
-            }
+            wtr.write_record(&record_values)
+                .map_err(|e| format!("Lỗi ghi dòng CSV: {}", e))?;
         }
 
         let _ = wtr.flush();
     }
 
-    let filename = format!("KSK_QD3176_{}.csv", Local::now().format("%Y%m%d_%H%M%S"));
-    (
-        StatusCode::OK,
-        [
-            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
-            (
-                header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}\"", filename),
-            ),
-        ],
-        output,
-    )
-        .into_response()
+    Ok(output)
 }
 
 // ============================================================================
