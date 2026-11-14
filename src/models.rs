@@ -487,6 +487,12 @@ pub fn merge_payload_by_roles(
 
     // Chỉ cập nhật các trường thuộc quyền hạn của người dùng (Multi-role), KHÔNG tự tạo dữ liệu giả ở backend
     for (k, v) in incoming {
+        if k == "SELECTED_CLASSIFICATIONS_JSON" {
+            if let Value::String(s) = v {
+                base.insert(k.clone(), Value::String(s.clone()));
+            }
+            continue;
+        }
         if let Some(allowed_fields) = filter_fields {
             if !allowed_fields.contains(&k.as_str()) {
                 continue;

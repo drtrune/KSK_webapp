@@ -619,6 +619,7 @@ impl KskGpuiApp {
                 self.render_simple_specialty_card(
                     "clin_ngoai",
                     "Chuyên khoa Ngoại",
+                    "CK_NGOAI",
                     "KET_QUA_KHAM_NGOAI_KHOA",
                     "KHAM_NGOAI_KHOA_PL",
                     "BS_NGOAI",
@@ -635,6 +636,7 @@ impl KskGpuiApp {
                 self.render_simple_specialty_card(
                     "clin_dalieu",
                     "Chuyên khoa Da liễu",
+                    "CK_DA_LIEU",
                     "KET_QUA_KHAM_DA_LIEU",
                     "KHAM_DA_LIEU_PL",
                     "BS_DA_LIEU",
@@ -651,6 +653,7 @@ impl KskGpuiApp {
                 self.render_simple_specialty_card(
                     "clin_san",
                     "Chuyên khoa Sản phụ khoa",
+                    "CK_PHU_SAN",
                     "KET_QUA_KHAM_SAN_PHU_KHOA",
                     "KHAM_SAN_PHU_KHOA_PL",
                     "BS_SAN",
@@ -677,6 +680,7 @@ impl KskGpuiApp {
                             .child(self.render_form_input("CO_KINH_MAT_PHAI", "Thị lực có kính MP", "10/10", false, edit_mat, window, cx))
                             .child(self.render_form_input("CO_KINH_MAT_TRAI", "Thị lực có kính MT", "10/10", false, edit_mat, window, cx)),
                     )
+                    .child(self.render_specialty_classification_block("CK_MAT", "Chuyên khoa Mắt", edit_mat, window, cx))
                     .child(self.render_form_textarea("BENH_KHAC_MAT", "Kết quả khám & Các bệnh về mắt", "Bình thường / Không có bệnh lý...", 3, edit_mat, window, cx))
                     .child(self.render_pl_radio_group("mat", "KHAM_MAT_PL", "Phân loại Mắt", edit_mat, cx))
                     .child(self.render_form_input("BS_MAT", "Bác sĩ khám Mắt", "", false, edit_mat, window, cx))
@@ -698,6 +702,7 @@ impl KskGpuiApp {
                             .child(self.render_form_input("TAI_TRAI_NOI_THUONG", "Tai trái nói thường (m)", "5m", false, edit_tmh, window, cx))
                             .child(self.render_form_input("TAI_TRAI_NOI_THAM", "Tai trái nói thầm (m)", "0.5m", false, edit_tmh, window, cx)),
                     )
+                    .child(self.render_specialty_classification_block("CK_TMH", "Tai - Mũi - Họng", edit_tmh, window, cx))
                     .child(self.render_form_textarea("BENH_KHAC_TAI_MUI_HONG", "Kết quả khám & Bệnh Tai - Mũi - Họng", "Bình thường...", 3, edit_tmh, window, cx))
                     .child(self.render_pl_radio_group("tmh", "KHAM_TAI_MUI_HONG_PL", "Phân loại TMH", edit_tmh, cx))
                     .child(self.render_form_input("BS_TMH", "Bác sĩ khám TMH", "", false, edit_tmh, window, cx))
@@ -717,6 +722,7 @@ impl KskGpuiApp {
                             .child(self.render_form_textarea("HAM_TREN", "Hàm trên", "Bình thường", 2, edit_rhm, window, cx))
                             .child(self.render_form_textarea("HAM_DUOI", "Hàm dưới", "Bình thường", 2, edit_rhm, window, cx)),
                     )
+                    .child(self.render_specialty_classification_block("CK_RHM", "Răng - Hàm - Mặt", edit_rhm, window, cx))
                     .child(self.render_form_textarea("BENH_KHAC_RANG_HAM_MAT", "Kết quả khám & Bệnh Răng - Hàm - Mặt", "Bình thường...", 3, edit_rhm, window, cx))
                     .child(self.render_pl_radio_group("rhm", "KHAM_RANG_HAM_MAT_PL", "Phân loại RHM", edit_rhm, cx))
                     .child(self.render_form_input("BS_RHM", "Bác sĩ khám RHM", "", false, edit_rhm, window, cx))
@@ -726,39 +732,80 @@ impl KskGpuiApp {
             _ => {
                 let can_noi = self.has_any_role(&["admin", "bs_noi"]);
                 let edit_noi = !is_locked && can_noi && self.editing_section.as_deref() == Some("clin_noi");
-                let noi_fields = [
-                    ("NOI_KHOA_TUAN_HOAN", "NOI_KHOA_TUAN_HOAN_PL", "Tuần hoàn"),
-                    ("NOI_KHOA_HO_HAP", "NOI_KHOA_HO_HAP_PL", "Hô hấp"),
-                    ("NOI_KHOA_TIEU_HOA", "NOI_KHOA_TIEU_HOA_PL", "Tiêu hóa"),
-                    ("NOI_KHOA_THAN_TN_SD", "NOI_KHOA_THAN_TIETNIEU_PL", "Thận - Tiết niệu"),
-                    ("NOI_KHOA_NOI_TIET", "NOI_KHOA_NOI_TIET_PL", "Nội tiết"),
-                    ("NOI_KHOA_CO_XUONG_KHOP", "NOI_KHOA_CO_XUONG_KHOP_PL", "Cơ xương khớp"),
-                    ("NOI_KHOA_THAN_KINH", "NOI_KHOA_THAN_KINH_PL", "Thần kinh"),
-                    ("NOI_KHOA_TAM_THAN", "NOI_KHOA_TAM_THAN_PL", "Tâm thần"),
+                let noi_specs = [
+                    ("CK_NOI_TIM_MACH", "NOI_KHOA_TUAN_HOAN", "NOI_KHOA_TUAN_HOAN_PL", "Tuần hoàn"),
+                    ("CK_NOI_HO_HAP", "NOI_KHOA_HO_HAP", "NOI_KHOA_HO_HAP_PL", "Hô hấp"),
+                    ("CK_NOI_TIEU_HOA", "NOI_KHOA_TIEU_HOA", "NOI_KHOA_TIEU_HOA_PL", "Tiêu hóa"),
+                    ("CK_NOI_TIET_NIEU_SD", "NOI_KHOA_THAN_TN_SD", "NOI_KHOA_THAN_TIETNIEU_PL", "Thận - Tiết niệu"),
+                    ("CK_NOI_NOITIET", "NOI_KHOA_NOI_TIET", "NOI_KHOA_NOI_TIET_PL", "Nội tiết"),
+                    ("CK_NOI_CO_XUONG_KHOP", "NOI_KHOA_CO_XUONG_KHOP", "NOI_KHOA_CO_XUONG_KHOP_PL", "Cơ xương khớp"),
+                    ("CK_NOI_THAN_KINH", "NOI_KHOA_THAN_KINH", "NOI_KHOA_THAN_KINH_PL", "Thần kinh"),
+                    ("CK_NOI_TAM_THAN", "NOI_KHOA_TAM_THAN", "NOI_KHOA_TAM_THAN_PL", "Tâm thần"),
                 ];
-                let mut box_noi = card_box().child(self.render_section_action_bar(
-                    "clin_noi",
-                    "Chuyên khoa Nội & Tâm thần",
-                    can_noi,
-                    is_locked,
-                    cx,
-                ));
-                for (f_kq, f_pl, lbl) in noi_fields {
-                    box_noi = box_noi.child(
-                        div()
-                            .p(px(10.0))
-                            .rounded(px(6.0))
-                            .bg(rgb(BG_SUBTLE))
-                            .border_1()
-                            .border_color(rgb(BORDER_COL))
-                            .flex()
-                            .flex_col()
-                            .gap(px(8.0))
-                            .child(self.render_form_textarea(f_kq, lbl, "Bình thường...", 2, edit_noi, window, cx))
-                            .child(self.render_pl_radio_group(f_pl, f_pl, "Phân loại", edit_noi, cx)),
-                    );
-                }
-                box_noi
+                let active_noi = self.active_noi_subtab.clone();
+                let current_noi = noi_specs
+                    .iter()
+                    .find(|(sp, _, _, _)| *sp == active_noi.as_str())
+                    .copied()
+                    .unwrap_or(noi_specs[0]);
+
+                let noi_subtab_bar = div()
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(px(6.0))
+                    .children(noi_specs.iter().map(|(sp, _, f_pl, lbl)| {
+                        let is_act = current_noi.0 == *sp;
+                        let sp_own = sp.to_string();
+                        let cur_pl = self.get_form_val(f_pl);
+                        let label = if cur_pl.is_empty() || cur_pl == "1" {
+                            lbl.to_string()
+                        } else {
+                            format!("{} (L{})", lbl, cur_pl)
+                        };
+                        Button::new(SharedString::from(format!("noi-sub-{}", sp)))
+                            .label(label)
+                            .small()
+                            .when(is_act, |b| b.primary())
+                            .when(!is_act, |b| b.secondary())
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.active_noi_subtab = sp_own.clone();
+                                cx.notify();
+                            }))
+                    }));
+
+                card_box()
+                    .child(self.render_section_action_bar(
+                        "clin_noi",
+                        "Chuyên khoa Nội & Tâm thần",
+                        can_noi,
+                        is_locked,
+                        cx,
+                    ))
+                    .child(noi_subtab_bar)
+                    .child(self.render_specialty_classification_block(
+                        current_noi.0,
+                        current_noi.3,
+                        edit_noi,
+                        window,
+                        cx,
+                    ))
+                    .child(self.render_form_textarea(
+                        current_noi.1,
+                        &format!("Kết quả {}", current_noi.3),
+                        "Bình thường...",
+                        3,
+                        edit_noi,
+                        window,
+                        cx,
+                    ))
+                    .child(self.render_pl_radio_group(
+                        current_noi.2,
+                        current_noi.2,
+                        &format!("Phân loại {}", current_noi.3),
+                        edit_noi,
+                        cx,
+                    ))
                     .child(self.render_form_input("BS_NOI", "Bác sĩ Nội khoa", "", false, edit_noi, window, cx))
                     .into_any_element()
             }
@@ -778,6 +825,7 @@ impl KskGpuiApp {
         &mut self,
         sec_key: &str,
         title: &str,
+        spec_id: &str,
         f_kq: &str,
         f_pl: &str,
         f_bs: &str,
@@ -789,17 +837,457 @@ impl KskGpuiApp {
     ) -> AnyElement {
         card_box()
             .child(self.render_section_action_bar(sec_key, title, can_role, is_locked, cx))
+            .child(self.render_specialty_classification_block(spec_id, title, editable, window, cx))
             .child(self.render_form_textarea(
                 f_kq,
                 "Kết quả khám chuyên khoa",
                 "Nhập chi tiết kết quả khám...",
-                4,
+                3,
                 editable,
                 window,
                 cx,
             ))
             .child(self.render_pl_radio_group(f_pl, f_pl, "Phân loại sức khỏe chuyên khoa", editable, cx))
             .child(self.render_form_input(f_bs, "Bác sĩ khám", "", false, editable, window, cx))
+            .into_any_element()
+    }
+
+    fn parse_cls_score(name: &str, fallback: Option<i64>) -> i64 {
+        if let Some(sc) = fallback {
+            return sc;
+        }
+        for s in 1..=6 {
+            if name.contains(&format!("Loại {}", s)) || name.contains(&format!("loại {}", s)) {
+                return s;
+            }
+        }
+        1
+    }
+
+    fn score_badge_colors(score: i64) -> (u32, u32) {
+        match score {
+            1 => (SUCCESS_BG, SUCCESS_COL),
+            2 | 3 => (WARN_BG, WARN_COL),
+            _ => (DANGER_BG, DANGER_COL),
+        }
+    }
+
+    fn load_specialty_diseases(&self, spec_id: &str) -> Vec<(String, String, Vec<(String, String, i64)>)> {
+        let db_diseases = self.query_catalog_items("BENH_TAT", Some(spec_id));
+        let db_classes = self.query_catalog_items("TIEU_CHUAN_PL", None);
+
+        if !db_diseases.is_empty() {
+            db_diseases
+                .into_iter()
+                .filter(|d| d.parent_code == spec_id)
+                .map(|d| {
+                    let classes = db_classes
+                        .iter()
+                        .filter(|c| c.parent_code == d.code)
+                        .map(|c| {
+                            let sc = Self::parse_cls_score(&c.name, None);
+                            (c.code.clone(), c.name.clone(), sc)
+                        })
+                        .collect();
+                    (d.code, d.name, classes)
+                })
+                .collect()
+        } else {
+            let cfg = phan_loai_config();
+            cfg.diseases
+                .iter()
+                .filter(|d| d.specialty_id == spec_id)
+                .map(|d| {
+                    let classes = cfg
+                        .classifications
+                        .iter()
+                        .filter(|c| c.disease_id == d.id)
+                        .map(|c| {
+                            let sc = Self::parse_cls_score(&c.name, c.score);
+                            (c.id.clone(), c.name.clone(), sc)
+                        })
+                        .collect();
+                    (d.id.clone(), d.name.clone(), classes)
+                })
+                .collect()
+        }
+    }
+
+    fn sync_specialty_from_classifications(
+        &mut self,
+        spec_id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let diseases = self.load_specialty_diseases(spec_id);
+        let mut max_score: i64 = 1;
+        let mut abn_names: Vec<String> = Vec::new();
+
+        for (d_code, d_name, classes) in &diseases {
+            let sel_id = self.selected_classifications.get(d_code);
+            let sel_cls = sel_id
+                .and_then(|cid| classes.iter().find(|(c, _, _)| c == cid))
+                .or_else(|| classes.first());
+            if let Some((_, c_name, sc)) = sel_cls {
+                if *sc > max_score {
+                    max_score = *sc;
+                }
+                if *sc > 1 {
+                    abn_names.push(format!("{}: {}", d_name, c_name));
+                }
+            }
+        }
+
+        let (f_kq, f_pl) = match spec_id {
+            "CK_NOI_TIM_MACH" => ("NOI_KHOA_TUAN_HOAN", "NOI_KHOA_TUAN_HOAN_PL"),
+            "CK_NOI_HO_HAP" => ("NOI_KHOA_HO_HAP", "NOI_KHOA_HO_HAP_PL"),
+            "CK_NOI_TIEU_HOA" => ("NOI_KHOA_TIEU_HOA", "NOI_KHOA_TIEU_HOA_PL"),
+            "CK_NOI_TIET_NIEU_SD" => ("NOI_KHOA_THAN_TN_SD", "NOI_KHOA_THAN_TIETNIEU_PL"),
+            "CK_NOI_NOITIET" => ("NOI_KHOA_NOI_TIET", "NOI_KHOA_NOI_TIET_PL"),
+            "CK_NOI_CO_XUONG_KHOP" => ("NOI_KHOA_CO_XUONG_KHOP", "NOI_KHOA_CO_XUONG_KHOP_PL"),
+            "CK_NOI_THAN_KINH" => ("NOI_KHOA_THAN_KINH", "NOI_KHOA_THAN_KINH_PL"),
+            "CK_NOI_TAM_THAN" => ("NOI_KHOA_TAM_THAN", "NOI_KHOA_TAM_THAN_PL"),
+            "CK_NGOAI" => ("KET_QUA_KHAM_NGOAI_KHOA", "KHAM_NGOAI_KHOA_PL"),
+            "CK_DA_LIEU" => ("KET_QUA_KHAM_DA_LIEU", "KHAM_DA_LIEU_PL"),
+            "CK_PHU_SAN" => ("KET_QUA_KHAM_SAN_PHU_KHOA", "KHAM_SAN_PHU_KHOA_PL"),
+            "CK_MAT" => ("BENH_KHAC_MAT", "KHAM_MAT_PL"),
+            "CK_TMH" => ("BENH_KHAC_TAI_MUI_HONG", "KHAM_TAI_MUI_HONG_PL"),
+            "CK_RHM" => ("BENH_KHAC_RANG_HAM_MAT", "KHAM_RANG_HAM_MAT_PL"),
+            _ => return,
+        };
+
+        let kq_val = if abn_names.is_empty() {
+            "Bình thường".to_string()
+        } else {
+            abn_names.join("; ")
+        };
+        let pl_val = max_score.to_string();
+
+        self.form_values.insert(f_pl.into(), pl_val);
+        self.form_values.insert(f_kq.into(), kq_val.clone());
+        if let Some(ta) = self.form_textareas.get(f_kq) {
+            ta.update(cx, |s, cx| s.set_value(kq_val.clone(), window, cx));
+        }
+        if let Some(inp) = self.form_inputs.get(f_kq) {
+            inp.update(cx, |s, cx| s.set_value(kq_val, window, cx));
+        }
+        if let Ok(json) = serde_json::to_string(&self.selected_classifications) {
+            self.form_values.insert("SELECTED_CLASSIFICATIONS_JSON".into(), json);
+        }
+    }
+
+    fn render_specialty_classification_block(
+        &mut self,
+        spec_id: &str,
+        spec_title: &str,
+        editable: bool,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let diseases = self.load_specialty_diseases(spec_id);
+        let mut max_score: i64 = 1;
+        let mut abnormal_rows: Vec<(String, String, i64)> = Vec::new();
+
+        for (d_code, d_name, classes) in &diseases {
+            let sel_id = self.selected_classifications.get(d_code);
+            let sel_cls = sel_id
+                .and_then(|cid| classes.iter().find(|(c, _, _)| c == cid))
+                .or_else(|| classes.first());
+            if let Some((_, c_name, sc)) = sel_cls {
+                if *sc > max_score {
+                    max_score = *sc;
+                }
+                if *sc > 1 {
+                    abnormal_rows.push((d_name.clone(), c_name.clone(), *sc));
+                }
+            }
+        }
+
+        let (max_bg, max_col) = Self::score_badge_colors(max_score);
+        let expand_all = self.expand_all_diseases;
+        let spec_own = spec_id.to_string();
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(10.0))
+            .child(
+                // Header + Kết luận tự động chuyên khoa
+                div()
+                    .p(px(12.0))
+                    .rounded(px(8.0))
+                    .bg(rgb(BG_SUBTLE))
+                    .border_1()
+                    .border_color(rgb(BORDER_COL))
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.0))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(8.0))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .gap(px(8.0))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .text_color(rgb(TEXT_MAIN))
+                                            .child(format!("Phân loại bệnh tật sẵn — {}", spec_title)),
+                                    )
+                                    .child(badge(&format!("Loại {}", max_score), max_bg, max_col)),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .gap(px(6.0))
+                                    .child(
+                                        Button::new(SharedString::from(format!("exp-all-{}", spec_id)))
+                                            .label("Mở tất cả")
+                                            .xsmall()
+                                            .secondary()
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.expand_all_diseases = true;
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new(SharedString::from(format!("col-all-{}", spec_id)))
+                                            .label("Thu gọn tất cả")
+                                            .xsmall()
+                                            .secondary()
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.expand_all_diseases = false;
+                                                this.expanded_diseases.clear();
+                                                cx.notify();
+                                            })),
+                                    ),
+                            ),
+                    )
+                    .when(abnormal_rows.is_empty(), |el| {
+                        el.child(
+                            div()
+                                .px(px(10.0))
+                                .py(px(6.0))
+                                .rounded(px(6.0))
+                                .bg(rgb(SUCCESS_BG))
+                                .text_xs()
+                                .text_color(rgb(SUCCESS_COL))
+                                .child("✓ Tất cả các chỉ tiêu đều bình thường (Loại 1)"),
+                        )
+                    })
+                    .when(!abnormal_rows.is_empty(), |el| {
+                        el.child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.0))
+                                .children(abnormal_rows.into_iter().map(|(dn, cn, sc)| {
+                                    let (bg, col) = Self::score_badge_colors(sc);
+                                    div()
+                                        .px(px(10.0))
+                                        .py(px(6.0))
+                                        .rounded(px(6.0))
+                                        .bg(rgb(BG_CARD))
+                                        .border_1()
+                                        .border_color(rgb(BORDER_COL))
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .justify_between()
+                                        .gap(px(8.0))
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .text_xs()
+                                                .text_color(rgb(TEXT_MAIN))
+                                                .child(format!("{} — {}", dn, cn)),
+                                        )
+                                        .child(badge(&format!("Loại {}", sc), bg, col))
+                                })),
+                        )
+                    }),
+            )
+            .when(diseases.is_empty(), |el| {
+                el.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(TEXT_MUTED))
+                        .child("Chưa có mục bệnh tật chi tiết cho chuyên khoa này trong danh mục."),
+                )
+            })
+            .children(diseases.into_iter().map(|(d_code, d_name, classes)| {
+                let is_open = expand_all || self.expanded_diseases.contains(&d_code);
+                let sel_id = self.selected_classifications.get(&d_code).cloned();
+                let current_cls = sel_id
+                    .as_ref()
+                    .and_then(|cid| classes.iter().find(|(c, _, _)| c == cid))
+                    .or_else(|| classes.first());
+                let (cur_cls_code, cur_cls_name, cur_score) = current_cls
+                    .map(|(c, n, s)| (c.clone(), n.clone(), *s))
+                    .unwrap_or_else(|| (String::new(), "Mặc định: Bình thường (Loại 1)".into(), 1));
+                let (s_bg, s_col) = Self::score_badge_colors(cur_score);
+                let d_code_toggle = d_code.clone();
+
+                div()
+                    .rounded(px(8.0))
+                    .border_1()
+                    .border_color(rgb(BORDER_COL))
+                    .bg(rgb(BG_CARD))
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("dis-hdr-{}", d_code)))
+                            .px(px(12.0))
+                            .py(px(8.0))
+                            .bg(rgb(BG_SUBTLE))
+                            .cursor_pointer()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(8.0))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                if this.expanded_diseases.contains(&d_code_toggle) {
+                                    this.expanded_diseases.remove(&d_code_toggle);
+                                } else {
+                                    this.expanded_diseases.insert(d_code_toggle.clone());
+                                }
+                                cx.notify();
+                            }))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(2.0))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .text_color(rgb(TEXT_MAIN))
+                                            .child(d_name),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(TEXT_MUTED))
+                                            .child(cur_cls_name),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .gap(px(6.0))
+                                    .child(badge(&format!("Loại {}", cur_score), s_bg, s_col))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(TEXT_MUTED))
+                                            .child(if is_open { "▲" } else { "▼" }),
+                                    ),
+                            ),
+                    )
+                    .when(is_open, |el| {
+                        el.child(
+                            div()
+                                .p(px(8.0))
+                                .border_t_1()
+                                .border_color(rgb(BORDER_COL))
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.0))
+                                .children(classes.into_iter().map(|(c_code, c_name, sc)| {
+                                    let checked = c_code == cur_cls_code;
+                                    let (c_bg, c_col) = Self::score_badge_colors(sc);
+                                    let d_c = d_code.clone();
+                                    let c_c = c_code.clone();
+                                    let sp_c = spec_own.clone();
+
+                                    div()
+                                        .id(SharedString::from(format!("cls-opt-{}-{}", d_code, c_code)))
+                                        .px(px(8.0))
+                                        .py(px(6.0))
+                                        .rounded(px(6.0))
+                                        .border_1()
+                                        .border_color(if checked {
+                                            rgb(PRIMARY_COL)
+                                        } else {
+                                            rgb(BG_CARD)
+                                        })
+                                        .bg(if checked {
+                                            rgb(PRIMARY_LIGHT)
+                                        } else {
+                                            rgb(BG_CARD)
+                                        })
+                                        .when(editable, |d| {
+                                            d.cursor_pointer().on_click(cx.listener(move |this, _, window, cx| {
+                                                this.selected_classifications.insert(d_c.clone(), c_c.clone());
+                                                this.sync_specialty_from_classifications(&sp_c, window, cx);
+                                                cx.notify();
+                                            }))
+                                        })
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .justify_between()
+                                        .gap(px(8.0))
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .flex()
+                                                .flex_row()
+                                                .items_center()
+                                                .gap(px(8.0))
+                                                .child(
+                                                    div()
+                                                        .w(px(14.0))
+                                                        .h(px(14.0))
+                                                        .rounded(px(7.0))
+                                                        .border_1()
+                                                        .border_color(if checked {
+                                                            rgb(PRIMARY_COL)
+                                                        } else {
+                                                            rgb(BORDER_COL)
+                                                        })
+                                                        .flex()
+                                                        .items_center()
+                                                        .justify_center()
+                                                        .when(checked, |dot| {
+                                                            dot.child(
+                                                                div()
+                                                                    .w(px(8.0))
+                                                                    .h(px(8.0))
+                                                                    .rounded(px(4.0))
+                                                                    .bg(rgb(PRIMARY_COL)),
+                                                            )
+                                                        }),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .flex_1()
+                                                        .text_xs()
+                                                        .text_color(rgb(TEXT_MAIN))
+                                                        .child(c_name),
+                                                ),
+                                        )
+                                        .child(badge(&format!("Loại {}", sc), c_bg, c_col))
+                                })),
+                        )
+                    })
+            }))
             .into_any_element()
     }
 

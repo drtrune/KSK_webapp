@@ -95,7 +95,11 @@ pub struct KskGpuiApp {
 
     // Clinical Disease Tree & Subtab
     pub active_clinical_subtab: String,
+    pub active_noi_subtab: String,
     pub clinical_tree_mode: bool,
+    pub expanded_diseases: HashSet<String>,
+    pub expand_all_diseases: bool,
+    pub selected_classifications: HashMap<String, String>,
     pub disease_search_input: Entity<InputState>,
     pub selected_specialty_filter: String,
 
@@ -336,7 +340,11 @@ impl KskGpuiApp {
             form_textareas: HashMap::new(),
             form_subs: HashMap::new(),
             active_clinical_subtab: "noi".into(),
+            active_noi_subtab: "CK_NOI_TIM_MACH".into(),
             clinical_tree_mode: false,
+            expanded_diseases: HashSet::new(),
+            expand_all_diseases: false,
+            selected_classifications: HashMap::new(),
             disease_search_input,
             selected_specialty_filter: String::new(),
             exp_from_date,
@@ -565,6 +573,8 @@ impl KskGpuiApp {
         self.current_record_status = rec.status;
         self.editing_section = None;
         self.form_values.clear();
+        self.selected_classifications.clear();
+        self.expanded_diseases.clear();
         if let Ok(map) = serde_json::from_str::<Map<String, Value>>(&rec.payload_json) {
             for (k, v) in map {
                 let s = match v {
@@ -576,6 +586,11 @@ impl KskGpuiApp {
                     _ => String::new(),
                 };
                 self.form_values.insert(k, s);
+            }
+        }
+        if let Some(raw_cls) = self.form_values.get("SELECTED_CLASSIFICATIONS_JSON") {
+            if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(raw_cls) {
+                self.selected_classifications = map;
             }
         }
     }
@@ -642,6 +657,8 @@ impl KskGpuiApp {
         self.editing_section = Some("reception".into());
         self.active_exam_tab = "reception".into();
         self.form_values.clear();
+        self.selected_classifications.clear();
+        self.expanded_diseases.clear();
         self.form_inputs.clear();
         self.form_textareas.clear();
         self.form_subs.clear();
