@@ -169,14 +169,17 @@ fn main() {
         };
 
         let ctx = launch_ctx.clone();
-        if let Err(e) = gpui_kit::open_window(options, cx, move |window, cx| {
+        match gpui_kit::open_window(options, cx, move |window, cx| {
+            tracing::info!("Tao KskGpuiApp view...");
             let app_view = cx.new(|cx| gui::KskGpuiApp::new(ctx, window, cx));
             cx.new(|cx| gpui_component::Root::new(app_view, window, cx))
         }) {
-            tracing::error!("Khong the mo cua so GPUI: {:?}", e);
+            Ok(_) => tracing::info!("Da mo cua so GPUI thanh cong!"),
+            Err(e) => tracing::error!("Khong the mo cua so GPUI: {:?}", e),
         }
         cx.activate(true);
     });
+    tracing::info!("GPUI Application::run da ket thuc.");
 
     drop(rt);
 }
