@@ -142,7 +142,7 @@ fn main() {
     });
 
     let launch_ctx = AppLaunchCtx {
-        rt,
+        rt: rt.handle().clone(),
         state,
         his_tx,
         initial_cfg: cfg.clone(),
@@ -159,4 +159,6 @@ fn main() {
         .with_context(launch_ctx)
         .with_cfg(win_cfg)
         .launch(gui::App);
+
+    drop(rt);
 }

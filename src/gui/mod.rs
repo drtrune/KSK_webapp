@@ -21,14 +21,14 @@ use tab_export_admin::{TabAdmin, TabExportCsv};
 use tabs_exam::{
     TabClinical, TabConclusion, TabHistory, TabParaclinical, TabPhysical, TabReception,
 };
-use tokio::runtime::Runtime;
+use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 
 const STYLES_CSS: &str = include_str!("styles.css");
 
 #[derive(Clone)]
 pub struct AppLaunchCtx {
-    pub rt: Arc<Runtime>,
+    pub rt: Handle,
     pub state: SharedState,
     pub his_tx: broadcast::Sender<String>,
     pub initial_cfg: AppConfig,
@@ -74,7 +74,7 @@ fn section_role_and_fields(section: &str) -> (&'static str, &'static [&'static s
     }
 }
 
-fn run_sync<F, T>(rt: &Arc<Runtime>, fut: F) -> T
+fn run_sync<F, T>(rt: &Handle, fut: F) -> T
 where
     F: std::future::Future<Output = T> + Send,
     T: Send,
@@ -91,7 +91,7 @@ where
     }
 }
 
-fn load_catalogs_sync(rt: &Arc<Runtime>, state: &SharedState) -> HashMap<String, Vec<CatalogItem>> {
+fn load_catalogs_sync(rt: &Handle, state: &SharedState) -> HashMap<String, Vec<CatalogItem>> {
     let types = [
         "DAN_TOC",
         "NGHE_NGHIEP",

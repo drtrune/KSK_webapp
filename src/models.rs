@@ -909,7 +909,8 @@ pub struct ClassificationDef {
     pub id: String,
     pub disease_id: String,
     pub name: String,
-    pub score: i64,
+    #[serde(default)]
+    pub score: Option<i64>,
     pub ref_rule: Option<String>,
     pub ref_disease_id: Option<String>,
     pub adjust: Option<i64>,

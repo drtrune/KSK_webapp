@@ -376,7 +376,10 @@ pub fn TabClinical(
                                                     summary { style: "cursor: pointer; font-size: 12.5px;", "{dis.name}" }
                                                     ul { style: "padding-left: 18px; font-size: 12px; color: #475569;",
                                                         for c in cfg.classifications.iter().filter(|c| c.disease_id == dis.id) {
-                                                            li { "[Loại {c.score}] {c.name}" }
+                                                            {
+                                                                let score_lbl = c.score.map(|s| format!("Loại {}", s)).unwrap_or_else(|| "Tham chiếu".to_string());
+                                                                rsx! { li { "[{score_lbl}] {c.name}" } }
+                                                            }
                                                         }
                                                     }
                                                 }
