@@ -150,6 +150,16 @@ impl KskGpuiApp {
                                     })
                                     .when(!ma_tn.is_empty(), |el| {
                                         el.child(badge(format!("Số TN: {}", ma_tn), primary_light(), PRIMARY_COL))
+                                    })
+                                    .child(if self.current_record_exam_mode == "doan" {
+                                        let label = self
+                                            .current_record_contract_id
+                                            .and_then(|cid| self.contracts_list.iter().find(|c| c.id == cid))
+                                            .map(|c| format!("Đoàn: {} ({})", c.company_name, c.contract_code))
+                                            .unwrap_or_else(|| "Khám đoàn".to_string());
+                                        badge(label, WARN_BG, WARN_COL)
+                                    } else {
+                                        badge("Khám lẻ", primary_light(), PRIMARY_COL)
                                     }),
                             )
                             .child(match self.current_record_status {

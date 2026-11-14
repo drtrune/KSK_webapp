@@ -32,6 +32,18 @@ impl KskGpuiApp {
             .exp_status_filter
             .map(|s| s.to_string())
             .unwrap_or_default();
+        let exp_mode_val = self.exp_exam_mode.clone();
+        let exp_cont_val = self
+            .exp_contract_id
+            .map(|id| id.to_string())
+            .unwrap_or_default();
+        let mut exp_cont_opts: Vec<(String, String)> = vec![("".into(), "Tất cả hợp đồng".into())];
+        for c in &self.contracts_list {
+            exp_cont_opts.push((
+                c.id.to_string(),
+                format!("{} - {}", c.contract_code, c.company_name),
+            ));
+        }
 
         div()
             .id("export-tab-scroll")
@@ -132,6 +144,38 @@ impl KskGpuiApp {
                                 },
                                 cx,
                             ))
+                            .child(self.render_select_dropdown(
+                                "exp-exam-mode",
+                                "Loại khám",
+                                &exp_mode_val,
+                                vec![
+                                    ("".to_string(), "Tất cả".to_string()),
+                                    ("le".to_string(), "Khám lẻ".to_string()),
+                                    ("doan".to_string(), "Khám đoàn".to_string()),
+                                ],
+                                true,
+                                |this, val, _, cx| {
+                                    this.exp_exam_mode = val;
+                                    if this.exp_exam_mode != "doan" {
+                                        this.exp_contract_id = None;
+                                    }
+                                    cx.notify();
+                                },
+                                cx,
+                            ))
+                            .when(exp_mode_val == "doan", |el| {
+                                el.child(self.render_select_dropdown(
+                                    "exp-contract",
+                                    "Hợp đồng đoàn",
+                                    &exp_cont_val,
+                                    exp_cont_opts,
+                                    true,
+                                    |this, val, _, _| {
+                                        this.exp_contract_id = val.parse::<i64>().ok();
+                                    },
+                                    cx,
+                                ))
+                            })
                             .child(
                                 Button::new("btn-exp-filter")
                                     .label("Lọc dữ liệu")

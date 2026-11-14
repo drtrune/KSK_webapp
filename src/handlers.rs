@@ -796,6 +796,8 @@ pub async fn query_filtered_records(
     workplace: Option<&str>,
     classification: Option<&str>,
     selected_ids: Option<&str>,
+    exam_mode: Option<&str>,
+    contract_id: Option<i64>,
     limit: Option<i64>,
     order_asc: bool,
     master_key: Option<&[u8; 32]>,
@@ -826,6 +828,15 @@ pub async fn query_filtered_records(
 
     if status.is_some() {
         conditions.push("status = ?".to_string());
+    }
+
+    if let Some(m) = exam_mode.filter(|s| !s.trim().is_empty()) {
+        let _ = m;
+        conditions.push("exam_mode = ?".to_string());
+    }
+
+    if contract_id.is_some() {
+        conditions.push("contract_id = ?".to_string());
     }
 
     if !from_str.is_empty() {
@@ -866,6 +877,12 @@ pub async fn query_filtered_records(
 
     if let Some(st) = status {
         query = query.bind(st);
+    }
+    if let Some(m) = exam_mode.filter(|s| !s.trim().is_empty()) {
+        query = query.bind(m.trim().to_string());
+    }
+    if let Some(cid) = contract_id {
+        query = query.bind(cid);
     }
     if !from_str.is_empty() {
         query = query.bind(from_str);
@@ -946,6 +963,8 @@ pub async fn list_records_handler(
         filter.q.as_deref(),
         filter.workplace.as_deref(),
         filter.classification.as_deref(),
+        None,
+        None,
         None,
         Some(filter.limit.unwrap_or(200)),
         false,
@@ -2061,6 +2080,8 @@ pub async fn export_csv_handler(
         query.workplace.as_deref(),
         query.classification.as_deref(),
         query.selected_ids.as_deref(),
+        None,
+        None,
         None,
         true,
         mk.as_ref(),

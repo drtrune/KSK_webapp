@@ -98,10 +98,62 @@ pub async fn init_db(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
             so_cccd TEXT NOT NULL DEFAULT '',
             ngay_vao TEXT NOT NULL DEFAULT '',
             status INTEGER NOT NULL DEFAULT 0,
+            exam_mode TEXT NOT NULL DEFAULT 'le',
+            contract_id INTEGER,
             payload_json TEXT NOT NULL DEFAULT '{}',
             updated_by TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+    let _ = sqlx::query("ALTER TABLE ksk_records ADD COLUMN exam_mode TEXT NOT NULL DEFAULT 'le'")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE ksk_records ADD COLUMN contract_id INTEGER")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_ksk_records_mode_contract ON ksk_records(exam_mode, contract_id)",
+    )
+    .execute(&pool)
+    .await;
+
+    // 3b. Tạo bảng companies & exam_contracts (Khám đoàn)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS companies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            tax_code TEXT NOT NULL DEFAULT '',
+            address TEXT NOT NULL DEFAULT '',
+            contact_person TEXT NOT NULL DEFAULT '',
+            contact_phone TEXT NOT NULL DEFAULT '',
+            note TEXT NOT NULL DEFAULT '',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS exam_contracts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id INTEGER NOT NULL,
+            contract_code TEXT NOT NULL UNIQUE,
+            title TEXT NOT NULL,
+            exam_date TEXT NOT NULL DEFAULT '',
+            expected_count INTEGER NOT NULL DEFAULT 0,
+            status INTEGER NOT NULL DEFAULT 0,
+            note TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE RESTRICT
         );
         "#,
     )
@@ -728,4 +780,287 @@ pub async fn upsert_patient_from_his(
             .map_err(|e| e.to_string())?;
 
     Ok((id, payload_val))
+}
+
+// =========================================================================
+// Quản lý Công ty, Hợp đồng khám đoàn & Import hàng loạt
+// =========================================================================
+
+pub async fn list_companies(pool: &SqlitePool) -> Vec<crate::models::Company> {
+    sqlx::query_as::<_, crate::models::Company>(
+        "SELECT id, code, name, tax_code, address, contact_person, contact_phone, note, is_active, created_at FROM companies ORDER BY is_active DESC, name ASC",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default()
+}
+
+pub async fn upsert_company(
+    pool: &SqlitePool,
+    edit_id: Option<i64>,
+    code: &str,
+    name: &str,
+    tax_code: &str,
+    address: &str,
+    contact_person: &str,
+    contact_phone: &str,
+    note: &str,
+) -> Result<i64, String> {
+    let code_t = code.trim();
+    let name_t = name.trim();
+    if code_t.is_empty() || name_t.is_empty() {
+        return Err("Mã công ty và Tên công ty không được để trống!".into());
+    }
+    if let Some(id) = edit_id {
+        sqlx::query(
+            "UPDATE companies SET code = ?, name = ?, tax_code = ?, address = ?, contact_person = ?, contact_phone = ?, note = ? WHERE id = ?",
+        )
+        .bind(code_t)
+        .bind(name_t)
+        .bind(tax_code.trim())
+        .bind(address.trim())
+        .bind(contact_person.trim())
+        .bind(contact_phone.trim())
+        .bind(note.trim())
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Lỗi cập nhật công ty: {}", e))?;
+        Ok(id)
+    } else {
+        let r = sqlx::query(
+            "INSERT INTO companies (code, name, tax_code, address, contact_person, contact_phone, note) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(code_t)
+        .bind(name_t)
+        .bind(tax_code.trim())
+        .bind(address.trim())
+        .bind(contact_person.trim())
+        .bind(contact_phone.trim())
+        .bind(note.trim())
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Lỗi thêm công ty (mã có thể đã tồn tại): {}", e))?;
+        Ok(r.last_insert_rowid())
+    }
+}
+
+pub async fn toggle_company_active(pool: &SqlitePool, id: i64, is_active: bool) -> Result<(), String> {
+    sqlx::query("UPDATE companies SET is_active = ? WHERE id = ?")
+        .bind(if is_active { 1 } else { 0 })
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub async fn list_exam_contracts(
+    pool: &SqlitePool,
+    company_id: Option<i64>,
+) -> Vec<crate::models::ExamContractSummary> {
+    let base_sql = r#"
+        SELECT
+            ec.id,
+            ec.company_id,
+            c.code AS company_code,
+            c.name AS company_name,
+            ec.contract_code,
+            ec.title,
+            ec.exam_date,
+            ec.expected_count,
+            ec.status,
+            ec.note,
+            COALESCE(COUNT(r.id), 0) AS total_records,
+            COALESCE(SUM(CASE WHEN r.status = 1 THEN 1 ELSE 0 END), 0) AS done_records,
+            COALESCE(SUM(CASE WHEN r.status = 2 THEN 1 ELSE 0 END), 0) AS signed_records,
+            ec.created_at
+        FROM exam_contracts ec
+        JOIN companies c ON c.id = ec.company_id
+        LEFT JOIN ksk_records r ON r.contract_id = ec.id AND r.exam_mode = 'doan'
+    "#;
+    if let Some(cid) = company_id {
+        let sql = format!("{} WHERE ec.company_id = ? GROUP BY ec.id ORDER BY ec.status ASC, ec.id DESC", base_sql);
+        sqlx::query_as::<_, crate::models::ExamContractSummary>(&sql)
+            .bind(cid)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+    } else {
+        let sql = format!("{} GROUP BY ec.id ORDER BY ec.status ASC, ec.id DESC", base_sql);
+        sqlx::query_as::<_, crate::models::ExamContractSummary>(&sql)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+    }
+}
+
+pub async fn upsert_exam_contract(
+    pool: &SqlitePool,
+    edit_id: Option<i64>,
+    company_id: i64,
+    contract_code: &str,
+    title: &str,
+    exam_date: &str,
+    expected_count: i64,
+    note: &str,
+) -> Result<i64, String> {
+    let code_t = contract_code.trim();
+    let title_t = title.trim();
+    if company_id <= 0 || code_t.is_empty() || title_t.is_empty() {
+        return Err("Vui lòng chọn công ty, nhập Mã hợp đồng và Tên đợt khám!".into());
+    }
+    if let Some(id) = edit_id {
+        sqlx::query(
+            "UPDATE exam_contracts SET company_id = ?, contract_code = ?, title = ?, exam_date = ?, expected_count = ?, note = ? WHERE id = ?",
+        )
+        .bind(company_id)
+        .bind(code_t)
+        .bind(title_t)
+        .bind(exam_date.trim())
+        .bind(expected_count)
+        .bind(note.trim())
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Lỗi cập nhật hợp đồng: {}", e))?;
+        Ok(id)
+    } else {
+        let r = sqlx::query(
+            "INSERT INTO exam_contracts (company_id, contract_code, title, exam_date, expected_count, note) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(company_id)
+        .bind(code_t)
+        .bind(title_t)
+        .bind(exam_date.trim())
+        .bind(expected_count)
+        .bind(note.trim())
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Lỗi tạo hợp đồng (mã HĐ có thể đã tồn tại): {}", e))?;
+        Ok(r.last_insert_rowid())
+    }
+}
+
+pub async fn set_exam_contract_status(pool: &SqlitePool, id: i64, status: i64) -> Result<(), String> {
+    sqlx::query("UPDATE exam_contracts SET status = ? WHERE id = ?")
+        .bind(status)
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub async fn get_existing_ma_tiep_nhan_set(pool: &SqlitePool) -> std::collections::HashSet<String> {
+    sqlx::query_as::<_, (String,)>("SELECT ma_tiep_nhan FROM ksk_records")
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(s,)| s.trim().to_string())
+        .collect()
+}
+
+pub async fn get_existing_contract_cccd_set(
+    pool: &SqlitePool,
+    contract_id: i64,
+    master_key: Option<&[u8; 32]>,
+) -> std::collections::HashSet<String> {
+    let rows = sqlx::query_as::<_, (String,)>(
+        "SELECT so_cccd FROM ksk_records WHERE exam_mode = 'doan' AND contract_id = ?",
+    )
+    .bind(contract_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    rows.into_iter()
+        .filter_map(|(raw,)| {
+            let dec = crate::crypto::decrypt_field(master_key, &raw);
+            let t = dec.trim().to_string();
+            if t.is_empty() { None } else { Some(t) }
+        })
+        .collect()
+}
+
+pub async fn batch_insert_group_records(
+    pool: &SqlitePool,
+    contract_id: i64,
+    ma_cskcb: &str,
+    ma_gtin: &str,
+    updated_by: &str,
+    master_key: Option<&[u8; 32]>,
+    rows: &[crate::models::GroupImportRow],
+) -> Result<(usize, usize), String> {
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let mut inserted = 0usize;
+    let mut skipped = 0usize;
+
+    for r in rows {
+        if r.error.is_some() {
+            skipped += 1;
+            continue;
+        }
+        let mut payload = Map::new();
+        payload.insert("MA_TIEP_NHAN".into(), Value::String(r.ma_tiep_nhan.clone()));
+        payload.insert("MA_Y_TE".into(), Value::String(r.ma_y_te.clone()));
+        payload.insert("HO_TEN".into(), Value::String(r.ho_ten.clone()));
+        payload.insert("NGAY_SINH".into(), Value::String(r.ngay_sinh.clone()));
+        payload.insert("GIOI_TINH".into(), Value::String(r.gioi_tinh.clone()));
+        payload.insert("SO_CCCD".into(), Value::String(r.so_cccd.clone()));
+        payload.insert("NGAYCAP_CCCD".into(), Value::String(r.ngaycap_cccd.clone()));
+        payload.insert("NOICAP_CCCD".into(), Value::String(r.noicap_cccd.clone()));
+        payload.insert("DIEN_THOAI".into(), Value::String(r.dien_thoai.clone()));
+        payload.insert("MATINH_CU_TRU".into(), Value::String(r.matinh_cu_tru.clone()));
+        payload.insert("MAXA_CU_TRU".into(), Value::String(r.maxa_cu_tru.clone()));
+        payload.insert("DIA_CHI".into(), Value::String(r.dia_chi.clone()));
+        payload.insert("MA_DAN_TOC".into(), Value::String(r.ma_dan_toc.clone()));
+        payload.insert("MA_NGHE_NGHIEP".into(), Value::String(r.ma_nghe_nghiep.clone()));
+        payload.insert(
+            "NOI_LAM_VIEC_HOC_TAP".into(),
+            Value::String(r.noi_lam_viec_hoc_tap.clone()),
+        );
+        payload.insert("MA_LOAI_KCB".into(), Value::String(r.ma_loai_kcb.clone()));
+        payload.insert("NGAY_VAO".into(), Value::String(r.ngay_vao.clone()));
+        payload.insert("NHOM_MAU".into(), Value::String(r.nhom_mau.clone()));
+        payload.insert("LY_DO_VV".into(), Value::String(r.ly_do_vv.clone()));
+        payload.insert("MA_CSKCB".into(), Value::String(ma_cskcb.to_string()));
+        payload.insert("MA_GTIN_CSKCB".into(), Value::String(ma_gtin.to_string()));
+        let ma_lk = format!("{}_{}", ma_cskcb, r.ma_tiep_nhan);
+        payload.insert("MA_LK".into(), Value::String(ma_lk));
+
+        let json_str = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+        let (enc_ho_ten, enc_ngay_sinh, enc_so_cccd, enc_json_str) =
+            crate::crypto::encrypt_record_fields(
+                master_key,
+                &r.ho_ten,
+                &r.ngay_sinh,
+                &r.so_cccd,
+                &json_str,
+            );
+
+        let res = sqlx::query(
+            "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'doan', ?, ?, ?)",
+        )
+        .bind(&r.ma_tiep_nhan)
+        .bind(&r.ma_y_te)
+        .bind(&enc_ho_ten)
+        .bind(&r.gioi_tinh)
+        .bind(&enc_ngay_sinh)
+        .bind(&enc_so_cccd)
+        .bind(&r.ngay_vao)
+        .bind(contract_id)
+        .bind(&enc_json_str)
+        .bind(updated_by)
+        .execute(&mut *tx)
+        .await;
+
+        match res {
+            Ok(_) => inserted += 1,
+            Err(e) => return Err(format!("Lỗi dòng {} ({}): {}", r.row_index, r.ma_tiep_nhan, e)),
+        }
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok((inserted, skipped))
 }

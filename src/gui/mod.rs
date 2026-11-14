@@ -1,6 +1,7 @@
 pub mod sidebar;
 pub mod tab_catalogs;
 pub mod tab_export_admin;
+pub mod tab_group_exam;
 pub mod tabs_exam;
 pub mod widgets;
 
@@ -27,7 +28,10 @@ use crate::{
     handlers::{
         AppState, generate_csv_bytes, generate_docx_bytes, query_filtered_records,
     },
-    models::{CatalogItem, KskRecordRow, UpdateManifest, User, merge_payload_by_roles},
+    models::{
+        CatalogItem, Company, ExamContractSummary, GroupImportRow, KskRecordRow, UpdateManifest,
+        User, merge_payload_by_roles,
+    },
     updater,
 };
 
@@ -98,6 +102,8 @@ pub struct KskGpuiApp {
 
     // Sidebar
     pub sidebar_open: bool,
+    pub sidebar_exam_mode: String, // "le" | "doan"
+    pub sidebar_contract_id: Option<i64>,
     pub sidebar_search: Entity<InputState>,
     pub sidebar_from_date: Entity<InputState>,
     pub sidebar_to_date: Entity<InputState>,
@@ -108,6 +114,8 @@ pub struct KskGpuiApp {
     pub selected_record_id: Option<i64>,
     pub is_creating_new: bool,
     pub current_record_status: i64,
+    pub current_record_exam_mode: String,
+    pub current_record_contract_id: Option<i64>,
     pub editing_section: Option<String>,
     pub form_values: HashMap<String, String>,
     pub form_inputs: HashMap<String, Entity<InputState>>,
@@ -131,8 +139,33 @@ pub struct KskGpuiApp {
     pub exp_q: Entity<InputState>,
     pub exp_workplace: Entity<InputState>,
     pub exp_status_filter: Option<i64>,
+    pub exp_exam_mode: String,
+    pub exp_contract_id: Option<i64>,
     pub export_rows: Vec<KskRecordRow>,
     pub export_selected_ids: HashSet<i64>,
+
+    // Group Exam (Công ty & Hợp đồng & Import)
+    pub grp_sub_tab: String,
+    pub companies_list: Vec<Company>,
+    pub contracts_list: Vec<ExamContractSummary>,
+    pub grp_comp_edit_id: Option<i64>,
+    pub grp_comp_code: Entity<InputState>,
+    pub grp_comp_name: Entity<InputState>,
+    pub grp_comp_tax: Entity<InputState>,
+    pub grp_comp_addr: Entity<InputState>,
+    pub grp_comp_contact: Entity<InputState>,
+    pub grp_comp_phone: Entity<InputState>,
+    pub grp_comp_note: Entity<InputState>,
+    pub grp_cont_edit_id: Option<i64>,
+    pub grp_cont_company_id: Option<i64>,
+    pub grp_cont_code: Entity<InputState>,
+    pub grp_cont_title: Entity<InputState>,
+    pub grp_cont_date: Entity<InputState>,
+    pub grp_cont_expected: Entity<InputState>,
+    pub grp_cont_note: Entity<InputState>,
+    pub grp_import_contract_id: Option<i64>,
+    pub grp_import_file_path: String,
+    pub grp_import_rows: Vec<GroupImportRow>,
 
     // Admin Tab
     pub admin_sub_tab: String,
@@ -459,6 +492,8 @@ impl KskGpuiApp {
             toast: None,
             available_update,
             sidebar_open: true,
+            sidebar_exam_mode: "le".into(),
+            sidebar_contract_id: None,
             sidebar_search,
             sidebar_from_date,
             sidebar_to_date,
@@ -467,6 +502,8 @@ impl KskGpuiApp {
             selected_record_id: None,
             is_creating_new: false,
             current_record_status: 0,
+            current_record_exam_mode: "le".into(),
+            current_record_contract_id: None,
             editing_section: None,
             form_values: HashMap::new(),
             form_inputs: HashMap::new(),
@@ -490,8 +527,35 @@ impl KskGpuiApp {
             exp_q,
             exp_workplace,
             exp_status_filter: None,
+            exp_exam_mode: String::new(),
+            exp_contract_id: None,
             export_rows: Vec::new(),
             export_selected_ids: HashSet::new(),
+            grp_sub_tab: "import".into(),
+            companies_list: Vec::new(),
+            contracts_list: Vec::new(),
+            grp_comp_edit_id: None,
+            grp_comp_code: cx.new(|cx| InputState::new(window, cx).placeholder("VD: CTY01")),
+            grp_comp_name: cx.new(|cx| InputState::new(window, cx).placeholder("Tên công ty / đơn vị")),
+            grp_comp_tax: cx.new(|cx| InputState::new(window, cx).placeholder("Mã số thuế")),
+            grp_comp_addr: cx.new(|cx| InputState::new(window, cx).placeholder("Địa chỉ công ty")),
+            grp_comp_contact: cx.new(|cx| InputState::new(window, cx).placeholder("Người liên hệ")),
+            grp_comp_phone: cx.new(|cx| InputState::new(window, cx).placeholder("Số điện thoại")),
+            grp_comp_note: cx.new(|cx| InputState::new(window, cx).placeholder("Ghi chú")),
+            grp_cont_edit_id: None,
+            grp_cont_company_id: None,
+            grp_cont_code: cx.new(|cx| InputState::new(window, cx).placeholder("VD: HD-2026-001")),
+            grp_cont_title: cx.new(|cx| InputState::new(window, cx).placeholder("VD: Khám SK định kỳ Q4/2026")),
+            grp_cont_date: cx.new(|cx| {
+                InputState::new(window, cx)
+                    .placeholder("dd/mm/yyyy")
+                    .default_value(chrono::Local::now().format("%d/%m/%Y").to_string())
+            }),
+            grp_cont_expected: cx.new(|cx| InputState::new(window, cx).placeholder("Số lượng dự kiến")),
+            grp_cont_note: cx.new(|cx| InputState::new(window, cx).placeholder("Ghi chú hợp đồng")),
+            grp_import_contract_id: None,
+            grp_import_file_path: String::new(),
+            grp_import_rows: Vec::new(),
             admin_sub_tab: "config".into(),
             adm_cskcb,
             adm_ma_cskcb,
@@ -717,6 +781,8 @@ impl KskGpuiApp {
                 None,
                 None,
                 None,
+                Some("le"),
+                None,
                 Some(200),
                 true,
                 mk.as_ref(),
@@ -750,6 +816,12 @@ impl KskGpuiApp {
         self.selected_record_id = Some(rec.id);
         self.is_creating_new = false;
         self.current_record_status = rec.status;
+        self.current_record_exam_mode = if rec.exam_mode.is_empty() {
+            "le".to_string()
+        } else {
+            rec.exam_mode.clone()
+        };
+        self.current_record_contract_id = rec.contract_id;
         self.editing_section = None;
         self.form_values.clear();
         self.selected_classifications.clear();
@@ -775,10 +847,21 @@ impl KskGpuiApp {
     }
 
     pub fn refresh_records(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.sidebar_exam_mode == "doan" && self.sidebar_contract_id.is_none() {
+            self.records.clear();
+            cx.notify();
+            return;
+        }
         let q = self.sidebar_search.read(cx).value().trim().to_string();
         let from_d = self.sidebar_from_date.read(cx).value().trim().to_string();
         let to_d = self.sidebar_to_date.read(cx).value().trim().to_string();
         let st = self.sidebar_status_filter;
+        let mode = self.sidebar_exam_mode.clone();
+        let contract_id = if mode == "doan" {
+            self.sidebar_contract_id
+        } else {
+            None
+        };
         let state = self.state.clone();
 
         let mk = self.master_key;
@@ -793,6 +876,8 @@ impl KskGpuiApp {
                 None,
                 None,
                 None,
+                Some(mode.as_str()),
+                contract_id,
                 Some(200),
                 false,
                 mk.as_ref(),
@@ -814,7 +899,7 @@ impl KskGpuiApp {
         let rec_opt = self.run_sync(async move {
             let pool = state.db.read().await;
             let mut r = sqlx::query_as::<_, KskRecordRow>(
-                "SELECT id, ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, payload_json, updated_by, created_at, updated_at FROM ksk_records WHERE id = ?",
+                "SELECT id, ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, payload_json, updated_by, created_at, updated_at FROM ksk_records WHERE id = ?",
             )
             .bind(record_id)
             .fetch_optional(&*pool)
@@ -840,6 +925,8 @@ impl KskGpuiApp {
         self.selected_record_id = None;
         self.is_creating_new = true;
         self.current_record_status = 0;
+        self.current_record_exam_mode = "le".into();
+        self.current_record_contract_id = None;
         self.editing_section = Some("reception".into());
         self.active_exam_tab = "reception".into();
         self.form_values.clear();
@@ -1004,7 +1091,7 @@ impl KskGpuiApp {
                         &json_str,
                     );
                 let r = sqlx::query(
-                    "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                    "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'le', NULL, ?, ?)",
                 )
                 .bind(&ma_tn)
                 .bind(&ma_y_te)
@@ -1107,12 +1194,48 @@ impl KskGpuiApp {
         }
     }
 
+    pub fn refresh_group_data(&mut self, cx: &mut Context<Self>) {
+        let state = self.state.clone();
+        let (companies, contracts) = self.run_sync(async move {
+            let pool = state.db.read().await;
+            let comps = db::list_companies(&pool).await;
+            let conts = db::list_exam_contracts(&pool, None).await;
+            (comps, conts)
+        });
+        self.companies_list = companies;
+        self.contracts_list = contracts;
+        if self.grp_cont_company_id.is_none() {
+            self.grp_cont_company_id = self.companies_list.first().map(|c| c.id);
+        }
+        if self.grp_import_contract_id.is_none() {
+            self.grp_import_contract_id = self
+                .contracts_list
+                .iter()
+                .find(|c| c.status == 0)
+                .map(|c| c.id);
+        }
+        if self.sidebar_contract_id.is_none() {
+            self.sidebar_contract_id = self
+                .contracts_list
+                .iter()
+                .find(|c| c.status == 0)
+                .map(|c| c.id);
+        }
+        cx.notify();
+    }
+
     pub fn refresh_export_rows(&mut self, cx: &mut Context<Self>) {
         let from_d = self.exp_from_date.read(cx).value().trim().to_string();
         let to_d = self.exp_to_date.read(cx).value().trim().to_string();
         let q = self.exp_q.read(cx).value().trim().to_string();
         let wp = self.exp_workplace.read(cx).value().trim().to_string();
         let st = self.exp_status_filter;
+        let mode = self.exp_exam_mode.clone();
+        let contract_id = if mode == "doan" {
+            self.exp_contract_id
+        } else {
+            None
+        };
         let state = self.state.clone();
 
         let mk = self.master_key;
@@ -1127,6 +1250,8 @@ impl KskGpuiApp {
                 if wp.is_empty() { None } else { Some(wp.as_str()) },
                 None,
                 None,
+                if mode.is_empty() { None } else { Some(mode.as_str()) },
+                contract_id,
                 Some(2000),
                 false,
                 mk.as_ref(),
@@ -1290,6 +1415,7 @@ impl KskGpuiApp {
                 self.export_selected_ids.clear();
                 self.refresh_catalogs(cx);
                 self.refresh_users(cx);
+                self.refresh_group_data(cx);
                 self.refresh_records(window, cx);
                 self.show_toast(
                     "Đã tạo DB mới và chuyển sang CSDL mới! Hãy lưu lại Recovery Key.",
@@ -1760,7 +1886,11 @@ impl KskGpuiApp {
             return;
         };
         match role.as_str() {
+            "business" => {
+                self.active_nav = "group".into();
+            }
             "reception" | "admin" => {
+                self.active_nav = "exam".into();
                 self.active_exam_tab = "reception".into();
             }
             "tiensu" => {
@@ -1893,6 +2023,7 @@ impl KskGpuiApp {
                 self.set_default_tabs_for_user(&u);
                 self.current_user = Some(u);
                 self.refresh_catalogs(cx);
+                self.refresh_group_data(cx);
                 self.refresh_records(window, cx);
                 self.start_auto_backup_loop(cx);
                 cx.notify();
@@ -2570,12 +2701,15 @@ impl Render for KskGpuiApp {
 
         let user = self.current_user.clone().unwrap();
         let is_admin = user.has_role("admin");
+        let can_group = user.has_role("admin") || user.has_role("business") || user.has_role("reception");
         let can_export = user.has_role("admin")
             || user.has_role("reception")
+            || user.has_role("business")
             || user.has_role("bs_ketluan");
 
         let active_nav = self.active_nav.clone();
         let main_body = match active_nav.as_str() {
+            "group" => self.render_group_exam_tab(window, cx),
             "export" => self.render_export_tab(window, cx),
             "admin" => self.render_admin_tab(window, cx),
             _ => div()
@@ -2633,11 +2767,25 @@ impl Render for KskGpuiApp {
                                     .small()
                                     .when(active_nav == "exam", |b| b.primary())
                                     .when(active_nav != "exam", |b| b.secondary())
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.active_nav = "exam".into();
-                                        cx.notify();
+                                        this.refresh_group_data(cx);
+                                        this.refresh_records(window, cx);
                                     })),
                             )
+                            .when(can_group, |el| {
+                                el.child(
+                                    Button::new("nav-group")
+                                        .label("Khám đoàn & Hợp đồng")
+                                        .small()
+                                        .when(active_nav == "group", |b| b.primary())
+                                        .when(active_nav != "group", |b| b.secondary())
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.active_nav = "group".into();
+                                            this.refresh_group_data(cx);
+                                        })),
+                                )
+                            })
                             .when(can_export, |el| {
                                 el.child(
                                     Button::new("nav-export")

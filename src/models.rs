@@ -5,6 +5,7 @@ use sqlx::FromRow;
 /// Danh sách các Role trong hệ thống KSK (Mục 3)
 pub const VALID_ROLES: &[&str] = &[
     "admin",
+    "business",
     "reception",
     "tiensu",
     "bs_theluc",
@@ -673,6 +674,10 @@ pub struct KskRecordRow {
     pub so_cccd: String,
     pub ngay_vao: String,
     pub status: i64,
+    #[sqlx(default)]
+    pub exam_mode: String,
+    #[sqlx(default)]
+    pub contract_id: Option<i64>,
     pub payload_json: String,
     pub updated_by: String,
     pub created_at: String,
@@ -690,6 +695,8 @@ pub struct KskRecordDto {
     pub so_cccd: String,
     pub ngay_vao: String,
     pub status: i64,
+    pub exam_mode: String,
+    pub contract_id: Option<i64>,
     pub payload: Value,
     pub updated_by: String,
     pub created_at: String,
@@ -710,12 +717,88 @@ impl From<KskRecordRow> for KskRecordDto {
             so_cccd: row.so_cccd,
             ngay_vao: row.ngay_vao,
             status: row.status,
+            exam_mode: if row.exam_mode.is_empty() {
+                "le".to_string()
+            } else {
+                row.exam_mode
+            },
+            contract_id: row.contract_id,
             payload,
             updated_by: row.updated_by,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Company {
+    pub id: i64,
+    pub code: String,
+    pub name: String,
+    pub tax_code: String,
+    pub address: String,
+    pub contact_person: String,
+    pub contact_phone: String,
+    pub note: String,
+    pub is_active: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ExamContract {
+    pub id: i64,
+    pub company_id: i64,
+    pub contract_code: String,
+    pub title: String,
+    pub exam_date: String,
+    pub expected_count: i64,
+    pub status: i64,
+    pub note: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ExamContractSummary {
+    pub id: i64,
+    pub company_id: i64,
+    pub company_code: String,
+    pub company_name: String,
+    pub contract_code: String,
+    pub title: String,
+    pub exam_date: String,
+    pub expected_count: i64,
+    pub status: i64,
+    pub note: String,
+    pub total_records: i64,
+    pub done_records: i64,
+    pub signed_records: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct GroupImportRow {
+    pub row_index: usize,
+    pub ma_tiep_nhan: String,
+    pub ma_y_te: String,
+    pub ho_ten: String,
+    pub ngay_sinh: String,
+    pub gioi_tinh: String,
+    pub so_cccd: String,
+    pub ngaycap_cccd: String,
+    pub noicap_cccd: String,
+    pub dien_thoai: String,
+    pub matinh_cu_tru: String,
+    pub maxa_cu_tru: String,
+    pub dia_chi: String,
+    pub ma_dan_toc: String,
+    pub ma_nghe_nghiep: String,
+    pub noi_lam_viec_hoc_tap: String,
+    pub ma_loai_kcb: String,
+    pub ngay_vao: String,
+    pub nhom_mau: String,
+    pub ly_do_vv: String,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

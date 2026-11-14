@@ -57,6 +57,19 @@ impl KskGpuiApp {
 
         let records = self.records.clone();
         let selected_id = self.selected_record_id;
+        let is_group_mode = self.sidebar_exam_mode == "doan";
+        let selected_contract_str = self
+            .sidebar_contract_id
+            .map(|id| id.to_string())
+            .unwrap_or_default();
+        let mut contract_opts: Vec<(String, String)> = vec![("".into(), "-- Chọn đoàn khám --".into())];
+        for c in &self.contracts_list {
+            let st_txt = if c.status == 1 { " [Đã đóng]" } else { "" };
+            contract_opts.push((
+                c.id.to_string(),
+                format!("{} - {} ({} HS){}", c.contract_code, c.company_name, c.total_records, st_txt),
+            ));
+        }
 
         div()
             .w(px(310.0))
@@ -119,7 +132,41 @@ impl KskGpuiApp {
                     .flex()
                     .flex_col()
                     .gap(px(8.0))
-                    .when(can_create, |el| {
+                    .child(
+                        // Mode switcher: Khám lẻ / Khám đoàn
+                        div()
+                            .flex()
+                            .flex_row()
+                            .gap(px(6.0))
+                            .child(
+                                Button::new("btn-mode-le")
+                                    .label("Khám lẻ")
+                                    .small()
+                                    .when(!is_group_mode, |b| b.primary())
+                                    .when(is_group_mode, |b| b.secondary())
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.sidebar_exam_mode = "le".into();
+                                        this.selected_record_id = None;
+                                        this.is_creating_new = false;
+                                        this.refresh_records(window, cx);
+                                    })),
+                            )
+                            .child(
+                                Button::new("btn-mode-doan")
+                                    .label("Khám đoàn")
+                                    .small()
+                                    .when(is_group_mode, |b| b.primary())
+                                    .when(!is_group_mode, |b| b.secondary())
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.sidebar_exam_mode = "doan".into();
+                                        this.selected_record_id = None;
+                                        this.is_creating_new = false;
+                                        this.refresh_group_data(cx);
+                                        this.refresh_records(window, cx);
+                                    })),
+                            ),
+                    )
+                    .when(!is_group_mode && can_create, |el| {
                         el.child(
                             Button::new("btn-new-patient")
                                 .label("+ Tiếp nhận hồ sơ mới")
@@ -129,6 +176,21 @@ impl KskGpuiApp {
                                     this.start_new_patient(window, cx);
                                 })),
                         )
+                    })
+                    .when(is_group_mode, |el| {
+                        el.child(self.render_select_dropdown(
+                            "sidebar-contract-select",
+                            "Đoàn khám / Hợp đồng",
+                            &selected_contract_str,
+                            contract_opts,
+                            true,
+                            |this, val, window, cx| {
+                                this.sidebar_contract_id = val.parse::<i64>().ok();
+                                this.selected_record_id = None;
+                                this.refresh_records(window, cx);
+                            },
+                            cx,
+                        ))
                     })
                     .child(
                         Input::new(&self.sidebar_search)
@@ -206,7 +268,11 @@ impl KskGpuiApp {
                                 .p(px(16.0))
                                 .text_sm()
                                 .text_color(rgb(text_muted()))
-                                .child("Không có hồ sơ phù hợp bộ lọc."),
+                                .child(if is_group_mode && self.sidebar_contract_id.is_none() {
+                                    "Vui lòng chọn một đoàn khám từ danh sách trên."
+                                } else {
+                                    "Không có hồ sơ phù hợp bộ lọc."
+                                }),
                         )
                     })
                     .children(records.into_iter().map(|rec| {

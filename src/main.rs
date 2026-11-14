@@ -3,6 +3,7 @@
 mod config;
 mod crypto;
 mod db;
+mod group_import;
 mod gui;
 mod handlers;
 mod models;

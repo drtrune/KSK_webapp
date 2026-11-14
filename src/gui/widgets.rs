@@ -87,6 +87,7 @@ pub fn badge(label: impl Into<SharedString>, bg_hex: u32, fg_hex: u32) -> AnyEle
 pub fn role_label_vi(role: &str) -> &'static str {
     match role {
         "admin" => "Quản trị viên",
+        "business" => "Phòng kinh doanh",
         "reception" => "Tiếp nhận",
         "tiensu" => "Tiền sử",
         "bs_theluc" => "BS Thể lực",
