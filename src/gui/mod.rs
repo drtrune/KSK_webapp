@@ -49,6 +49,298 @@ pub fn payload_field(row: &KskRecordRow, key: &str) -> String {
         .unwrap_or_default()
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PendingNav {
+    Record(i64),
+    Tab(String),
+    Template(String),
+    ClinicalSubtab(String),
+    NewPatient,
+    Nav(String),
+    Logout,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SectionProgress {
+    Empty,
+    Partial,
+    Done,
+}
+
+pub fn format_ngay_vao_display(raw: &str) -> String {
+    let s = raw.trim();
+    if s.len() == 12 && s.chars().all(|c| c.is_ascii_digit()) {
+        format!("{}/{}/{} {}:{}", &s[6..8], &s[4..6], &s[0..4], &s[8..10], &s[10..12])
+    } else if s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()) {
+        format!("{}/{}/{}", &s[6..8], &s[4..6], &s[0..4])
+    } else {
+        s.to_string()
+    }
+}
+
+fn map_has_val(map: &Map<String, Value>, key: &str) -> bool {
+    map.get(key)
+        .and_then(|v| v.as_str())
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+}
+
+pub fn section_progress_from_map(map: &Map<String, Value>, section: &str) -> SectionProgress {
+    match section {
+        "reception" => {
+            if map_has_val(map, "HO_TEN") {
+                SectionProgress::Done
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        "history" => {
+            if map_has_val(map, "TSGD_MAC_BENH")
+                || map_has_val(map, "TSBT_MAC_BENH")
+                || map_has_val(map, "TIEN_SU_BAN_THAN_KHAC")
+            {
+                SectionProgress::Done
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        "physical" => {
+            if map_has_val(map, "BS_THE_LUC") {
+                SectionProgress::Done
+            } else if map_has_val(map, "CHIEU_CAO")
+                || map_has_val(map, "CAN_NANG")
+                || map_has_val(map, "HUYET_AP")
+            {
+                SectionProgress::Partial
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        "clin_noi" => {
+            if map_has_val(map, "BS_NOI") {
+                SectionProgress::Done
+            } else if crate::models::get_section_fields("clin_noi")
+                .iter()
+                .any(|f| map_has_val(map, f))
+            {
+                SectionProgress::Partial
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        "clin_ngoai" => {
+            if map_has_val(map, "BS_NGOAI") {
+                SectionProgress::Done
+            } else if map_has_val(map, "KET_QUA_KHAM_NGOAI_KHOA") || map_has_val(map, "KHAM_NGOAI_KHOA_PL") {
+                SectionProgress::Partial
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        "clin_dalieu" => {
+            if map_has_val(map, "BS_DA_LIEU") {
+                SectionProgress::Done
+            } else if map_has_val(map, "KET_QUA_KHAM_DA_LIEU") || map_has_val(map, "KHAM_DA_LIEU_PL") {
+                SectionProgress::Partial
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        "clin_san" => {
+            if map_has_val(map, "BS_SAN") {
+                SectionProgress::Done
+            } else if map_has_val(map, "KET_QUA_KHAM_SAN_PHU_KHOA") || map_has_val(map, "KHAM_SAN_PHU_KHOA_PL") {
+                SectionProgress::Partial
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        "clin_mat" => {
+            if map_has_val(map, "BS_MAT") {
+                SectionProgress::Done
+            } else if map_has_val(map, "KET_QUA_KHAM_MAT") || map_has_val(map, "KHAM_MAT_PL") {
+                SectionProgress::Partial
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        "clin_tmh" => {
+            if map_has_val(map, "BS_TMH") {
+                SectionProgress::Done
+            } else if map_has_val(map, "KET_QUA_KHAM_TMH") || map_has_val(map, "KHAM_TMH_PL") {
+                SectionProgress::Partial
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        "clin_rhm" => {
+            if map_has_val(map, "BS_RHM") {
+                SectionProgress::Done
+            } else if map_has_val(map, "KET_QUA_KHAM_RHM") || map_has_val(map, "KHAM_RHM_PL") {
+                SectionProgress::Partial
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        "paraclinical" => {
+            if map_has_val(map, "BS_CLS") {
+                SectionProgress::Done
+            } else if crate::models::get_section_fields("paraclinical")
+                .iter()
+                .any(|f| map_has_val(map, f))
+            {
+                SectionProgress::Partial
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        "conclusion" => {
+            if map_has_val(map, "BS_KET_LUAN") || map_has_val(map, "PHAN_LOAI_SK") {
+                SectionProgress::Done
+            } else if map_has_val(map, "KET_LUAN_BENH") {
+                SectionProgress::Partial
+            } else {
+                SectionProgress::Empty
+            }
+        }
+        _ => SectionProgress::Empty,
+    }
+}
+
+pub fn clinical_tab_progress(map: &Map<String, Value>) -> SectionProgress {
+    let subs = [
+        "clin_noi",
+        "clin_ngoai",
+        "clin_dalieu",
+        "clin_san",
+        "clin_mat",
+        "clin_tmh",
+        "clin_rhm",
+    ];
+    let mut done_cnt = 0usize;
+    let mut any_partial = false;
+    for s in subs {
+        match section_progress_from_map(map, s) {
+            SectionProgress::Done => done_cnt += 1,
+            SectionProgress::Partial => any_partial = true,
+            SectionProgress::Empty => {}
+        }
+    }
+    if done_cnt == subs.len() {
+        SectionProgress::Done
+    } else if done_cnt > 0 || any_partial {
+        SectionProgress::Partial
+    } else {
+        SectionProgress::Empty
+    }
+}
+
+pub fn record_progress_summary(rec: &KskRecordRow) -> (usize, usize, Vec<&'static str>) {
+    let map: Map<String, Value> = serde_json::from_str(&rec.payload_json).unwrap_or_default();
+    let tpls = crate::templates::parse_template_list(&rec.exam_templates);
+    if tpls.iter().any(|t| t == "TREN_18") {
+        let checks: &[(&str, &str)] = &[
+            ("history", "Tiền sử"),
+            ("physical", "Thể lực"),
+            ("clin_noi", "Nội"),
+            ("clin_ngoai", "Ngoại"),
+            ("clin_dalieu", "Da liễu"),
+            ("clin_san", "Sản"),
+            ("clin_mat", "Mắt"),
+            ("clin_tmh", "TMH"),
+            ("clin_rhm", "RHM"),
+            ("paraclinical", "CLS"),
+            ("conclusion", "Kết luận"),
+        ];
+        let mut done = 0usize;
+        let mut missing = Vec::new();
+        for (sec, lbl) in checks {
+            if section_progress_from_map(&map, sec) == SectionProgress::Done {
+                done += 1;
+            } else {
+                missing.push(*lbl);
+            }
+        }
+        (done, checks.len(), missing)
+    } else {
+        let primary = tpls.first().map(|s| s.as_str()).unwrap_or("MAU_GIAO");
+        let tabs = [
+            ("history", "Tiền sử"),
+            ("physical", "Thể lực"),
+            ("clinical", "Lâm sàng"),
+            ("conclusion", "Kết luận"),
+        ];
+        let mut done = 0usize;
+        let mut missing = Vec::new();
+        for (tab, lbl) in tabs {
+            let grps = crate::templates::get_template_groups(primary, tab);
+            let any_filled = grps.iter().any(|g| {
+                g.fields.iter().any(|f| {
+                    let k = crate::templates::namespaced_key(primary, f.key);
+                    map_has_val(&map, &k)
+                })
+            });
+            if any_filled {
+                done += 1;
+            } else {
+                missing.push(lbl);
+            }
+        }
+        (done, tabs.len(), missing)
+    }
+}
+
+pub fn next_exam_tab_in_order(active_tpl: &str, current_tab: &str, delta: isize) -> String {
+    let order: &[&str] = if active_tpl == "TREN_18" {
+        &["reception", "history", "physical", "clinical", "paraclinical", "conclusion"]
+    } else {
+        &["reception", "history", "physical", "clinical", "conclusion"]
+    };
+    let idx = order.iter().position(|t| *t == current_tab).unwrap_or(0);
+    let len = order.len() as isize;
+    let next = ((idx as isize + delta).rem_euclid(len)) as usize;
+    order[next].to_string()
+}
+
+pub fn next_section_for_user(
+    active_tpl: &str,
+    current_tab: &str,
+    current_subtab: &str,
+    user: &User,
+) -> Option<(String, Option<String>)> {
+    if active_tpl != "TREN_18" {
+        let order = ["reception", "history", "physical", "clinical", "conclusion"];
+        let idx = order.iter().position(|t| *t == current_tab)?;
+        return order.get(idx + 1).map(|t| ((*t).to_string(), None));
+    }
+
+    let flow: &[(&str, Option<&str>, &[&str])] = &[
+        ("reception", None, &["admin", "reception"]),
+        ("history", None, &["admin", "tiensu", "reception"]),
+        ("physical", None, &["admin", "bs_theluc"]),
+        ("clinical", Some("noi"), &["admin", "bs_noi"]),
+        ("clinical", Some("ngoai"), &["admin", "bs_ngoai"]),
+        ("clinical", Some("dalieu"), &["admin", "bs_dalieu"]),
+        ("clinical", Some("san"), &["admin", "bs_san"]),
+        ("clinical", Some("mat"), &["admin", "bs_mat"]),
+        ("clinical", Some("tmh"), &["admin", "bs_tmh"]),
+        ("clinical", Some("rhm"), &["admin", "bs_rhm"]),
+        ("paraclinical", None, &["admin", "bs_cls", "cls", "xetnghiem", "cdha"]),
+        ("conclusion", None, &["admin", "bs_ketluan"]),
+    ];
+
+    let cur_idx = flow.iter().position(|(t, sub, _)| {
+        *t == current_tab && (*t != "clinical" || *sub == Some(current_subtab))
+    })?;
+
+    for (tab, sub, roles) in flow.iter().skip(cur_idx + 1) {
+        if roles.iter().any(|r| user.has_role(r)) {
+            return Some(((*tab).to_string(), sub.map(|s| s.to_string())));
+        }
+    }
+    None
+}
+
 #[derive(Clone)]
 pub struct AppLaunchCtx {
     pub rt: tokio::runtime::Handle,
@@ -99,7 +391,16 @@ pub struct KskGpuiApp {
     pub open_dropdown: Option<String>,
     pub dropdown_search_input: Entity<InputState>,
     pub toast: Option<(String, bool)>,
+    pub toast_seq: u64,
     pub available_update: Option<UpdateManifest>,
+    pub focus_handle: gpui::FocusHandle,
+
+    // UX Safety & Workflow Modals
+    pub is_dirty: bool,
+    pub pending_nav: Option<PendingNav>,
+    pub confirm_lock_modal: bool,
+    pub lock_missing_sections: Vec<String>,
+    pub confirm_logout_modal: bool,
 
     // Sidebar
     pub sidebar_open: bool,
@@ -109,6 +410,7 @@ pub struct KskGpuiApp {
     pub sidebar_from_date: Entity<InputState>,
     pub sidebar_to_date: Entity<InputState>,
     pub sidebar_status_filter: Option<i64>,
+    pub sidebar_only_my_pending: bool,
     pub records: Vec<KskRecordRow>,
 
     // Current Exam Record
@@ -117,6 +419,8 @@ pub struct KskGpuiApp {
     pub current_record_status: i64,
     pub current_record_exam_mode: String,
     pub current_record_contract_id: Option<i64>,
+    pub current_record_templates: String,
+    pub active_record_template: String,
     pub editing_section: Option<String>,
     pub form_values: HashMap<String, String>,
     pub form_inputs: HashMap<String, Entity<InputState>>,
@@ -126,6 +430,10 @@ pub struct KskGpuiApp {
     // Clinical Disease Tree & Subtab
     pub active_clinical_subtab: String,
     pub active_noi_subtab: String,
+    pub active_custom_subtab: Option<usize>,
+    pub active_reception_subtab: Option<usize>,
+    pub registered_tab_inputs: Vec<String>,
+    pub pending_focus_first_input: bool,
     #[allow(dead_code)]
     pub clinical_tree_mode: bool,
     pub expanded_diseases: HashSet<String>,
@@ -171,6 +479,7 @@ pub struct KskGpuiApp {
     pub grp_cont_title: Entity<InputState>,
     pub grp_cont_date: Entity<InputState>,
     pub grp_cont_expected: Entity<InputState>,
+    pub grp_cont_templates: String,
     pub grp_cont_note: Entity<InputState>,
     pub grp_import_contract_id: Option<i64>,
     pub grp_import_file_path: String,
@@ -178,6 +487,7 @@ pub struct KskGpuiApp {
     pub grp_show_member_dialog: bool,
     pub grp_member_contract_id: Option<i64>,
     pub grp_member_edit_id: Option<i64>,
+    pub grp_mem_templates: String,
     pub grp_mem_ma_tn: Entity<InputState>,
     pub grp_mem_ma_yte: Entity<InputState>,
     pub grp_mem_ho_ten: Entity<InputState>,
@@ -207,6 +517,8 @@ pub struct KskGpuiApp {
     pub grp_bulk_doituong: String,
     pub grp_bulk_apply_lydo: bool,
     pub grp_bulk_lydo: Entity<InputState>,
+    pub grp_bulk_apply_templates: bool,
+    pub grp_bulk_templates: String,
 
     // Admin Tab
     pub admin_sub_tab: String,
@@ -531,7 +843,14 @@ impl KskGpuiApp {
             open_dropdown: None,
             dropdown_search_input,
             toast: None,
+            toast_seq: 0,
             available_update,
+            focus_handle: cx.focus_handle(),
+            is_dirty: false,
+            pending_nav: None,
+            confirm_lock_modal: false,
+            lock_missing_sections: Vec::new(),
+            confirm_logout_modal: false,
             sidebar_open: true,
             sidebar_exam_mode: "le".into(),
             sidebar_contract_id: None,
@@ -539,12 +858,15 @@ impl KskGpuiApp {
             sidebar_from_date,
             sidebar_to_date,
             sidebar_status_filter: None,
+            sidebar_only_my_pending: false,
             records: Vec::new(),
             selected_record_id: None,
             is_creating_new: false,
             current_record_status: 0,
             current_record_exam_mode: "le".into(),
             current_record_contract_id: None,
+            current_record_templates: "TREN_18".into(),
+            active_record_template: "TREN_18".into(),
             editing_section: None,
             form_values: HashMap::new(),
             form_inputs: HashMap::new(),
@@ -552,6 +874,10 @@ impl KskGpuiApp {
             form_subs: HashMap::new(),
             active_clinical_subtab: "noi".into(),
             active_noi_subtab: "CK_NOI_TIM_MACH".into(),
+            active_custom_subtab: None,
+            active_reception_subtab: None,
+            registered_tab_inputs: Vec::new(),
+            pending_focus_first_input: false,
             clinical_tree_mode: false,
             expanded_diseases: HashSet::new(),
             expand_all_diseases: false,
@@ -600,6 +926,7 @@ impl KskGpuiApp {
                     .default_value(chrono::Local::now().format("%d/%m/%Y").to_string())
             }),
             grp_cont_expected: cx.new(|cx| InputState::new(window, cx).placeholder("Số lượng dự kiến")),
+            grp_cont_templates: "TREN_18".into(),
             grp_cont_note: cx.new(|cx| InputState::new(window, cx).placeholder("Ghi chú hợp đồng")),
             grp_import_contract_id: None,
             grp_import_file_path: String::new(),
@@ -607,6 +934,7 @@ impl KskGpuiApp {
             grp_show_member_dialog: false,
             grp_member_contract_id: None,
             grp_member_edit_id: None,
+            grp_mem_templates: "TREN_18".into(),
             grp_mem_ma_tn: cx.new(|cx| InputState::new(window, cx).placeholder("VD: HD01-0001")),
             grp_mem_ma_yte: cx.new(|cx| InputState::new(window, cx).placeholder("Mã y tế")),
             grp_mem_ho_ten: cx.new(|cx| InputState::new(window, cx).placeholder("Họ và tên")),
@@ -636,6 +964,8 @@ impl KskGpuiApp {
             grp_bulk_doituong: "13".into(),
             grp_bulk_apply_lydo: true,
             grp_bulk_lydo: cx.new(|cx| InputState::new(window, cx).placeholder("Khám sức khỏe định kỳ")),
+            grp_bulk_apply_templates: false,
+            grp_bulk_templates: "TREN_18".into(),
             admin_sub_tab: "config".into(),
             adm_cskcb,
             adm_ma_cskcb,
@@ -729,10 +1059,16 @@ impl KskGpuiApp {
         let sub = cx.subscribe_in(&entity, window, move |this, ent, ev, window, cx| {
             if matches!(ev, InputEvent::Change) {
                 let val = ent.read(cx).value().to_string();
+                let prev = this.form_values.get(&key_owned).cloned().unwrap_or_default();
+                if val != prev && this.editing_section.is_some() && !key_owned.ends_with("CHI_SO_BMI") && key_owned != "BMI" {
+                    this.is_dirty = true;
+                }
                 this.form_values.insert(key_owned.clone(), val);
-                if key_owned == "CHIEU_CAO" || key_owned == "CAN_NANG" {
+                if key_owned.ends_with("CHIEU_CAO") || key_owned.ends_with("CHIEU_DAI") || key_owned.ends_with("CAN_NANG") {
                     this.recompute_bmi(window, cx);
                 }
+            } else if matches!(ev, InputEvent::PressEnter { secondary: false, .. }) {
+                this.focus_next_form_input(&key_owned, window, cx);
             }
         });
         self.form_subs.insert(key.to_string(), sub);
@@ -770,6 +1106,10 @@ impl KskGpuiApp {
         let sub = cx.subscribe_in(&entity, window, move |this, ent, ev, _window, cx| {
             if matches!(ev, InputEvent::Change) {
                 let val = ent.read(cx).value().to_string();
+                let prev = this.form_values.get(&key_owned).cloned().unwrap_or_default();
+                if val != prev && this.editing_section.is_some() {
+                    this.is_dirty = true;
+                }
                 this.form_values.insert(key_owned.clone(), val);
             }
         });
@@ -819,30 +1159,50 @@ impl KskGpuiApp {
     }
 
     fn recompute_bmi(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let h_cm = self
-            .get_form_val("CHIEU_CAO")
-            .replace(',', ".")
-            .parse::<f64>()
-            .unwrap_or(0.0);
-        let w_kg = self
-            .get_form_val("CAN_NANG")
-            .replace(',', ".")
-            .parse::<f64>()
-            .unwrap_or(0.0);
-        if h_cm > 30.0 && w_kg > 5.0 {
-            let h_m = h_cm / 100.0;
-            let bmi = w_kg / (h_m * h_m);
-            let bmi_str = format!("{:.1}", bmi);
-            self.form_values
-                .insert("CHI_SO_BMI".into(), bmi_str.clone());
-            if let Some(ent) = self.form_inputs.get("CHI_SO_BMI") {
-                ent.update(cx, |s, cx| s.set_value(bmi_str, window, cx));
+        for prefix in ["", "D6_", "U18_", "MG_", "HS_"] {
+            let cc_key = format!("{}CHIEU_CAO", prefix);
+            let cn_key = format!("{}CAN_NANG", prefix);
+            let bmi_key = format!("{}CHI_SO_BMI", prefix);
+            let h_cm = self
+                .get_form_val(&cc_key)
+                .replace(',', ".")
+                .parse::<f64>()
+                .unwrap_or(0.0);
+            let w_kg = self
+                .get_form_val(&cn_key)
+                .replace(',', ".")
+                .parse::<f64>()
+                .unwrap_or(0.0);
+            if h_cm > 30.0 && w_kg > 2.0 {
+                let h_m = h_cm / 100.0;
+                let bmi = w_kg / (h_m * h_m);
+                let bmi_str = format!("{:.1}", bmi);
+                self.form_values
+                    .insert(bmi_key.clone(), bmi_str.clone());
+                if let Some(ent) = self.form_inputs.get(&bmi_key) {
+                    ent.update(cx, |s, cx| s.set_value(bmi_str, window, cx));
+                }
             }
         }
     }
 
     pub fn show_toast(&mut self, msg: &str, is_err: bool, cx: &mut Context<Self>) {
+        self.toast_seq = self.toast_seq.wrapping_add(1);
+        let my_seq = self.toast_seq;
         self.toast = Some((msg.to_string(), is_err));
+        let secs = if is_err { 8 } else { 4 };
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(secs))
+                .await;
+            let _ = this.update(cx, |app, cx| {
+                if app.toast_seq == my_seq {
+                    app.toast = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
         cx.notify();
     }
 
@@ -902,6 +1262,14 @@ impl KskGpuiApp {
             rec.exam_mode.clone()
         };
         self.current_record_contract_id = rec.contract_id;
+        let tpls = crate::templates::parse_template_list(&rec.exam_templates);
+        self.current_record_templates = crate::templates::format_template_list(&tpls);
+        if !tpls.contains(&self.active_record_template) {
+            self.active_record_template = tpls
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "TREN_18".to_string());
+        }
         self.editing_section = None;
         self.form_values.clear();
         self.selected_classifications.clear();
@@ -979,7 +1347,7 @@ impl KskGpuiApp {
         let rec_opt = self.run_sync(async move {
             let pool = state.db.read().await;
             let mut r = sqlx::query_as::<_, KskRecordRow>(
-                "SELECT id, ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, payload_json, updated_by, created_at, updated_at FROM ksk_records WHERE id = ?",
+                "SELECT id, ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, exam_templates, payload_json, updated_by, created_at, updated_at FROM ksk_records WHERE id = ?",
             )
             .bind(record_id)
             .fetch_optional(&*pool)
@@ -994,19 +1362,404 @@ impl KskGpuiApp {
 
         if let Some(rec) = rec_opt {
             self.load_record_map(&rec);
+            self.is_dirty = false;
             self.form_inputs.clear();
             self.form_textareas.clear();
             self.form_subs.clear();
+            self.apply_role_landing();
+            self.auto_enter_edit_for_current_view(_window, cx);
             cx.notify();
         }
+    }
+
+    pub fn current_section_key_and_can_edit(&self) -> Option<(String, bool)> {
+        let user = self.current_user.as_ref()?;
+        if self.current_record_status == 2 {
+            return None;
+        }
+        let selected_tpls = crate::templates::parse_template_list(&self.current_record_templates);
+        let active_tpl = if selected_tpls.contains(&self.active_record_template) {
+            self.active_record_template.as_str()
+        } else {
+            selected_tpls.first().map(|s| s.as_str()).unwrap_or("TREN_18")
+        };
+
+        if self.active_exam_tab == "reception" {
+            return Some(("reception".to_string(), user.has_role("admin") || user.has_role("reception")));
+        }
+        if active_tpl != "TREN_18" {
+            let tab_key = if self.active_exam_tab == "paraclinical" {
+                "clinical"
+            } else {
+                self.active_exam_tab.as_str()
+            };
+            return Some((format!("tpl_{}_{}", active_tpl, tab_key), true));
+        }
+
+        match self.active_exam_tab.as_str() {
+            "history" => Some((
+                "history".to_string(),
+                user.has_role("admin") || user.has_role("tiensu") || user.has_role("reception"),
+            )),
+            "physical" => Some((
+                "physical".to_string(),
+                user.has_role("admin") || user.has_role("bs_theluc"),
+            )),
+            "clinical" => match self.active_clinical_subtab.as_str() {
+                "noi" => Some(("clin_noi".to_string(), user.has_role("admin") || user.has_role("bs_noi"))),
+                "ngoai" => Some(("clin_ngoai".to_string(), user.has_role("admin") || user.has_role("bs_ngoai"))),
+                "dalieu" => Some(("clin_dalieu".to_string(), user.has_role("admin") || user.has_role("bs_dalieu"))),
+                "san" => Some(("clin_san".to_string(), user.has_role("admin") || user.has_role("bs_san"))),
+                "mat" => Some(("clin_mat".to_string(), user.has_role("admin") || user.has_role("bs_mat"))),
+                "tmh" => Some(("clin_tmh".to_string(), user.has_role("admin") || user.has_role("bs_tmh"))),
+                "rhm" => Some(("clin_rhm".to_string(), user.has_role("admin") || user.has_role("bs_rhm"))),
+                _ => None,
+            },
+            "paraclinical" => Some((
+                "paraclinical".to_string(),
+                user.has_role("admin")
+                    || user.has_role("bs_cls")
+                    || user.has_role("cls")
+                    || user.has_role("xetnghiem")
+                    || user.has_role("cdha"),
+            )),
+            "conclusion" => Some((
+                "conclusion".to_string(),
+                user.has_role("admin") || user.has_role("bs_ketluan"),
+            )),
+            _ => None,
+        }
+    }
+
+    pub fn apply_role_landing(&mut self) {
+        let Some(user) = self.current_user.as_ref() else {
+            return;
+        };
+        if user.has_role("admin") {
+            return;
+        }
+        let selected_tpls = crate::templates::parse_template_list(&self.current_record_templates);
+        let active_tpl = if selected_tpls.contains(&self.active_record_template) {
+            self.active_record_template.as_str()
+        } else {
+            selected_tpls.first().map(|s| s.as_str()).unwrap_or("TREN_18")
+        };
+
+        if active_tpl != "TREN_18" {
+            if user.has_role("bs_ketluan") {
+                self.active_exam_tab = "conclusion".to_string();
+            } else if user.has_role("bs_noi")
+                || user.has_role("bs_ngoai")
+                || user.has_role("bs_dalieu")
+                || user.has_role("bs_san")
+                || user.has_role("bs_mat")
+                || user.has_role("bs_tmh")
+                || user.has_role("bs_rhm")
+                || user.has_role("bs_cls")
+                || user.has_role("cls")
+                || user.has_role("xetnghiem")
+                || user.has_role("cdha")
+            {
+                self.active_exam_tab = "clinical".to_string();
+            } else if user.has_role("bs_theluc") {
+                self.active_exam_tab = "physical".to_string();
+            } else if user.has_role("tiensu") {
+                self.active_exam_tab = "history".to_string();
+            } else if user.has_role("reception") {
+                self.active_exam_tab = "reception".to_string();
+            }
+            return;
+        }
+
+        if user.has_role("bs_ketluan") {
+            self.active_exam_tab = "conclusion".to_string();
+        } else if user.has_role("bs_cls")
+            || user.has_role("cls")
+            || user.has_role("xetnghiem")
+            || user.has_role("cdha")
+        {
+            self.active_exam_tab = "paraclinical".to_string();
+        } else if user.has_role("bs_noi") {
+            self.active_exam_tab = "clinical".to_string();
+            self.active_clinical_subtab = "noi".to_string();
+        } else if user.has_role("bs_ngoai") {
+            self.active_exam_tab = "clinical".to_string();
+            self.active_clinical_subtab = "ngoai".to_string();
+        } else if user.has_role("bs_dalieu") {
+            self.active_exam_tab = "clinical".to_string();
+            self.active_clinical_subtab = "dalieu".to_string();
+        } else if user.has_role("bs_san") {
+            self.active_exam_tab = "clinical".to_string();
+            self.active_clinical_subtab = "san".to_string();
+        } else if user.has_role("bs_mat") {
+            self.active_exam_tab = "clinical".to_string();
+            self.active_clinical_subtab = "mat".to_string();
+        } else if user.has_role("bs_tmh") {
+            self.active_exam_tab = "clinical".to_string();
+            self.active_clinical_subtab = "tmh".to_string();
+        } else if user.has_role("bs_rhm") {
+            self.active_exam_tab = "clinical".to_string();
+            self.active_clinical_subtab = "rhm".to_string();
+        } else if user.has_role("bs_theluc") {
+            self.active_exam_tab = "physical".to_string();
+        } else if user.has_role("tiensu") {
+            self.active_exam_tab = "history".to_string();
+        } else if user.has_role("reception") {
+            self.active_exam_tab = "reception".to_string();
+        }
+    }
+
+    pub fn auto_enter_edit_for_current_view(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected_record_id.is_none() && !self.is_creating_new {
+            return;
+        }
+        if let Some((sec, true)) = self.current_section_key_and_can_edit() {
+            self.enter_edit_section(&sec, window, cx);
+            self.is_dirty = false;
+            self.pending_focus_first_input = true;
+        } else {
+            self.editing_section = None;
+            self.pending_focus_first_input = false;
+        }
+    }
+
+    pub fn guard_unsaved(&mut self, nav: PendingNav, window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_dirty && self.editing_section.is_some() {
+            self.pending_nav = Some(nav);
+            self.open_dropdown = None;
+            cx.notify();
+        } else {
+            self.perform_nav(nav, window, cx);
+        }
+    }
+
+    pub fn perform_nav(&mut self, nav: PendingNav, window: &mut Window, cx: &mut Context<Self>) {
+        self.pending_nav = None;
+        self.open_dropdown = None;
+        match nav {
+            PendingNav::Record(rid) => {
+                self.active_custom_subtab = None;
+                self.active_reception_subtab = None;
+                self.load_record_into_form(rid, window, cx);
+            }
+            PendingNav::Tab(tab) => {
+                self.active_exam_tab = tab;
+                self.active_custom_subtab = None;
+                self.active_reception_subtab = None;
+                self.is_dirty = false;
+                self.auto_enter_edit_for_current_view(window, cx);
+                cx.notify();
+            }
+            PendingNav::Template(code) => {
+                self.active_record_template = code;
+                self.active_custom_subtab = None;
+                if self.active_record_template != "TREN_18" && self.active_exam_tab == "paraclinical"
+                {
+                    self.active_exam_tab = "clinical".to_string();
+                }
+                self.is_dirty = false;
+                self.auto_enter_edit_for_current_view(window, cx);
+                cx.notify();
+            }
+            PendingNav::ClinicalSubtab(sub) => {
+                self.active_clinical_subtab = sub;
+                self.is_dirty = false;
+                self.auto_enter_edit_for_current_view(window, cx);
+                cx.notify();
+            }
+            PendingNav::NewPatient => {
+                self.active_custom_subtab = None;
+                self.active_reception_subtab = None;
+                self.start_new_patient(window, cx);
+                self.pending_focus_first_input = true;
+            }
+            PendingNav::Nav(nav_key) => {
+                self.active_nav = nav_key.clone();
+                if nav_key == "exam" {
+                    self.refresh_group_data(cx);
+                    self.refresh_records(window, cx);
+                } else if nav_key == "group" {
+                    self.refresh_group_data(cx);
+                } else if nav_key == "export" {
+                    self.refresh_export_rows(cx);
+                } else {
+                    cx.notify();
+                }
+            }
+            PendingNav::Logout => {
+                self.current_user = None;
+                self.selected_record_id = None;
+                self.is_creating_new = false;
+                self.is_dirty = false;
+                self.editing_section = None;
+                self.records.clear();
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn focus_first_form_input(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(first_key) = self.registered_tab_inputs.first() {
+            if let Some(inp) = self.form_inputs.get(first_key) {
+                inp.update(cx, |s, cx| s.focus(window, cx));
+            }
+        }
+    }
+
+    pub fn focus_next_form_input(
+        &self,
+        current_key: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(idx) = self
+            .registered_tab_inputs
+            .iter()
+            .position(|k| k == current_key)
+        {
+            if let Some(next_key) = self.registered_tab_inputs.get(idx + 1) {
+                if let Some(inp) = self.form_inputs.get(next_key) {
+                    inp.update(cx, |s, cx| s.focus(window, cx));
+                }
+            }
+        }
+    }
+
+    pub fn cycle_exam_tab(&mut self, delta: isize, window: &mut Window, cx: &mut Context<Self>) {
+        let selected_tpls = crate::templates::parse_template_list(&self.current_record_templates);
+        let active_tpl = if selected_tpls.contains(&self.active_record_template) {
+            self.active_record_template.as_str()
+        } else {
+            selected_tpls.first().map(|s| s.as_str()).unwrap_or("TREN_18")
+        };
+        let next = next_exam_tab_in_order(active_tpl, &self.active_exam_tab, delta);
+        self.guard_unsaved(PendingNav::Tab(next), window, cx);
+    }
+
+    pub fn cycle_subtab(&mut self, delta: isize, window: &mut Window, cx: &mut Context<Self>) {
+        let selected_tpls = crate::templates::parse_template_list(&self.current_record_templates);
+        let active_tpl = if selected_tpls.contains(&self.active_record_template) {
+            self.active_record_template.as_str()
+        } else {
+            selected_tpls.first().map(|s| s.as_str()).unwrap_or("TREN_18")
+        };
+
+        if self.active_exam_tab == "reception" {
+            let total = 4isize; // None (All), 0, 1, 2
+            let cur: isize = match self.active_reception_subtab {
+                None => 0,
+                Some(i) => (i as isize + 1).clamp(1, 3),
+            };
+            let nxt = (cur + delta).rem_euclid(total);
+            self.active_reception_subtab = if nxt == 0 { None } else { Some((nxt - 1) as usize) };
+            self.pending_focus_first_input = true;
+            cx.notify();
+            return;
+        }
+
+        if active_tpl == "TREN_18" && self.active_exam_tab == "clinical" {
+            let subs = ["noi", "ngoai", "dalieu", "san", "mat", "tmh", "rhm", "tree"];
+            let cur = subs
+                .iter()
+                .position(|s| *s == self.active_clinical_subtab)
+                .unwrap_or(0) as isize;
+            let nxt = (cur + delta).rem_euclid(subs.len() as isize) as usize;
+            self.guard_unsaved(PendingNav::ClinicalSubtab(subs[nxt].to_string()), window, cx);
+            return;
+        }
+
+        if active_tpl != "TREN_18" {
+            let tab_key = if self.active_exam_tab == "paraclinical" {
+                "clinical"
+            } else {
+                self.active_exam_tab.as_str()
+            };
+            let groups = crate::templates::get_template_groups(active_tpl, tab_key);
+            if groups.len() >= 2 {
+                let total = (groups.len() + 1) as isize;
+                let cur: isize = match self.active_custom_subtab {
+                    None => 0,
+                    Some(i) => (i as isize + 1).min(total - 1),
+                };
+                let nxt = (cur + delta).rem_euclid(total);
+                self.active_custom_subtab = if nxt == 0 { None } else { Some((nxt - 1) as usize) };
+                self.pending_focus_first_input = true;
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn navigate_adjacent_record(
+        &mut self,
+        delta: isize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.records.is_empty() {
+            return;
+        }
+        let target_id = if let Some(cur) = self.selected_record_id {
+            if let Some(pos) = self.records.iter().position(|r| r.id == cur) {
+                let next_idx = (pos as isize + delta).clamp(0, (self.records.len() - 1) as isize) as usize;
+                if next_idx == pos {
+                    return;
+                }
+                self.records[next_idx].id
+            } else {
+                self.records[0].id
+            }
+        } else {
+            self.records[0].id
+        };
+        self.guard_unsaved(PendingNav::Record(target_id), window, cx);
+    }
+
+    pub fn request_lock_record(&mut self, cx: &mut Context<Self>) {
+        if self.selected_record_id.is_none() || self.current_record_status == 2 {
+            return;
+        }
+        let mut map = Map::new();
+        for (k, v) in &self.form_values {
+            map.insert(k.clone(), Value::String(v.clone()));
+        }
+        let payload_json = serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string());
+        let dummy = KskRecordRow {
+            id: self.selected_record_id.unwrap_or(0),
+            ma_tiep_nhan: self.get_form_val("MA_TIEP_NHAN"),
+            ma_y_te: self.get_form_val("MA_Y_TE"),
+            ho_ten: self.get_form_val("HO_TEN"),
+            gioi_tinh: self.get_form_val("GIOI_TINH"),
+            ngay_sinh: self.get_form_val("NGAY_SINH"),
+            so_cccd: self.get_form_val("SO_CCCD"),
+            ngay_vao: self.get_form_val("NGAY_VAO"),
+            status: self.current_record_status,
+            exam_mode: self.current_record_exam_mode.clone(),
+            contract_id: self.current_record_contract_id,
+            exam_templates: self.current_record_templates.clone(),
+            payload_json,
+            updated_by: String::new(),
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+        let (_, _, missing) = record_progress_summary(&dummy);
+        self.lock_missing_sections = missing.into_iter().map(|s| s.to_string()).collect();
+        self.confirm_lock_modal = true;
+        cx.notify();
     }
 
     pub fn start_new_patient(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.selected_record_id = None;
         self.is_creating_new = true;
+        self.is_dirty = false;
         self.current_record_status = 0;
         self.current_record_exam_mode = "le".into();
         self.current_record_contract_id = None;
+        self.current_record_templates = "TREN_18".into();
+        self.active_record_template = "TREN_18".into();
         self.editing_section = Some("reception".into());
         self.active_exam_tab = "reception".into();
         self.form_values.clear();
@@ -1051,9 +1804,9 @@ impl KskGpuiApp {
         section: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) {
+    ) -> bool {
         let Some(user) = self.current_user.clone() else {
-            return;
+            return false;
         };
         if let Some(doc_field) = Self::section_doctor_field(section) {
             if self.get_form_val(doc_field).trim().is_empty() && !user.full_name.trim().is_empty()
@@ -1088,6 +1841,10 @@ impl KskGpuiApp {
         let sec_owned = section.to_string();
 
         let updated_by = user.username.clone();
+        let exam_templates_val = {
+            let list = crate::templates::parse_template_list(&self.current_record_templates);
+            crate::templates::format_template_list(&list)
+        };
         let mk = self.master_key;
         let res: Result<i64, String> = self.run_sync(async move {
             let pool = state.db.read().await;
@@ -1129,7 +1886,7 @@ impl KskGpuiApp {
                         &json_str,
                     );
                 sqlx::query(
-                    "UPDATE ksk_records SET ma_tiep_nhan = ?, ma_y_te = ?, ho_ten = ?, gioi_tinh = ?, ngay_sinh = ?, so_cccd = ?, ngay_vao = ?, payload_json = ?, updated_by = ?, updated_at = datetime('now','localtime') WHERE id = ?",
+                    "UPDATE ksk_records SET ma_tiep_nhan = ?, ma_y_te = ?, ho_ten = ?, gioi_tinh = ?, ngay_sinh = ?, so_cccd = ?, ngay_vao = ?, exam_templates = ?, payload_json = ?, updated_by = ?, updated_at = datetime('now','localtime') WHERE id = ?",
                 )
                 .bind(&ma_tn)
                 .bind(&ma_y_te)
@@ -1138,6 +1895,7 @@ impl KskGpuiApp {
                 .bind(&enc_ngay_sinh)
                 .bind(&enc_so_cccd)
                 .bind(&ngay_vao)
+                .bind(&exam_templates_val)
                 .bind(&enc_json_str)
                 .bind(&updated_by)
                 .bind(rid)
@@ -1171,7 +1929,7 @@ impl KskGpuiApp {
                         &json_str,
                     );
                 let r = sqlx::query(
-                    "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'le', NULL, ?, ?)",
+                    "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, exam_templates, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'le', NULL, ?, ?, ?)",
                 )
                 .bind(&ma_tn)
                 .bind(&ma_y_te)
@@ -1180,6 +1938,7 @@ impl KskGpuiApp {
                 .bind(&enc_ngay_sinh)
                 .bind(&enc_so_cccd)
                 .bind(&ngay_vao)
+                .bind(&exam_templates_val)
                 .bind(&enc_json_str)
                 .bind(&updated_by)
                 .execute(&*pool)
@@ -1192,13 +1951,50 @@ impl KskGpuiApp {
         match res {
             Ok(rid) => {
                 self.editing_section = None;
+                self.is_dirty = false;
                 self.is_creating_new = false;
                 self.refresh_records(window, cx);
                 self.load_record_into_form(rid, window, cx);
                 self.show_toast("Đã lưu thông tin thành công!", false, cx);
+                true
             }
             Err(e) => {
                 self.show_toast(&format!("Lỗi lưu dữ liệu: {}", e), true, cx);
+                false
+            }
+        }
+    }
+
+    pub fn save_and_next_section(
+        &mut self,
+        section: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let cur_tab = self.active_exam_tab.clone();
+        let cur_sub = self.active_clinical_subtab.clone();
+        let selected_tpls = crate::templates::parse_template_list(&self.current_record_templates);
+        let active_tpl = if selected_tpls.contains(&self.active_record_template) {
+            self.active_record_template.clone()
+        } else {
+            selected_tpls
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "TREN_18".to_string())
+        };
+        if !self.save_section(section, window, cx) {
+            return;
+        }
+        if let Some(user) = self.current_user.clone() {
+            if let Some((next_tab, next_sub)) =
+                next_section_for_user(&active_tpl, &cur_tab, &cur_sub, &user)
+            {
+                self.active_exam_tab = next_tab;
+                if let Some(sub) = next_sub {
+                    self.active_clinical_subtab = sub;
+                }
+                self.auto_enter_edit_for_current_view(window, cx);
+                cx.notify();
             }
         }
     }
@@ -1226,16 +2022,22 @@ impl KskGpuiApp {
             Ok(_) => {
                 self.current_record_status = new_status;
                 self.editing_section = None;
+                self.is_dirty = false;
                 self.refresh_records(window, cx);
-                self.show_toast(
-                    if new_status == 2 {
-                        "Đã ký khóa hồ sơ!"
-                    } else {
-                        "Đã mở khóa hồ sơ!"
-                    },
-                    false,
-                    cx,
-                );
+                if new_status == 2 {
+                    self.show_toast("Đã ký khóa hồ sơ!", false, cx);
+                    if let Some(next_rec) = self
+                        .records
+                        .iter()
+                        .find(|r| r.id != rid && r.status == 0)
+                        .cloned()
+                    {
+                        self.load_record_into_form(next_rec.id, window, cx);
+                    }
+                } else {
+                    self.show_toast("Đã mở khóa hồ sơ!", false, cx);
+                    self.auto_enter_edit_for_current_view(window, cx);
+                }
             }
             Err(e) => self.show_toast(&format!("Lỗi cập nhật trạng thái: {}", e), true, cx),
         }
@@ -2871,7 +3673,102 @@ impl Render for KskGpuiApp {
                 .into_any_element(),
         };
 
+        let brand_title = if self.cfg.ten_cskcb.trim().is_empty() {
+            "Hệ thống KSK".to_string()
+        } else {
+            self.cfg.ten_cskcb.clone()
+        };
+
         div()
+            .id("ksk-app-root")
+            .track_focus(&self.focus_handle)
+            .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| {
+                let ks = &ev.keystroke;
+                let key = ks.key.as_str();
+                if ks.modifiers.control && !ks.modifiers.alt && key == "tab" {
+                    if this.active_nav == "exam" && (this.selected_record_id.is_some() || this.is_creating_new) {
+                        this.cycle_exam_tab(if ks.modifiers.shift { -1 } else { 1 }, window, cx);
+                    }
+                } else if ks.modifiers.control && !ks.modifiers.alt && !ks.modifiers.shift {
+                    match key {
+                        "s" | "S" => {
+                            if let Some((sec, true)) = this.current_section_key_and_can_edit() {
+                                if this.editing_section.as_deref() == Some(sec.as_str()) {
+                                    this.save_section(&sec, window, cx);
+                                }
+                            }
+                        }
+                        "enter" => {
+                            if let Some((sec, true)) = this.current_section_key_and_can_edit() {
+                                if this.editing_section.as_deref() == Some(sec.as_str()) {
+                                    this.save_and_next_section(&sec, window, cx);
+                                }
+                            }
+                        }
+                        "n" | "N" => {
+                            if this.has_any_role(&["admin", "reception"]) && this.active_nav == "exam" {
+                                this.guard_unsaved(PendingNav::NewPatient, window, cx);
+                            }
+                        }
+                        "f" | "F" => {
+                            if this.active_nav == "exam" {
+                                this.sidebar_open = true;
+                                this.sidebar_search.update(cx, |s, cx| {
+                                    s.focus(window, cx);
+                                });
+                            }
+                        }
+                        "p" | "P" => {
+                            if this.active_nav == "exam" && this.selected_record_id.is_some() {
+                                let is_rec = this.active_exam_tab == "reception";
+                                this.print_record_html(is_rec, cx);
+                            }
+                        }
+                        _ => {}
+                    }
+                } else if ks.modifiers.alt && !ks.modifiers.control {
+                    if this.active_nav == "exam" && (this.selected_record_id.is_some() || this.is_creating_new) {
+                        let tab_opt = match key {
+                            "1" => Some("reception"),
+                            "2" => Some("history"),
+                            "3" => Some("physical"),
+                            "4" => Some("clinical"),
+                            "5" => Some(if this.active_record_template == "TREN_18" { "paraclinical" } else { "conclusion" }),
+                            "6" if this.active_record_template == "TREN_18" => Some("conclusion"),
+                            _ => None,
+                        };
+                        if let Some(t) = tab_opt {
+                            this.guard_unsaved(PendingNav::Tab(t.to_string()), window, cx);
+                        } else if key == "left" {
+                            this.navigate_adjacent_record(-1, window, cx);
+                        } else if key == "right" {
+                            this.navigate_adjacent_record(1, window, cx);
+                        } else if key == "[" {
+                            this.cycle_subtab(-1, window, cx);
+                        } else if key == "]" {
+                            this.cycle_subtab(1, window, cx);
+                        }
+                    }
+                } else if key == "escape" {
+                    if this.pending_nav.is_some() {
+                        this.pending_nav = None;
+                        cx.notify();
+                    } else if this.confirm_lock_modal {
+                        this.confirm_lock_modal = false;
+                        cx.notify();
+                    } else if this.confirm_logout_modal {
+                        this.confirm_logout_modal = false;
+                        cx.notify();
+                    } else if this.open_dropdown.is_some() {
+                        this.open_dropdown = None;
+                        cx.notify();
+                    } else if this.editing_section.is_some() && this.is_dirty {
+                        if let Some(id) = this.selected_record_id {
+                            this.load_record_into_form(id, window, cx);
+                        }
+                    }
+                }
+            }))
             .relative()
             .size_full()
             .bg(rgb(bg_app()))
@@ -2904,10 +3801,12 @@ impl Render for KskGpuiApp {
                             )
                             .child(
                                 div()
+                                    .max_w(px(220.0))
+                                    .truncate()
                                     .text_base()
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(rgb(PRIMARY_COL))
-                                    .child("KSK Native"),
+                                    .child(brand_title),
                             )
                             .child(
                                 Button::new("nav-exam")
@@ -2916,9 +3815,7 @@ impl Render for KskGpuiApp {
                                     .when(active_nav == "exam", |b| b.primary())
                                     .when(active_nav != "exam", |b| b.secondary())
                                     .on_click(cx.listener(|this, _, window, cx| {
-                                        this.active_nav = "exam".into();
-                                        this.refresh_group_data(cx);
-                                        this.refresh_records(window, cx);
+                                        this.guard_unsaved(PendingNav::Nav("exam".into()), window, cx);
                                     })),
                             )
                             .when(can_group, |el| {
@@ -2928,22 +3825,20 @@ impl Render for KskGpuiApp {
                                         .small()
                                         .when(active_nav == "group", |b| b.primary())
                                         .when(active_nav != "group", |b| b.secondary())
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.active_nav = "group".into();
-                                            this.refresh_group_data(cx);
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.guard_unsaved(PendingNav::Nav("group".into()), window, cx);
                                         })),
                                 )
                             })
                             .when(can_export, |el| {
                                 el.child(
                                     Button::new("nav-export")
-                                        .label("Xuất CSV 123 cột")
+                                        .label("Báo cáo & Xuất dữ liệu")
                                         .small()
                                         .when(active_nav == "export", |b| b.primary())
                                         .when(active_nav != "export", |b| b.secondary())
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.active_nav = "export".into();
-                                            this.refresh_export_rows(cx);
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.guard_unsaved(PendingNav::Nav("export".into()), window, cx);
                                         })),
                                 )
                             })
@@ -2954,9 +3849,8 @@ impl Render for KskGpuiApp {
                                         .small()
                                         .when(active_nav == "admin", |b| b.primary())
                                         .when(active_nav != "admin", |b| b.secondary())
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.active_nav = "admin".into();
-                                            cx.notify();
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.guard_unsaved(PendingNav::Nav("admin".into()), window, cx);
                                         })),
                                 )
                             }),
@@ -3002,9 +3896,7 @@ impl Render for KskGpuiApp {
                                     .small()
                                     .secondary()
                                     .on_click(cx.listener(|this, _, _, cx| {
-                                        this.current_user = None;
-                                        this.selected_record_id = None;
-                                        this.records.clear();
+                                        this.confirm_logout_modal = true;
                                         cx.notify();
                                     })),
                             ),
@@ -3227,6 +4119,275 @@ impl Render for KskGpuiApp {
                         ),
                 )
             })
+            .when(self.pending_nav.is_some() || self.confirm_lock_modal || self.confirm_logout_modal, |el| {
+                el.child(self.render_ux_modals(window, cx))
+            })
             .into_any_element()
+    }
+}
+
+impl KskGpuiApp {
+    fn render_ux_modals(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        if let Some(pending) = self.pending_nav.clone() {
+            let p_save = pending.clone();
+            let p_discard = pending;
+            let sec_opt = self.editing_section.clone();
+            return div()
+                .id("ux-unsaved-backdrop")
+                .absolute()
+                .inset_0()
+                .bg(gpui::hsla(0., 0., 0., 0.45))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    card_box()
+                        .w(px(440.0))
+                        .child(
+                            div()
+                                .text_base()
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(rgb(WARN_COL))
+                                .child("Có thay đổi chưa lưu"),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(rgb(text_main()))
+                                .child("Bạn đã chỉnh sửa dữ liệu ở mục hiện tại nhưng chưa bấm Lưu. Bạn muốn xử lý thế nào?"),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .justify_end()
+                                .gap(px(8.0))
+                                .child(
+                                    Button::new("btn-unsaved-stay")
+                                        .label("Ở lại")
+                                        .small()
+                                        .secondary()
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.pending_nav = None;
+                                            cx.notify();
+                                        })),
+                                )
+                                .child(
+                                    Button::new("btn-unsaved-discard")
+                                        .label("Bỏ thay đổi")
+                                        .small()
+                                        .secondary()
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            this.is_dirty = false;
+                                            this.perform_nav(p_discard.clone(), window, cx);
+                                        })),
+                                )
+                                .child(
+                                    Button::new("btn-unsaved-save")
+                                        .label("Lưu rồi chuyển")
+                                        .small()
+                                        .primary()
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            if let Some(sec) = sec_opt.as_deref() {
+                                                if this.save_section(sec, window, cx) {
+                                                    this.perform_nav(p_save.clone(), window, cx);
+                                                }
+                                            } else {
+                                                this.perform_nav(p_save.clone(), window, cx);
+                                            }
+                                        })),
+                                ),
+                        ),
+                )
+                .into_any_element();
+        }
+
+        if self.confirm_lock_modal {
+            let missing = self.lock_missing_sections.clone();
+            let has_missing = !missing.is_empty();
+            return div()
+                .id("ux-lock-backdrop")
+                .absolute()
+                .inset_0()
+                .bg(gpui::hsla(0., 0., 0., 0.45))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    card_box()
+                        .w(px(460.0))
+                        .child(
+                            div()
+                                .text_base()
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(rgb(if has_missing { DANGER_COL } else { PRIMARY_COL }))
+                                .child(if has_missing {
+                                    "Cảnh báo: Hồ sơ còn mục chưa hoàn tất"
+                                } else {
+                                    "Xác nhận ký khóa hồ sơ"
+                                }),
+                        )
+                        .when(has_missing, |el| {
+                            el.child(
+                                div()
+                                    .p(px(10.0))
+                                    .rounded(px(6.0))
+                                    .bg(rgb(DANGER_BG))
+                                    .text_xs()
+                                    .text_color(rgb(DANGER_COL))
+                                    .child(format!("Các mục còn trống / chưa có bác sĩ ký: {}", missing.join(", "))),
+                            )
+                        })
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(rgb(text_main()))
+                                .child("Sau khi ký khóa, hồ sơ sẽ chuyển sang chế độ chỉ xem (chỉ Admin mới mở khóa được). Bạn chắc chắn muốn ký khóa?"),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .justify_end()
+                                .gap(px(8.0))
+                                .child(
+                                    Button::new("btn-lock-cancel")
+                                        .label("Quay lại kiểm tra")
+                                        .small()
+                                        .secondary()
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.confirm_lock_modal = false;
+                                            cx.notify();
+                                        })),
+                                )
+                                .child(
+                                    Button::new("btn-lock-confirm")
+                                        .label("Xác nhận ký khóa")
+                                        .small()
+                                        .primary()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.confirm_lock_modal = false;
+                                            this.set_record_status(2, window, cx);
+                                        })),
+                                ),
+                        ),
+                )
+                .into_any_element();
+        }
+
+        div()
+            .id("ux-logout-backdrop")
+            .absolute()
+            .inset_0()
+            .bg(gpui::hsla(0., 0., 0., 0.45))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                card_box()
+                    .w(px(380.0))
+                    .child(
+                        div()
+                            .text_base()
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .child("Xác nhận đăng xuất"),
+                    )
+                    .when(self.is_dirty, |el| {
+                        el.child(
+                            div()
+                                .p(px(8.0))
+                                .rounded(px(6.0))
+                                .bg(rgb(WARN_BG))
+                                .text_xs()
+                                .text_color(rgb(WARN_COL))
+                                .child("Lưu ý: Bạn đang có thay đổi chưa lưu!"),
+                        )
+                    })
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(text_main()))
+                            .child("Bạn có chắc muốn đăng xuất khỏi tài khoản hiện tại?"),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .justify_end()
+                            .gap(px(8.0))
+                            .child(
+                                Button::new("btn-logout-cancel")
+                                    .label("Ở lại")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.confirm_logout_modal = false;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("btn-logout-ok")
+                                    .label("Đăng xuất")
+                                    .small()
+                                    .primary()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.confirm_logout_modal = false;
+                                        this.perform_nav(PendingNav::Logout, window, cx);
+                                    })),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_ngay_vao_and_progress_helpers() {
+        assert_eq!(format_ngay_vao_display("202611151230"), "15/11/2026 12:30");
+        assert_eq!(format_ngay_vao_display("20261115"), "15/11/2026");
+        assert_eq!(format_ngay_vao_display("15/11/2026"), "15/11/2026");
+
+        let mut map = Map::new();
+        assert_eq!(section_progress_from_map(&map, "physical"), SectionProgress::Empty);
+        map.insert("CHIEU_CAO".into(), Value::String("170".into()));
+        assert_eq!(section_progress_from_map(&map, "physical"), SectionProgress::Partial);
+        map.insert("BS_THE_LUC".into(), Value::String("BS. A".into()));
+        assert_eq!(section_progress_from_map(&map, "physical"), SectionProgress::Done);
+
+        let user_mat = User {
+            id: 1,
+            username: "mat".into(),
+            password_hash: String::new(),
+            full_name: "BS Mat".into(),
+            role: "bs_mat".into(),
+            is_locked: 0,
+            created_at: String::new(),
+        };
+        assert_eq!(next_section_for_user("TREN_18", "clinical", "mat", &user_mat), None);
+
+        let user_admin = User {
+            id: 2,
+            username: "admin".into(),
+            password_hash: String::new(),
+            full_name: "Admin".into(),
+            role: "admin".into(),
+            is_locked: 0,
+            created_at: String::new(),
+        };
+        assert_eq!(
+            next_section_for_user("TREN_18", "physical", "", &user_admin),
+            Some(("clinical".to_string(), Some("noi".to_string())))
+        );
+        assert_eq!(
+            next_section_for_user("MAU_GIAO", "history", "", &user_admin),
+            Some(("physical".to_string(), None))
+        );
+        assert_eq!(next_exam_tab_in_order("TREN_18", "conclusion", 1), "reception");
+        assert_eq!(next_exam_tab_in_order("TREN_18", "reception", -1), "conclusion");
+        assert_eq!(next_exam_tab_in_order("MAU_GIAO", "clinical", 1), "conclusion");
     }
 }

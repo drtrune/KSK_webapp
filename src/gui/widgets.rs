@@ -107,16 +107,18 @@ pub fn role_label_vi(role: &str) -> &'static str {
 pub fn field_label(text: impl Into<SharedString>, required: bool) -> AnyElement {
     let label: SharedString = text.into();
     div()
+        .w_full()
+        .min_w_0()
         .flex()
         .flex_row()
-        .items_center()
+        .items_start()
         .gap(px(3.0))
         .text_xs()
         .font_weight(gpui::FontWeight::MEDIUM)
         .text_color(rgb(text_muted()))
-        .child(label)
+        .child(div().min_w_0().flex_1().child(label))
         .when(required, |el| {
-            el.child(div().text_color(rgb(DANGER_COL)).child("*"))
+            el.child(div().flex_shrink_0().text_color(rgb(DANGER_COL)).child("*"))
         })
         .into_any_element()
 }
@@ -133,12 +135,16 @@ impl KskGpuiApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let state = self.get_or_create_form_input(key, placeholder, false, window, cx);
+        if editable && !self.registered_tab_inputs.iter().any(|k| k == key) {
+            self.registered_tab_inputs.push(key.to_string());
+        }
         div()
             .flex()
             .flex_col()
             .gap(px(4.0))
-            .min_w(px(160.0))
+            .min_w(px(200.0))
             .flex_1()
+            .overflow_hidden()
             .child(field_label(label.to_string(), required))
             .child(
                 Input::new(&state)
@@ -250,6 +256,9 @@ impl KskGpuiApp {
                                     } else {
                                         this.form_values.insert(fk_c.clone(), v_owned.clone());
                                     }
+                                    if this.editing_section.is_some() {
+                                        this.is_dirty = true;
+                                    }
                                     cx.notify();
                                 }))
                             })
@@ -296,8 +305,9 @@ impl KskGpuiApp {
                 .flex()
                 .flex_col()
                 .gap(px(4.0))
-                .min_w(px(160.0))
+                .min_w(px(200.0))
                 .flex_1()
+                .overflow_hidden()
                 .when(!label.is_empty(), |el| {
                     el.child(field_label(label.to_string(), false))
                 })
@@ -350,6 +360,9 @@ impl KskGpuiApp {
                                         .when(editable, |el| {
                                             el.cursor_pointer().on_click(cx.listener(
                                                 move |this, _, window, cx| {
+                                                    if this.editing_section.is_some() {
+                                                        this.is_dirty = true;
+                                                    }
                                                     cb(this, val_c.clone(), window, cx);
                                                     cx.notify();
                                                 },
@@ -522,6 +535,9 @@ impl KskGpuiApp {
                                     .hover(|s| s.bg(rgb(bg_subtle())))
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.open_dropdown = None;
+                                        if this.editing_section.is_some() {
+                                            this.is_dirty = true;
+                                        }
                                         cb(this, val_c.clone(), window, cx);
                                         cx.notify();
                                     }))
@@ -603,12 +619,14 @@ impl KskGpuiApp {
                     })
                     .when(!is_locked && can_edit_role && is_editing, |el| {
                         let s_save = sec_save.clone();
+                        let s_next = sec_save.clone();
                         el.child(
                             Button::new(SharedString::from(format!("btn-cancel-{}", sec_owned)))
                                 .label("Hủy")
                                 .small()
                                 .secondary()
                                 .on_click(cx.listener(|this, _, window, cx| {
+                                    this.is_dirty = false;
                                     this.editing_section = None;
                                     if let Some(id) = this.selected_record_id {
                                         this.load_record_into_form(id, window, cx);
@@ -618,11 +636,20 @@ impl KskGpuiApp {
                         )
                         .child(
                             Button::new(SharedString::from(format!("btn-save-{}", sec_save)))
-                                .label("Lưu phần này")
+                                .label("Lưu (Ctrl+S)")
+                                .small()
+                                .secondary()
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    this.save_section(&s_save, window, cx);
+                                })),
+                        )
+                        .child(
+                            Button::new(SharedString::from(format!("btn-save-next-{}", sec_save)))
+                                .label("Lưu & tiếp → (Ctrl+Enter)")
                                 .small()
                                 .primary()
                                 .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.save_section(&s_save, window, cx);
+                                    this.save_and_next_section(&s_next, window, cx);
                                 })),
                         )
                     }),
@@ -674,6 +701,7 @@ impl KskGpuiApp {
                 let id_rm = id_owned.clone();
                 el.child(
                     div()
+                        .w_full()
                         .flex()
                         .flex_row()
                         .flex_wrap()
@@ -683,6 +711,8 @@ impl KskGpuiApp {
                             let fk_c = fk_rm.clone();
                             let full_lbl = label_for(code);
                             div()
+                                .max_w_full()
+                                .overflow_hidden()
                                 .px(px(8.0))
                                 .py(px(3.0))
                                 .rounded(px(999.0))
@@ -695,7 +725,7 @@ impl KskGpuiApp {
                                 .gap(px(4.0))
                                 .text_xs()
                                 .text_color(rgb(PRIMARY_COL))
-                                .child(full_lbl)
+                                .child(div().min_w_0().overflow_hidden().child(full_lbl))
                                 .when(editable, |chip| {
                                     chip.child(
                                         div()
@@ -710,6 +740,9 @@ impl KskGpuiApp {
                                                     .filter(|s| !s.is_empty() && s != &code_rm)
                                                     .collect();
                                                 let joined = next.join(";");
+                                                if this.editing_section.is_some() {
+                                                    this.is_dirty = true;
+                                                }
                                                 this.form_values.insert(fk_c.clone(), joined.clone());
                                                 if let Some(inp) = this.form_inputs.get(&fk_c) {
                                                     inp.update(cx, |s, cx| s.set_value(joined, window, cx));
@@ -846,6 +879,9 @@ impl KskGpuiApp {
                                             list.push(val_c.clone());
                                         }
                                         let joined = list.join(";");
+                                        if this.editing_section.is_some() {
+                                            this.is_dirty = true;
+                                        }
                                         this.form_values.insert(fk_c.clone(), joined.clone());
                                         if let Some(inp) = this.form_inputs.get(&fk_c) {
                                             inp.update(cx, |s, cx| s.set_value(joined, window, cx));
@@ -897,6 +933,9 @@ impl KskGpuiApp {
             DateStoreFmt::DmySlash,
             move |this, formatted, window, cx| {
                 this.form_values.insert(fk_owned.clone(), formatted.clone());
+                if this.editing_section.is_some() {
+                    this.is_dirty = true;
+                }
                 inp_for_cb.update(cx, |s, cx| s.set_value(formatted, window, cx));
             },
             cx,

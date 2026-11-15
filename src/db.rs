@@ -100,6 +100,7 @@ pub async fn init_db(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
             status INTEGER NOT NULL DEFAULT 0,
             exam_mode TEXT NOT NULL DEFAULT 'le',
             contract_id INTEGER,
+            exam_templates TEXT NOT NULL DEFAULT 'TREN_18',
             payload_json TEXT NOT NULL DEFAULT '{}',
             updated_by TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -115,6 +116,11 @@ pub async fn init_db(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
     let _ = sqlx::query("ALTER TABLE ksk_records ADD COLUMN contract_id INTEGER")
         .execute(&pool)
         .await;
+    let _ = sqlx::query(
+        "ALTER TABLE ksk_records ADD COLUMN exam_templates TEXT NOT NULL DEFAULT 'TREN_18'",
+    )
+    .execute(&pool)
+    .await;
     let _ = sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_ksk_records_mode_contract ON ksk_records(exam_mode, contract_id)",
     )
@@ -152,6 +158,7 @@ pub async fn init_db(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
             expected_count INTEGER NOT NULL DEFAULT 0,
             status INTEGER NOT NULL DEFAULT 0,
             scan_file_path TEXT NOT NULL DEFAULT '',
+            default_templates TEXT NOT NULL DEFAULT 'TREN_18',
             note TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE RESTRICT
@@ -162,6 +169,11 @@ pub async fn init_db(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
     .await?;
     let _ = sqlx::query(
         "ALTER TABLE exam_contracts ADD COLUMN scan_file_path TEXT NOT NULL DEFAULT ''",
+    )
+    .execute(&pool)
+    .await;
+    let _ = sqlx::query(
+        "ALTER TABLE exam_contracts ADD COLUMN default_templates TEXT NOT NULL DEFAULT 'TREN_18'",
     )
     .execute(&pool)
     .await;
@@ -878,6 +890,7 @@ pub async fn list_exam_contracts(
             ec.expected_count,
             ec.status,
             ec.scan_file_path,
+            ec.default_templates,
             ec.note,
             COALESCE(COUNT(r.id), 0) AS total_records,
             COALESCE(SUM(CASE WHEN r.status = 1 THEN 1 ELSE 0 END), 0) AS done_records,
@@ -911,22 +924,29 @@ pub async fn upsert_exam_contract(
     title: &str,
     exam_date: &str,
     expected_count: i64,
+    default_templates: &str,
     note: &str,
 ) -> Result<i64, String> {
     let code_t = contract_code.trim();
     let title_t = title.trim();
+    let tpl_t = if default_templates.trim().is_empty() {
+        "TREN_18"
+    } else {
+        default_templates.trim()
+    };
     if company_id <= 0 || code_t.is_empty() || title_t.is_empty() {
         return Err("Vui lòng chọn công ty, nhập Mã hợp đồng và Tên đợt khám!".into());
     }
     if let Some(id) = edit_id {
         sqlx::query(
-            "UPDATE exam_contracts SET company_id = ?, contract_code = ?, title = ?, exam_date = ?, expected_count = ?, note = ? WHERE id = ?",
+            "UPDATE exam_contracts SET company_id = ?, contract_code = ?, title = ?, exam_date = ?, expected_count = ?, default_templates = ?, note = ? WHERE id = ?",
         )
         .bind(company_id)
         .bind(code_t)
         .bind(title_t)
         .bind(exam_date.trim())
         .bind(expected_count)
+        .bind(tpl_t)
         .bind(note.trim())
         .bind(id)
         .execute(pool)
@@ -935,13 +955,14 @@ pub async fn upsert_exam_contract(
         Ok(id)
     } else {
         let r = sqlx::query(
-            "INSERT INTO exam_contracts (company_id, contract_code, title, exam_date, expected_count, note) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO exam_contracts (company_id, contract_code, title, exam_date, expected_count, default_templates, note) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(company_id)
         .bind(code_t)
         .bind(title_t)
         .bind(exam_date.trim())
         .bind(expected_count)
+        .bind(tpl_t)
         .bind(note.trim())
         .execute(pool)
         .await
@@ -1057,13 +1078,32 @@ fn apply_group_row_to_payload(
     payload.insert("MA_LK".into(), Value::String(ma_lk));
 }
 
+pub async fn update_record_templates(
+    pool: &SqlitePool,
+    record_id: i64,
+    exam_templates: &str,
+) -> Result<(), String> {
+    let tpl = if exam_templates.trim().is_empty() {
+        "TREN_18"
+    } else {
+        exam_templates.trim()
+    };
+    sqlx::query("UPDATE ksk_records SET exam_templates = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(tpl)
+        .bind(record_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub async fn get_contract_record_for_edit(
     pool: &SqlitePool,
     record_id: i64,
     master_key: Option<&[u8; 32]>,
-) -> Result<(i64, Map<String, Value>), String> {
-    let (status, enc_json) = sqlx::query_as::<_, (i64, String)>(
-        "SELECT status, payload_json FROM ksk_records WHERE id = ?",
+) -> Result<(i64, String, Map<String, Value>), String> {
+    let (status, exam_templates, enc_json) = sqlx::query_as::<_, (i64, String, String)>(
+        "SELECT status, exam_templates, payload_json FROM ksk_records WHERE id = ?",
     )
     .bind(record_id)
     .fetch_optional(pool)
@@ -1072,13 +1112,14 @@ pub async fn get_contract_record_for_edit(
     .ok_or_else(|| "Không tìm thấy hồ sơ!".to_string())?;
     let json_str = crate::crypto::decrypt_field(master_key, &enc_json);
     let payload: Map<String, Value> = serde_json::from_str(&json_str).unwrap_or_default();
-    Ok((status, payload))
+    Ok((status, exam_templates, payload))
 }
 
 pub async fn upsert_group_member_record(
     pool: &SqlitePool,
     contract_id: i64,
     edit_record_id: Option<i64>,
+    exam_templates: &str,
     ma_cskcb: &str,
     ma_gtin: &str,
     updated_by: &str,
@@ -1087,6 +1128,11 @@ pub async fn upsert_group_member_record(
 ) -> Result<(), String> {
     let ma_tn = row.ma_tiep_nhan.trim();
     let ho_ten = row.ho_ten.trim();
+    let tpl = if exam_templates.trim().is_empty() {
+        "TREN_18"
+    } else {
+        exam_templates.trim()
+    };
     if ma_tn.is_empty() || ho_ten.is_empty() {
         return Err("Mã tiếp nhận và Họ tên không được để trống!".into());
     }
@@ -1114,7 +1160,7 @@ pub async fn upsert_group_member_record(
     }
 
     if let Some(rid) = edit_record_id {
-        let (status, mut payload) = get_contract_record_for_edit(pool, rid, master_key).await?;
+        let (status, _, mut payload) = get_contract_record_for_edit(pool, rid, master_key).await?;
         if status == 2 {
             return Err("Hồ sơ đã ký khóa, không thể chỉnh sửa!".into());
         }
@@ -1129,7 +1175,7 @@ pub async fn upsert_group_member_record(
                 &json_str,
             );
         sqlx::query(
-            "UPDATE ksk_records SET ma_tiep_nhan = ?, ma_y_te = ?, ho_ten = ?, gioi_tinh = ?, ngay_sinh = ?, so_cccd = ?, ngay_vao = ?, payload_json = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND contract_id = ?",
+            "UPDATE ksk_records SET ma_tiep_nhan = ?, ma_y_te = ?, ho_ten = ?, gioi_tinh = ?, ngay_sinh = ?, so_cccd = ?, ngay_vao = ?, exam_templates = ?, payload_json = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND contract_id = ?",
         )
         .bind(ma_tn)
         .bind(&row.ma_y_te)
@@ -1138,6 +1184,7 @@ pub async fn upsert_group_member_record(
         .bind(&enc_ngay_sinh)
         .bind(&enc_so_cccd)
         .bind(&row.ngay_vao)
+        .bind(tpl)
         .bind(&enc_json_str)
         .bind(updated_by)
         .bind(rid)
@@ -1158,7 +1205,7 @@ pub async fn upsert_group_member_record(
                 &json_str,
             );
         sqlx::query(
-            "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'doan', ?, ?, ?)",
+            "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, exam_templates, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'doan', ?, ?, ?, ?)",
         )
         .bind(ma_tn)
         .bind(&row.ma_y_te)
@@ -1168,6 +1215,7 @@ pub async fn upsert_group_member_record(
         .bind(&enc_so_cccd)
         .bind(&row.ngay_vao)
         .bind(contract_id)
+        .bind(tpl)
         .bind(&enc_json_str)
         .bind(updated_by)
         .execute(pool)
@@ -1184,14 +1232,20 @@ pub async fn bulk_update_contract_records_common(
     nguon_chi_tra: Option<String>,
     doi_tuong: Option<String>,
     ly_do_vv: Option<String>,
+    exam_templates: Option<String>,
     updated_by: &str,
     master_key: Option<&[u8; 32]>,
 ) -> Result<usize, String> {
-    if noi_lam_viec.is_none() && nguon_chi_tra.is_none() && doi_tuong.is_none() && ly_do_vv.is_none() {
+    if noi_lam_viec.is_none()
+        && nguon_chi_tra.is_none()
+        && doi_tuong.is_none()
+        && ly_do_vv.is_none()
+        && exam_templates.is_none()
+    {
         return Err("Vui lòng chọn ít nhất một trường để cập nhật!".into());
     }
-    let rows = sqlx::query_as::<_, (i64, i64, String)>(
-        "SELECT id, status, payload_json FROM ksk_records WHERE contract_id = ?",
+    let rows = sqlx::query_as::<_, (i64, i64, String, String)>(
+        "SELECT id, status, exam_templates, payload_json FROM ksk_records WHERE contract_id = ?",
     )
     .bind(contract_id)
     .fetch_all(pool)
@@ -1200,7 +1254,7 @@ pub async fn bulk_update_contract_records_common(
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let mut updated = 0usize;
-    for (rid, status, enc_json) in rows {
+    for (rid, status, cur_tpl, enc_json) in rows {
         if status == 2 {
             continue;
         }
@@ -1218,14 +1272,19 @@ pub async fn bulk_update_contract_records_common(
         if let Some(ref v) = ly_do_vv {
             payload.insert("LY_DO_VV".into(), Value::String(v.clone()));
         }
+        let new_tpl = exam_templates
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or(&cur_tpl);
         let new_json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
         let enc_payload = match master_key {
             Some(mk) => crate::crypto::encrypt_field(mk, &new_json),
             None => new_json,
         };
         sqlx::query(
-            "UPDATE ksk_records SET payload_json = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE ksk_records SET exam_templates = ?, payload_json = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
+        .bind(new_tpl)
         .bind(&enc_payload)
         .bind(updated_by)
         .bind(rid)
@@ -1247,6 +1306,17 @@ pub async fn batch_insert_group_records(
     master_key: Option<&[u8; 32]>,
     rows: &[crate::models::GroupImportRow],
 ) -> Result<(usize, usize), String> {
+    let default_tpl: String = sqlx::query_scalar(
+        "SELECT default_templates FROM exam_contracts WHERE id = ?",
+    )
+    .bind(contract_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+    .filter(|s: &String| !s.trim().is_empty())
+    .unwrap_or_else(|| "TREN_18".into());
+
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let mut inserted = 0usize;
     let mut skipped = 0usize;
@@ -1270,7 +1340,7 @@ pub async fn batch_insert_group_records(
             );
 
         let res = sqlx::query(
-            "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'doan', ?, ?, ?)",
+            "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, exam_templates, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'doan', ?, ?, ?, ?)",
         )
         .bind(&r.ma_tiep_nhan)
         .bind(&r.ma_y_te)
@@ -1280,6 +1350,7 @@ pub async fn batch_insert_group_records(
         .bind(&enc_so_cccd)
         .bind(&r.ngay_vao)
         .bind(contract_id)
+        .bind(&default_tpl)
         .bind(&enc_json_str)
         .bind(updated_by)
         .execute(&mut *tx)

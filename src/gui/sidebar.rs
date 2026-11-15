@@ -55,7 +55,51 @@ impl KskGpuiApp {
             ("2".to_string(), "Đã ký khóa".to_string()),
         ];
 
-        let records = self.records.clone();
+        let mut records = self.records.clone();
+        if self.sidebar_only_my_pending {
+            let user_opt = self.current_user.clone();
+            records.retain(|rec| {
+                if rec.status == 2 {
+                    return false;
+                }
+                let Some(user) = user_opt.as_ref() else {
+                    return rec.status == 0;
+                };
+                if user.has_role("admin") {
+                    return rec.status == 0;
+                }
+                let map: serde_json::Map<String, serde_json::Value> =
+                    serde_json::from_str(&rec.payload_json).unwrap_or_default();
+                let mut any_pending = false;
+                let checks: &[(&str, &str)] = &[
+                    ("reception", "reception"),
+                    ("tiensu", "history"),
+                    ("bs_theluc", "physical"),
+                    ("bs_noi", "clin_noi"),
+                    ("bs_ngoai", "clin_ngoai"),
+                    ("bs_dalieu", "clin_dalieu"),
+                    ("bs_san", "clin_san"),
+                    ("bs_mat", "clin_mat"),
+                    ("bs_tmh", "clin_tmh"),
+                    ("bs_rhm", "clin_rhm"),
+                    ("bs_cls", "paraclinical"),
+                    ("cls", "paraclinical"),
+                    ("xetnghiem", "paraclinical"),
+                    ("cdha", "paraclinical"),
+                    ("bs_ketluan", "conclusion"),
+                ];
+                for (role, sec) in checks {
+                    if user.has_role(role)
+                        && super::section_progress_from_map(&map, sec)
+                            != super::SectionProgress::Done
+                    {
+                        any_pending = true;
+                        break;
+                    }
+                }
+                any_pending
+            });
+        }
         let selected_id = self.selected_record_id;
         let is_group_mode = self.sidebar_exam_mode == "doan";
         let selected_contract_str = self
@@ -173,7 +217,7 @@ impl KskGpuiApp {
                                 .small()
                                 .primary()
                                 .on_click(cx.listener(|this, _, window, cx| {
-                                    this.start_new_patient(window, cx);
+                                    this.guard_unsaved(super::PendingNav::NewPatient, window, cx);
                                 })),
                         )
                     })
@@ -204,13 +248,13 @@ impl KskGpuiApp {
                             .gap(px(6.0))
                             .child(self.render_date_picker_entity(
                                 "sb-from",
-                                "",
+                                "Từ ngày",
                                 self.sidebar_from_date.clone(),
                                 cx,
                             ))
                             .child(self.render_date_picker_entity(
                                 "sb-to",
-                                "",
+                                "Đến ngày",
                                 self.sidebar_to_date.clone(),
                                 cx,
                             )),
@@ -219,11 +263,11 @@ impl KskGpuiApp {
                         div()
                             .flex()
                             .flex_row()
-                            .items_center()
+                            .items_end()
                             .gap(px(6.0))
                             .child(self.render_select_dropdown(
                                 "sidebar-status",
-                                "",
+                                "Trạng thái",
                                 &status_val,
                                 status_opts,
                                 true,
@@ -250,6 +294,28 @@ impl KskGpuiApp {
                                         this.refresh_records(window, cx);
                                     })),
                             ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(6.0))
+                            .child({
+                                let active = self.sidebar_only_my_pending;
+                                let btn = Button::new("btn-my-pending-filter")
+                                    .label(if active {
+                                        "✓ Chờ tôi khám"
+                                    } else {
+                                        "Chờ tôi khám"
+                                    })
+                                    .small();
+                                if active { btn.primary() } else { btn.secondary() }
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.sidebar_only_my_pending = !this.sidebar_only_my_pending;
+                                        cx.notify();
+                                    }))
+                            }),
                     ),
             )
             .child(
@@ -288,8 +354,19 @@ impl KskGpuiApp {
                             rec.ho_ten.clone()
                         };
                         let ma_bn = rec.ma_y_te.clone();
-                        let ngay = rec.ngay_vao.clone();
+                        let ngay = super::format_ngay_vao_display(&rec.ngay_vao);
                         let workplace = super::payload_field(&rec, "NOI_LAM_VIEC_HOC_TAP");
+                        let (done_cnt, total_cnt, missing_secs) = super::record_progress_summary(&rec);
+                        let missing_text = if missing_secs.is_empty() {
+                            "Đủ các mục".to_string()
+                        } else {
+                            let preview: Vec<&str> = missing_secs.iter().copied().take(2).collect();
+                            if missing_secs.len() > 2 {
+                                format!("Thiếu: {} +{}", preview.join(", "), missing_secs.len() - 2)
+                            } else {
+                                format!("Thiếu: {}", preview.join(", "))
+                            }
+                        };
                         let rec_id = rec.id;
 
                         div()
@@ -302,7 +379,7 @@ impl KskGpuiApp {
                             .cursor_pointer()
                             .hover(|s| s.bg(rgb(if is_sel { primary_light() } else { bg_subtle() })))
                             .on_click(cx.listener(move |this, _, window, cx| {
-                                this.load_record_into_form(rec_id, window, cx);
+                                this.guard_unsaved(super::PendingNav::Record(rec_id), window, cx);
                             }))
                             .flex()
                             .flex_col()
@@ -344,6 +421,22 @@ impl KskGpuiApp {
                                         .child(workplace),
                                 )
                             })
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .justify_between()
+                                    .gap(px(6.0))
+                                    .text_xs()
+                                    .text_color(rgb(if missing_secs.is_empty() {
+                                        SUCCESS_COL
+                                    } else {
+                                        text_muted()
+                                    }))
+                                    .child(format!("{}/{} mục", done_cnt, total_cnt))
+                                    .child(div().truncate().child(missing_text)),
+                            )
                     })),
             )
             .into_any_element()

@@ -191,6 +191,16 @@ pub const FIELDS_RECEPTION: &[&str] = &[
     "DIEN_THOAI",
     "LY_DO_VV",
     "MA_LOAI_KCB",
+    "NGUOI_GIAM_HO",
+    "MOI_QUAN_HE_VOI_TRE",
+    "DIEN_THOAI_NGH",
+    "SO_CCCD_NGH",
+    "TEN_CSGD",
+    "MA_CSGD",
+    "SINH_NON",
+    "TUAN_THAI",
+    "GIO_KHAM",
+    "BAC_SI_KHAM",
 ];
 
 pub const FIELDS_TIENSU: &[&str] = &[
@@ -440,6 +450,13 @@ pub fn can_user_roles_edit_field(user_roles_str: &str, field: &str) -> bool {
     if roles.contains(&"admin") {
         return true;
     }
+    if field.starts_with("D6_")
+        || field.starts_with("U18_")
+        || field.starts_with("MG_")
+        || field.starts_with("HS_")
+    {
+        return !roles.is_empty();
+    }
     for r in roles {
         let allowed = match r {
             "reception" => FIELDS_RECEPTION.contains(&field),
@@ -498,7 +515,11 @@ pub fn merge_payload_by_roles(
             continue;
         }
         if let Some(allowed_fields) = filter_fields {
-            if !allowed_fields.contains(&k.as_str()) {
+            let is_custom_tpl_field = k.starts_with("D6_")
+                || k.starts_with("U18_")
+                || k.starts_with("MG_")
+                || k.starts_with("HS_");
+            if !is_custom_tpl_field && !allowed_fields.contains(&k.as_str()) {
                 continue;
             }
         }
@@ -515,14 +536,19 @@ pub fn merge_payload_by_roles(
     }
 
     // Tự động tính lại BMI nếu có chiều cao và cân nặng hợp lệ
-    if let (Some(cc), Some(cn)) = (
-        base.get("CHIEU_CAO").and_then(|v| v.as_str()).and_then(|s| s.replace(',', ".").parse::<f64>().ok()),
-        base.get("CAN_NANG").and_then(|v| v.as_str()).and_then(|s| s.replace(',', ".").parse::<f64>().ok()),
-    ) {
-        if cc > 30.0 && cn > 2.0 {
-            let height_m = cc / 100.0;
-            let bmi = cn / (height_m * height_m);
-            base.insert("CHI_SO_BMI".to_string(), Value::String(format!("{:.2}", bmi)));
+    for prefix in ["", "D6_", "U18_", "MG_", "HS_"] {
+        let cc_key = format!("{}CHIEU_CAO", prefix);
+        let cn_key = format!("{}CAN_NANG", prefix);
+        let bmi_key = format!("{}CHI_SO_BMI", prefix);
+        if let (Some(cc), Some(cn)) = (
+            base.get(&cc_key).and_then(|v| v.as_str()).and_then(|s| s.replace(',', ".").parse::<f64>().ok()),
+            base.get(&cn_key).and_then(|v| v.as_str()).and_then(|s| s.replace(',', ".").parse::<f64>().ok()),
+        ) {
+            if cc > 30.0 && cn > 2.0 {
+                let height_m = cc / 100.0;
+                let bmi = cn / (height_m * height_m);
+                base.insert(bmi_key, Value::String(format!("{:.2}", bmi)));
+            }
         }
     }
 
@@ -681,6 +707,8 @@ pub struct KskRecordRow {
     pub exam_mode: String,
     #[sqlx(default)]
     pub contract_id: Option<i64>,
+    #[sqlx(default)]
+    pub exam_templates: String,
     pub payload_json: String,
     pub updated_by: String,
     pub created_at: String,
@@ -759,6 +787,8 @@ pub struct ExamContract {
     pub status: i64,
     #[sqlx(default)]
     pub scan_file_path: String,
+    #[sqlx(default)]
+    pub default_templates: String,
     pub note: String,
     pub created_at: String,
 }
@@ -776,6 +806,8 @@ pub struct ExamContractSummary {
     pub status: i64,
     #[sqlx(default)]
     pub scan_file_path: String,
+    #[sqlx(default)]
+    pub default_templates: String,
     pub note: String,
     pub total_records: i64,
     pub done_records: i64,

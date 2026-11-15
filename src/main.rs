@@ -8,6 +8,7 @@ mod gui;
 mod handlers;
 mod models;
 mod pdf_print;
+mod templates;
 mod updater;
 
 use axum::{routing::post, Router};

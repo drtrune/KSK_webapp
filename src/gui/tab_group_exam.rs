@@ -352,7 +352,18 @@ impl KskGpuiApp {
                                                                     })
                                                                     .when(has_scan, |b| {
                                                                         b.child(badge("Có file scan", primary_light(), PRIMARY_COL))
-                                                                    }),
+                                                                    })
+                                                                    .children(
+                                                                        crate::templates::parse_template_list(&ct.default_templates)
+                                                                            .into_iter()
+                                                                            .map(|code| {
+                                                                                badge(
+                                                                                    crate::templates::template_short_label(&code),
+                                                                                    bg_card(),
+                                                                                    PRIMARY_COL,
+                                                                                )
+                                                                            }),
+                                                                    ),
                                                             )
                                                             .child(
                                                                 div()
@@ -701,6 +712,80 @@ impl KskGpuiApp {
                                     .child(Input::new(&self.grp_cont_note).small()),
                             ),
                     )
+                    .child({
+                        let active_tpls =
+                            crate::templates::parse_template_list(&self.grp_cont_templates);
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.0))
+                            .child(field_label(
+                                "Mẫu phiếu khám mặc định của đoàn (có thể chọn nhiều)",
+                                true,
+                            ))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .flex_wrap()
+                                    .gap(px(6.0))
+                                    .children(
+                                        crate::templates::ALL_TEMPLATES.iter().map(
+                                            |(code, short_lbl, _)| {
+                                                let code_str = (*code).to_string();
+                                                let is_checked =
+                                                    active_tpls.iter().any(|x| x == code);
+                                                div()
+                                                    .id(SharedString::from(format!(
+                                                        "dlg-cont-tpl-{}",
+                                                        code_str
+                                                    )))
+                                                    .px(px(10.0))
+                                                    .py(px(5.0))
+                                                    .rounded(px(6.0))
+                                                    .cursor_pointer()
+                                                    .border_1()
+                                                    .border_color(rgb(if is_checked {
+                                                        PRIMARY_COL
+                                                    } else {
+                                                        border_col()
+                                                    }))
+                                                    .bg(rgb(if is_checked {
+                                                        primary_light()
+                                                    } else {
+                                                        bg_card()
+                                                    }))
+                                                    .text_xs()
+                                                    .font_weight(if is_checked {
+                                                        gpui::FontWeight::BOLD
+                                                    } else {
+                                                        gpui::FontWeight::MEDIUM
+                                                    })
+                                                    .text_color(rgb(if is_checked {
+                                                        PRIMARY_COL
+                                                    } else {
+                                                        text_main()
+                                                    }))
+                                                    .on_click(cx.listener(
+                                                        move |this, _, _, cx| {
+                                                            this.grp_cont_templates =
+                                                                crate::templates::toggle_template_in_list(
+                                                                    &this.grp_cont_templates,
+                                                                    &code_str,
+                                                                );
+                                                            cx.notify();
+                                                        },
+                                                    ))
+                                                    .child(format!(
+                                                        "{} {}",
+                                                        if is_checked { "☑" } else { "☐" },
+                                                        short_lbl
+                                                    ))
+                                            },
+                                        ),
+                                    ),
+                            )
+                    })
                     .child(
                         div()
                             .flex()
@@ -911,6 +996,11 @@ impl KskGpuiApp {
                                                 this.grp_cont_title.update(cx, |s, cx| s.set_value(c_edit.title.clone(), window, cx));
                                                 this.grp_cont_date.update(cx, |s, cx| s.set_value(c_edit.exam_date.clone(), window, cx));
                                                 this.grp_cont_expected.update(cx, |s, cx| s.set_value(c_edit.expected_count.to_string(), window, cx));
+                                                this.grp_cont_templates = if c_edit.default_templates.trim().is_empty() {
+                                                    "TREN_18".into()
+                                                } else {
+                                                    c_edit.default_templates.clone()
+                                                };
                                                 this.grp_cont_note.update(cx, |s, cx| s.set_value(c_edit.note.clone(), window, cx));
                                                 this.grp_show_contract_dialog = true;
                                                 cx.notify();
@@ -1193,6 +1283,17 @@ impl KskGpuiApp {
                                                         if rec.ngay_sinh.is_empty() { "-" } else { &rec.ngay_sinh },
                                                         if rec.so_cccd.is_empty() { "-" } else { &rec.so_cccd },
                                                     )),
+                                            )
+                                            .children(
+                                                crate::templates::parse_template_list(&rec.exam_templates)
+                                                    .into_iter()
+                                                    .map(|code| {
+                                                        badge(
+                                                            crate::templates::template_short_label(&code),
+                                                            bg_card(),
+                                                            PRIMARY_COL,
+                                                        )
+                                                    }),
                                             ),
                                     )
                                     .child(
@@ -1544,6 +1645,7 @@ impl KskGpuiApp {
         self.grp_cont_title.update(cx, |s, cx| s.set_value("", window, cx));
         self.grp_cont_date.update(cx, |s, cx| s.set_value(today, window, cx));
         self.grp_cont_expected.update(cx, |s, cx| s.set_value("", window, cx));
+        self.grp_cont_templates = "TREN_18".into();
         self.grp_cont_note.update(cx, |s, cx| s.set_value("", window, cx));
         cx.notify();
     }
@@ -1561,12 +1663,27 @@ impl KskGpuiApp {
             .trim()
             .parse::<i64>()
             .unwrap_or(0);
+        let default_tpls = {
+            let list = crate::templates::parse_template_list(&self.grp_cont_templates);
+            crate::templates::format_template_list(&list)
+        };
         let note = self.grp_cont_note.read(cx).value().to_string();
         let state = self.state.clone();
 
         let res = self.run_sync(async move {
             let pool = state.db.read().await;
-            db::upsert_exam_contract(&pool, edit_id, cid, &code, &title, &date, expected, &note).await
+            db::upsert_exam_contract(
+                &pool,
+                edit_id,
+                cid,
+                &code,
+                &title,
+                &date,
+                expected,
+                &default_tpls,
+                &note,
+            )
+            .await
         });
         match res {
             Ok(new_id) => {
@@ -1684,7 +1801,7 @@ impl KskGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let (company_name, exam_date) = self
+        let (company_name, exam_date, default_tpls) = self
             .contracts_list
             .iter()
             .find(|c| c.id == contract_id)
@@ -1694,12 +1811,24 @@ impl KskGpuiApp {
                 } else {
                     c.exam_date.clone()
                 };
-                (c.company_name.clone(), d)
+                let t = if c.default_templates.trim().is_empty() {
+                    "TREN_18".to_string()
+                } else {
+                    c.default_templates.clone()
+                };
+                (c.company_name.clone(), d, t)
             })
-            .unwrap_or_else(|| (String::new(), chrono::Local::now().format("%d/%m/%Y").to_string()));
+            .unwrap_or_else(|| {
+                (
+                    String::new(),
+                    chrono::Local::now().format("%d/%m/%Y").to_string(),
+                    "TREN_18".to_string(),
+                )
+            });
 
         self.grp_member_contract_id = Some(contract_id);
         self.grp_member_edit_id = None;
+        self.grp_mem_templates = default_tpls;
         self.open_dropdown = None;
         self.grp_mem_gioi_tinh = "1".into();
 
@@ -1757,7 +1886,7 @@ impl KskGpuiApp {
             let pool = state.db.read().await;
             db::get_contract_record_for_edit(&pool, record_id, mk.as_ref()).await
         });
-        let (status, payload) = match res {
+        let (status, exam_templates, payload) = match res {
             Ok(v) => v,
             Err(e) => {
                 self.show_toast(&e, true, cx);
@@ -1778,6 +1907,11 @@ impl KskGpuiApp {
 
         self.grp_member_contract_id = Some(contract_id);
         self.grp_member_edit_id = Some(record_id);
+        self.grp_mem_templates = if exam_templates.trim().is_empty() {
+            "TREN_18".into()
+        } else {
+            exam_templates
+        };
         self.open_dropdown = None;
         let gt = get_s("GIOI_TINH");
         self.grp_mem_gioi_tinh = if gt == "2" || gt == "3" { gt } else { "1".into() };
@@ -1844,6 +1978,10 @@ impl KskGpuiApp {
             .as_ref()
             .map(|u| u.username.clone())
             .unwrap_or_else(|| "system".into());
+        let mem_tpls = {
+            let list = crate::templates::parse_template_list(&self.grp_mem_templates);
+            crate::templates::format_template_list(&list)
+        };
 
         let res = self.run_sync(async move {
             let pool = state.db.read().await;
@@ -1851,6 +1989,7 @@ impl KskGpuiApp {
                 &pool,
                 cid,
                 edit_id,
+                &mem_tpls,
                 &ma_cskcb,
                 &ma_gtin,
                 &updated_by,
@@ -1891,6 +2030,14 @@ impl KskGpuiApp {
         let ma_nghe = self.grp_mem_ma_nghe.clone();
         let kcb = self.grp_mem_ma_loai_kcb.clone();
         let nhom_mau = self.grp_mem_nhom_mau.clone();
+        let mem_tpls = crate::templates::parse_template_list(&self.grp_mem_templates);
+        let has_any_tpl = |targets: &[&str]| -> bool {
+            mem_tpls.iter().any(|c| targets.contains(&c.as_str()))
+        };
+        let show_cccd_issue = has_any_tpl(&["TREN_18", "TU_6_DUOI_18", "HS_PHO_THONG"]);
+        let show_phone_self = has_any_tpl(&["TREN_18", "TU_6_DUOI_18", "HS_PHO_THONG"]);
+        let show_job_workplace = has_any_tpl(&["TREN_18"]);
+        let show_ly_do = has_any_tpl(&["TREN_18", "TU_6_DUOI_18", "DUOI_6", "HS_PHO_THONG"]);
 
         let gender_opts = vec![
             ("1".to_string(), "Nam".to_string()),
@@ -2039,25 +2186,27 @@ impl KskGpuiApp {
                                             .flex()
                                             .flex_col()
                                             .gap(px(4.0))
-                                            .child(field_label("Số CCCD / CMND", false))
+                                            .child(field_label("Số CCCD / Định danh cá nhân", false))
                                             .child(Input::new(&self.grp_mem_so_cccd).small()),
                                     )
-                                    .child(self.render_date_picker_entity(
-                                        "grp-mem-ngaycap-cccd",
-                                        "Ngày cấp CCCD (dd/mm/yyyy)",
-                                        self.grp_mem_ngaycap_cccd.clone(),
-                                        cx,
-                                    ))
-                                    .child(
-                                        div()
-                                            .flex_1()
-                                            .min_w(px(180.0))
-                                            .flex()
-                                            .flex_col()
-                                            .gap(px(4.0))
-                                            .child(field_label("Nơi cấp CCCD", false))
-                                            .child(Input::new(&self.grp_mem_noicap_cccd).small()),
-                                    ),
+                                    .when(show_cccd_issue, |el| {
+                                        el.child(self.render_date_picker_entity(
+                                            "grp-mem-ngaycap-cccd",
+                                            "Ngày cấp CCCD (dd/mm/yyyy)",
+                                            self.grp_mem_ngaycap_cccd.clone(),
+                                            cx,
+                                        ))
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .min_w(px(180.0))
+                                                .flex()
+                                                .flex_col()
+                                                .gap(px(4.0))
+                                                .child(field_label("Nơi cấp CCCD", false))
+                                                .child(Input::new(&self.grp_mem_noicap_cccd).small()),
+                                        )
+                                    }),
                             )
                             .child(
                                 div()
@@ -2065,16 +2214,18 @@ impl KskGpuiApp {
                                     .flex_row()
                                     .flex_wrap()
                                     .gap(px(12.0))
-                                    .child(
-                                        div()
-                                            .flex_1()
-                                            .min_w(px(150.0))
-                                            .flex()
-                                            .flex_col()
-                                            .gap(px(4.0))
-                                            .child(field_label("Số điện thoại", false))
-                                            .child(Input::new(&self.grp_mem_dien_thoai).small()),
-                                    )
+                                    .when(show_phone_self, |el| {
+                                        el.child(
+                                            div()
+                                                .flex_1()
+                                                .min_w(px(150.0))
+                                                .flex()
+                                                .flex_col()
+                                                .gap(px(4.0))
+                                                .child(field_label("Số điện thoại", false))
+                                                .child(Input::new(&self.grp_mem_dien_thoai).small()),
+                                        )
+                                    })
                                     .child(self.render_select_dropdown(
                                         "grp-mem-tinh",
                                         "Tỉnh / Thành phố cư trú",
@@ -2127,27 +2278,29 @@ impl KskGpuiApp {
                                         },
                                         cx,
                                     ))
-                                    .child(self.render_select_dropdown(
-                                        "grp-mem-nghe",
-                                        "Nghề nghiệp",
-                                        &ma_nghe,
-                                        nghe_opts,
-                                        true,
-                                        |this, val, _, _| {
-                                            this.grp_mem_ma_nghe = val;
-                                        },
-                                        cx,
-                                    ))
-                                    .child(
-                                        div()
-                                            .flex_1()
-                                            .min_w(px(200.0))
-                                            .flex()
-                                            .flex_col()
-                                            .gap(px(4.0))
-                                            .child(field_label("Nơi làm việc / Học tập", false))
-                                            .child(Input::new(&self.grp_mem_noi_lam_viec).small()),
-                                    ),
+                                    .when(show_job_workplace, |el| {
+                                        el.child(self.render_select_dropdown(
+                                            "grp-mem-nghe",
+                                            "Nghề nghiệp",
+                                            &ma_nghe,
+                                            nghe_opts,
+                                            true,
+                                            |this, val, _, _| {
+                                                this.grp_mem_ma_nghe = val;
+                                            },
+                                            cx,
+                                        ))
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .min_w(px(200.0))
+                                                .flex()
+                                                .flex_col()
+                                                .gap(px(4.0))
+                                                .child(field_label("Nơi làm việc / Học tập", false))
+                                                .child(Input::new(&self.grp_mem_noi_lam_viec).small()),
+                                        )
+                                    }),
                             )
                             .child(
                                 div()
@@ -2183,17 +2336,96 @@ impl KskGpuiApp {
                                         },
                                         cx,
                                     ))
+                                    .when(show_ly_do, |el| {
+                                        el.child(
+                                            div()
+                                                .flex_1()
+                                                .min_w(px(180.0))
+                                                .flex()
+                                                .flex_col()
+                                                .gap(px(4.0))
+                                                .child(field_label("Lý do khám", false))
+                                                .child(Input::new(&self.grp_mem_ly_do).small()),
+                                        )
+                                    }),
+                            )
+                            .child({
+                                let active_tpls =
+                                    crate::templates::parse_template_list(&self.grp_mem_templates);
+                                div()
+                                    .pt(px(6.0))
+                                    .border_t_1()
+                                    .border_color(rgb(border_col()))
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(6.0))
+                                    .child(field_label(
+                                        "Mẫu phiếu khám áp dụng cho cá nhân này (có thể chọn nhiều)",
+                                        true,
+                                    ))
                                     .child(
                                         div()
-                                            .flex_1()
-                                            .min_w(px(180.0))
                                             .flex()
-                                            .flex_col()
-                                            .gap(px(4.0))
-                                            .child(field_label("Lý do khám", false))
-                                            .child(Input::new(&self.grp_mem_ly_do).small()),
-                                    ),
-                            ),
+                                            .flex_row()
+                                            .flex_wrap()
+                                            .gap(px(6.0))
+                                            .children(
+                                                crate::templates::ALL_TEMPLATES.iter().map(
+                                                    |(code, short_lbl, _)| {
+                                                        let code_str = (*code).to_string();
+                                                        let is_checked =
+                                                            active_tpls.iter().any(|x| x == code);
+                                                        div()
+                                                            .id(SharedString::from(format!(
+                                                                "dlg-mem-tpl-{}",
+                                                                code_str
+                                                            )))
+                                                            .px(px(10.0))
+                                                            .py(px(5.0))
+                                                            .rounded(px(6.0))
+                                                            .cursor_pointer()
+                                                            .border_1()
+                                                            .border_color(rgb(if is_checked {
+                                                                PRIMARY_COL
+                                                            } else {
+                                                                border_col()
+                                                            }))
+                                                            .bg(rgb(if is_checked {
+                                                                primary_light()
+                                                            } else {
+                                                                bg_card()
+                                                            }))
+                                                            .text_xs()
+                                                            .font_weight(if is_checked {
+                                                                gpui::FontWeight::BOLD
+                                                            } else {
+                                                                gpui::FontWeight::MEDIUM
+                                                            })
+                                                            .text_color(rgb(if is_checked {
+                                                                PRIMARY_COL
+                                                            } else {
+                                                                text_main()
+                                                            }))
+                                                            .on_click(cx.listener(
+                                                                move |this, _, _, cx| {
+                                                                    this.grp_mem_templates =
+                                                                        crate::templates::toggle_template_in_list(
+                                                                            &this.grp_mem_templates,
+                                                                            &code_str,
+                                                                        );
+                                                                    cx.notify();
+                                                                },
+                                                            ))
+                                                            .child(format!(
+                                                                "{} {}",
+                                                                if is_checked { "☑" } else { "☐" },
+                                                                short_lbl
+                                                            ))
+                                                    },
+                                                ),
+                                            ),
+                                    )
+                            }),
                     )
                     .child(
                         div()
@@ -2232,12 +2464,19 @@ impl KskGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let company_name = self
+        let (company_name, def_tpls) = self
             .contracts_list
             .iter()
             .find(|c| c.id == contract_id)
-            .map(|c| c.company_name.clone())
-            .unwrap_or_default();
+            .map(|c| {
+                let t = if c.default_templates.trim().is_empty() {
+                    "TREN_18".to_string()
+                } else {
+                    c.default_templates.clone()
+                };
+                (c.company_name.clone(), t)
+            })
+            .unwrap_or_else(|| (String::new(), "TREN_18".to_string()));
         let def_nguon = self.get_default_catalog_code("NGUON_CHI_TRA", None);
         let def_dt = self.get_default_catalog_code("DOI_TUONG", None);
 
@@ -2246,6 +2485,8 @@ impl KskGpuiApp {
         self.grp_bulk_apply_nguon = true;
         self.grp_bulk_apply_doituong = true;
         self.grp_bulk_apply_lydo = true;
+        self.grp_bulk_apply_templates = false;
+        self.grp_bulk_templates = def_tpls;
         self.grp_bulk_nguon = if def_nguon.is_empty() { "9".into() } else { def_nguon };
         self.grp_bulk_doituong = if def_dt.is_empty() { "13".into() } else { def_dt };
         self.grp_bulk_workplace.update(cx, |s, cx| s.set_value(company_name, window, cx));
@@ -2279,6 +2520,12 @@ impl KskGpuiApp {
         } else {
             None
         };
+        let templates_opt = if self.grp_bulk_apply_templates {
+            let list = crate::templates::parse_template_list(&self.grp_bulk_templates);
+            Some(crate::templates::format_template_list(&list))
+        } else {
+            None
+        };
 
         let state = self.state.clone();
         let mk = self.master_key;
@@ -2297,6 +2544,7 @@ impl KskGpuiApp {
                 nguon,
                 doituong,
                 lydo,
+                templates_opt,
                 &updated_by,
                 mk.as_ref(),
             )
@@ -2464,6 +2712,87 @@ impl KskGpuiApp {
                             )
                             .child(Input::new(&self.grp_bulk_lydo).small()),
                     )
+                    .child({
+                        let apply_tpls = self.grp_bulk_apply_templates;
+                        let active_tpls =
+                            crate::templates::parse_template_list(&self.grp_bulk_templates);
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.0))
+                            .child(
+                                Checkbox::new("chk-bulk-tpls")
+                                    .checked(apply_tpls)
+                                    .label("Cập nhật Mẫu phiếu khám cho cả đoàn (có thể chọn nhiều)")
+                                    .on_click(cx.listener(|this, v: &bool, _, cx| {
+                                        this.grp_bulk_apply_templates = *v;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .flex_wrap()
+                                    .gap(px(6.0))
+                                    .children(
+                                        crate::templates::ALL_TEMPLATES.iter().map(
+                                            |(code, short_lbl, _)| {
+                                                let code_str = (*code).to_string();
+                                                let is_checked =
+                                                    active_tpls.iter().any(|x| x == code);
+                                                div()
+                                                    .id(SharedString::from(format!(
+                                                        "dlg-bulk-tpl-{}",
+                                                        code_str
+                                                    )))
+                                                    .px(px(10.0))
+                                                    .py(px(5.0))
+                                                    .rounded(px(6.0))
+                                                    .border_1()
+                                                    .border_color(rgb(if is_checked {
+                                                        PRIMARY_COL
+                                                    } else {
+                                                        border_col()
+                                                    }))
+                                                    .bg(rgb(if is_checked {
+                                                        primary_light()
+                                                    } else {
+                                                        bg_card()
+                                                    }))
+                                                    .text_xs()
+                                                    .font_weight(if is_checked {
+                                                        gpui::FontWeight::BOLD
+                                                    } else {
+                                                        gpui::FontWeight::MEDIUM
+                                                    })
+                                                    .text_color(rgb(if is_checked {
+                                                        PRIMARY_COL
+                                                    } else {
+                                                        text_main()
+                                                    }))
+                                                    .when(apply_tpls, |el| {
+                                                        el.cursor_pointer().on_click(cx.listener(
+                                                            move |this, _, _, cx| {
+                                                                this.grp_bulk_templates =
+                                                                    crate::templates::toggle_template_in_list(
+                                                                        &this.grp_bulk_templates,
+                                                                        &code_str,
+                                                                    );
+                                                                cx.notify();
+                                                            },
+                                                        ))
+                                                    })
+                                                    .child(format!(
+                                                        "{} {}",
+                                                        if is_checked { "☑" } else { "☐" },
+                                                        short_lbl
+                                                    ))
+                                            },
+                                        ),
+                                    ),
+                            )
+                    })
                     .child(
                         div()
                             .flex()
