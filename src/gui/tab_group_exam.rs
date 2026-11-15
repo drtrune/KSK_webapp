@@ -5,6 +5,7 @@ use gpui::{
 use gpui_component::{
     Sizable,
     button::{Button, ButtonVariants},
+    checkbox::Checkbox,
     input::Input,
 };
 
@@ -403,6 +404,12 @@ impl KskGpuiApp {
             )
             .when_some(self.grp_detail_contract_id, |el, cid| {
                 el.child(self.render_contract_detail_window(cid, window, cx))
+            })
+            .when(self.grp_show_bulk_edit_dialog, |el| {
+                el.child(self.render_group_bulk_edit_dialog(cx))
+            })
+            .when(self.grp_show_member_dialog, |el| {
+                el.child(self.render_group_member_dialog(cx))
             })
             .when(self.grp_show_import_dialog, |el| {
                 el.child(self.render_group_import_dialog(cx))
@@ -857,6 +864,24 @@ impl KskGpuiApp {
                                             })),
                                     )
                                     .child(
+                                        Button::new("btn-detail-add-member")
+                                            .label("+ Thêm lẻ nhân viên")
+                                            .small()
+                                            .secondary()
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.open_group_member_add_dialog(cid, window, cx);
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("btn-detail-bulk-edit")
+                                            .label("Điều chỉnh chung cả đoàn")
+                                            .small()
+                                            .secondary()
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.open_group_bulk_edit_dialog(cid, window, cx);
+                                            })),
+                                    )
+                                    .child(
                                         Button::new("btn-detail-print-group-rec")
                                             .label("In phôi tiếp nhận cả đoàn (A4)")
                                             .small()
@@ -979,26 +1004,31 @@ impl KskGpuiApp {
                                             .label(if has_scan { "Đổi file scan" } else { "Nhập file scan HĐ" })
                                             .small()
                                             .secondary()
-                                            .on_click(cx.listener(move |this, _, _, cx| {
-                                                if let Some(p) = rfd::FileDialog::new()
-                                                    .add_filter("PDF / Ảnh", &["pdf", "png", "jpg", "jpeg", "webp"])
-                                                    .pick_file()
-                                                {
-                                                    let path_str = p.to_string_lossy().to_string();
-                                                    let state = this.state.clone();
-                                                    let path_clone = path_str.clone();
-                                                    let res = this.run_sync(async move {
-                                                        let pool = state.db.read().await;
-                                                        db::update_exam_contract_scan_file(&pool, cid, &path_clone).await
-                                                    });
-                                                    match res {
-                                                        Ok(_) => {
-                                                            this.refresh_group_data(cx);
-                                                            this.show_toast("Đã lưu đường dẫn file scan hợp đồng!", false, cx);
+                                            .on_click(cx.listener(move |_, _, _, cx| {
+                                                spawn_file_dialog(
+                                                    cx,
+                                                    || {
+                                                        rfd::FileDialog::new()
+                                                            .add_filter("PDF / Ảnh", &["pdf", "png", "jpg", "jpeg", "webp"])
+                                                            .pick_file()
+                                                    },
+                                                    move |this, p, cx| {
+                                                        let path_str = p.to_string_lossy().to_string();
+                                                        let state = this.state.clone();
+                                                        let path_clone = path_str.clone();
+                                                        let res = this.run_sync(async move {
+                                                            let pool = state.db.read().await;
+                                                            db::update_exam_contract_scan_file(&pool, cid, &path_clone).await
+                                                        });
+                                                        match res {
+                                                            Ok(_) => {
+                                                                this.refresh_group_data(cx);
+                                                                this.show_toast("Đã lưu đường dẫn file scan hợp đồng!", false, cx);
+                                                            }
+                                                            Err(e) => this.show_toast(&e, true, cx),
                                                         }
-                                                        Err(e) => this.show_toast(&e, true, cx),
-                                                    }
-                                                }
+                                                    },
+                                                );
                                             })),
                                     )
                                     .when(has_scan, |el| {
@@ -1173,6 +1203,15 @@ impl KskGpuiApp {
                                             .gap(px(8.0))
                                             .child(badge(st_lbl, st_bg, st_fg))
                                             .child(
+                                                Button::new(SharedString::from(format!("btn-det-edit-rec-{}", rec_id)))
+                                                    .label("Sửa")
+                                                    .small()
+                                                    .secondary()
+                                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                                        this.open_group_member_edit_dialog(cid, rec_id, window, cx);
+                                                    })),
+                                            )
+                                            .child(
                                                 Button::new(SharedString::from(format!("btn-det-open-rec-{}", rec_id)))
                                                     .label("Mở hồ sơ")
                                                     .small()
@@ -1292,22 +1331,27 @@ impl KskGpuiApp {
                                             .label("Tải file mẫu (.csv)")
                                             .small()
                                             .secondary()
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                if let Some(p) = rfd::FileDialog::new()
-                                                    .set_file_name("mau_import_kham_doan.csv")
-                                                    .add_filter("CSV UTF-8", &["csv"])
-                                                    .save_file()
-                                                {
-                                                    let bytes = group_import::sample_group_import_csv_bytes();
-                                                    match std::fs::write(&p, bytes) {
-                                                        Ok(_) => this.show_toast(
-                                                            &format!("Đã lưu file mẫu tại {}", p.display()),
-                                                            false,
-                                                            cx,
-                                                        ),
-                                                        Err(e) => this.show_toast(&format!("Lỗi lưu file mẫu: {}", e), true, cx),
-                                                    }
-                                                }
+                                            .on_click(cx.listener(|_, _, _, cx| {
+                                                spawn_file_dialog(
+                                                    cx,
+                                                    || {
+                                                        rfd::FileDialog::new()
+                                                            .set_file_name("mau_import_kham_doan.csv")
+                                                            .add_filter("CSV UTF-8", &["csv"])
+                                                            .save_file()
+                                                    },
+                                                    |this, p, cx| {
+                                                        let bytes = group_import::sample_group_import_csv_bytes();
+                                                        match std::fs::write(&p, bytes) {
+                                                            Ok(_) => this.show_toast(
+                                                                &format!("Đã lưu file mẫu tại {}", p.display()),
+                                                                false,
+                                                                cx,
+                                                            ),
+                                                            Err(e) => this.show_toast(&format!("Lỗi lưu file mẫu: {}", e), true, cx),
+                                                        }
+                                                    },
+                                                );
                                             })),
                                     )
                                     .child(
@@ -1545,37 +1589,40 @@ impl KskGpuiApp {
             self.show_toast("Không tìm thấy hợp đồng đã chọn!", true, cx);
             return;
         };
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("Excel / CSV", &["xlsx", "xls", "ods", "csv"])
-            .pick_file()
-        else {
-            return;
-        };
+        spawn_file_dialog(
+            cx,
+            || {
+                rfd::FileDialog::new()
+                    .add_filter("Excel / CSV", &["xlsx", "xls", "ods", "csv"])
+                    .pick_file()
+            },
+            move |this, path, cx| {
+                let state = this.state.clone();
+                let mk = this.master_key;
+                let (existing_tn, existing_cccd) = this.run_sync(async move {
+                    let pool = state.db.read().await;
+                    let tns = db::get_existing_ma_tiep_nhan_set(&pool).await;
+                    let cccds = db::get_existing_contract_cccd_set(&pool, cid, mk.as_ref()).await;
+                    (tns, cccds)
+                });
 
-        let state = self.state.clone();
-        let mk = self.master_key;
-        let (existing_tn, existing_cccd) = self.run_sync(async move {
-            let pool = state.db.read().await;
-            let tns = db::get_existing_ma_tiep_nhan_set(&pool).await;
-            let cccds = db::get_existing_contract_cccd_set(&pool, cid, mk.as_ref()).await;
-            (tns, cccds)
-        });
-
-        match group_import::parse_group_import_file(
-            &path,
-            &contract.company_name,
-            &contract.exam_date,
-            &self.catalogs,
-            &existing_tn,
-            &existing_cccd,
-        ) {
-            Ok(rows) => {
-                self.grp_import_file_path = path.to_string_lossy().to_string();
-                self.grp_import_rows = rows;
-                cx.notify();
-            }
-            Err(e) => self.show_toast(&e, true, cx),
-        }
+                match group_import::parse_group_import_file(
+                    &path,
+                    &contract.company_name,
+                    &contract.exam_date,
+                    &this.catalogs,
+                    &existing_tn,
+                    &existing_cccd,
+                ) {
+                    Ok(rows) => {
+                        this.grp_import_file_path = path.to_string_lossy().to_string();
+                        this.grp_import_rows = rows;
+                        cx.notify();
+                    }
+                    Err(e) => this.show_toast(&e, true, cx),
+                }
+            },
+        );
     }
 
     fn commit_group_import(&mut self, cx: &mut Context<Self>) {
@@ -1630,4 +1677,842 @@ impl KskGpuiApp {
             Err(e) => self.show_toast(&e, true, cx),
         }
     }
+
+    fn open_group_member_add_dialog(
+        &mut self,
+        contract_id: i64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let (company_name, exam_date) = self
+            .contracts_list
+            .iter()
+            .find(|c| c.id == contract_id)
+            .map(|c| {
+                let d = if c.exam_date.trim().is_empty() {
+                    chrono::Local::now().format("%d/%m/%Y").to_string()
+                } else {
+                    c.exam_date.clone()
+                };
+                (c.company_name.clone(), d)
+            })
+            .unwrap_or_else(|| (String::new(), chrono::Local::now().format("%d/%m/%Y").to_string()));
+
+        self.grp_member_contract_id = Some(contract_id);
+        self.grp_member_edit_id = None;
+        self.open_dropdown = None;
+        self.grp_mem_gioi_tinh = "1".into();
+
+        let def_tinh = self.get_default_catalog_code("TINH_TP", None);
+        self.grp_mem_matinh = def_tinh.clone();
+        self.grp_mem_maxa = if def_tinh.is_empty() {
+            String::new()
+        } else {
+            self.get_default_catalog_code("XA_PHUONG", Some(&def_tinh))
+        };
+        let dantoc_def = {
+            let d = self.get_default_catalog_code("DAN_TOC", None);
+            if d.is_empty() { "01".to_string() } else { d }
+        };
+        let nghe_def = {
+            let d = self.get_default_catalog_code("NGHE_NGHIEP", None);
+            if d.is_empty() { "00".to_string() } else { d }
+        };
+        let kcb_def = {
+            let d = self.get_default_catalog_code("LOAI_KCB", None);
+            if d.is_empty() { "1".to_string() } else { d }
+        };
+        let nhommau_def = self.get_default_catalog_code("NHOM_MAU", None);
+        self.grp_mem_ma_dantoc = dantoc_def;
+        self.grp_mem_ma_nghe = nghe_def;
+        self.grp_mem_ma_loai_kcb = kcb_def;
+        self.grp_mem_nhom_mau = nhommau_def;
+
+        self.grp_mem_ma_tn.update(cx, |s, cx| s.set_value("", window, cx));
+        self.grp_mem_ma_yte.update(cx, |s, cx| s.set_value("", window, cx));
+        self.grp_mem_ho_ten.update(cx, |s, cx| s.set_value("", window, cx));
+        self.grp_mem_ngay_sinh.update(cx, |s, cx| s.set_value("", window, cx));
+        self.grp_mem_so_cccd.update(cx, |s, cx| s.set_value("", window, cx));
+        self.grp_mem_ngaycap_cccd.update(cx, |s, cx| s.set_value("", window, cx));
+        self.grp_mem_noicap_cccd.update(cx, |s, cx| s.set_value("", window, cx));
+        self.grp_mem_dien_thoai.update(cx, |s, cx| s.set_value("", window, cx));
+        self.grp_mem_dia_chi.update(cx, |s, cx| s.set_value("", window, cx));
+        self.grp_mem_noi_lam_viec.update(cx, |s, cx| s.set_value(company_name, window, cx));
+        self.grp_mem_ngay_vao.update(cx, |s, cx| s.set_value(exam_date, window, cx));
+        self.grp_mem_ly_do.update(cx, |s, cx| s.set_value("Khám sức khỏe", window, cx));
+        self.grp_show_member_dialog = true;
+        cx.notify();
+    }
+
+    fn open_group_member_edit_dialog(
+        &mut self,
+        contract_id: i64,
+        record_id: i64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let state = self.state.clone();
+        let mk = self.master_key;
+        let res = self.run_sync(async move {
+            let pool = state.db.read().await;
+            db::get_contract_record_for_edit(&pool, record_id, mk.as_ref()).await
+        });
+        let (status, payload) = match res {
+            Ok(v) => v,
+            Err(e) => {
+                self.show_toast(&e, true, cx);
+                return;
+            }
+        };
+        if status == 2 {
+            self.show_toast("Hồ sơ đã ký khóa, không thể chỉnh sửa!", true, cx);
+            return;
+        }
+        let get_s = |k: &str| -> String {
+            payload
+                .get(k)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+
+        self.grp_member_contract_id = Some(contract_id);
+        self.grp_member_edit_id = Some(record_id);
+        self.open_dropdown = None;
+        let gt = get_s("GIOI_TINH");
+        self.grp_mem_gioi_tinh = if gt == "2" || gt == "3" { gt } else { "1".into() };
+        self.grp_mem_matinh = get_s("MATINH_CU_TRU");
+        self.grp_mem_maxa = get_s("MAXA_CU_TRU");
+        let dt = get_s("MA_DAN_TOC");
+        self.grp_mem_ma_dantoc = if dt.is_empty() { "01".into() } else { dt };
+        self.grp_mem_ma_nghe = get_s("MA_NGHE_NGHIEP");
+        let kcb = get_s("MA_LOAI_KCB");
+        self.grp_mem_ma_loai_kcb = if kcb.is_empty() { "1".into() } else { kcb };
+        self.grp_mem_nhom_mau = get_s("NHOM_MAU");
+
+        self.grp_mem_ma_tn.update(cx, |s, cx| s.set_value(get_s("MA_TIEP_NHAN"), window, cx));
+        self.grp_mem_ma_yte.update(cx, |s, cx| s.set_value(get_s("MA_Y_TE"), window, cx));
+        self.grp_mem_ho_ten.update(cx, |s, cx| s.set_value(get_s("HO_TEN"), window, cx));
+        self.grp_mem_ngay_sinh.update(cx, |s, cx| s.set_value(get_s("NGAY_SINH"), window, cx));
+        self.grp_mem_so_cccd.update(cx, |s, cx| s.set_value(get_s("SO_CCCD"), window, cx));
+        self.grp_mem_ngaycap_cccd.update(cx, |s, cx| s.set_value(get_s("NGAYCAP_CCCD"), window, cx));
+        self.grp_mem_noicap_cccd.update(cx, |s, cx| s.set_value(get_s("NOICAP_CCCD"), window, cx));
+        self.grp_mem_dien_thoai.update(cx, |s, cx| s.set_value(get_s("DIEN_THOAI"), window, cx));
+        self.grp_mem_dia_chi.update(cx, |s, cx| s.set_value(get_s("DIA_CHI"), window, cx));
+        self.grp_mem_noi_lam_viec.update(cx, |s, cx| s.set_value(get_s("NOI_LAM_VIEC_HOC_TAP"), window, cx));
+        self.grp_mem_ngay_vao.update(cx, |s, cx| s.set_value(get_s("NGAY_VAO"), window, cx));
+        self.grp_mem_ly_do.update(cx, |s, cx| s.set_value(get_s("LY_DO_VV"), window, cx));
+        self.grp_show_member_dialog = true;
+        cx.notify();
+    }
+
+    fn save_group_member(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(cid) = self.grp_member_contract_id else {
+            return;
+        };
+        let edit_id = self.grp_member_edit_id;
+        let row = crate::models::GroupImportRow {
+            row_index: 0,
+            ma_tiep_nhan: self.grp_mem_ma_tn.read(cx).value().trim().to_string(),
+            ma_y_te: self.grp_mem_ma_yte.read(cx).value().trim().to_string(),
+            ho_ten: self.grp_mem_ho_ten.read(cx).value().trim().to_string(),
+            ngay_sinh: self.grp_mem_ngay_sinh.read(cx).value().trim().to_string(),
+            gioi_tinh: self.grp_mem_gioi_tinh.clone(),
+            so_cccd: self.grp_mem_so_cccd.read(cx).value().trim().to_string(),
+            ngaycap_cccd: self.grp_mem_ngaycap_cccd.read(cx).value().trim().to_string(),
+            noicap_cccd: self.grp_mem_noicap_cccd.read(cx).value().trim().to_string(),
+            dien_thoai: self.grp_mem_dien_thoai.read(cx).value().trim().to_string(),
+            matinh_cu_tru: self.grp_mem_matinh.clone(),
+            maxa_cu_tru: self.grp_mem_maxa.clone(),
+            dia_chi: self.grp_mem_dia_chi.read(cx).value().trim().to_string(),
+            ma_dan_toc: self.grp_mem_ma_dantoc.clone(),
+            ma_nghe_nghiep: self.grp_mem_ma_nghe.clone(),
+            noi_lam_viec_hoc_tap: self.grp_mem_noi_lam_viec.read(cx).value().trim().to_string(),
+            ma_loai_kcb: self.grp_mem_ma_loai_kcb.clone(),
+            ngay_vao: self.grp_mem_ngay_vao.read(cx).value().trim().to_string(),
+            nhom_mau: self.grp_mem_nhom_mau.clone(),
+            ly_do_vv: self.grp_mem_ly_do.read(cx).value().trim().to_string(),
+            error: None,
+        };
+
+        let state = self.state.clone();
+        let mk = self.master_key;
+        let ma_cskcb = self.cfg.ma_cskcb.clone();
+        let ma_gtin = self.cfg.ma_gtin_cskcb.clone();
+        let updated_by = self
+            .current_user
+            .as_ref()
+            .map(|u| u.username.clone())
+            .unwrap_or_else(|| "system".into());
+
+        let res = self.run_sync(async move {
+            let pool = state.db.read().await;
+            db::upsert_group_member_record(
+                &pool,
+                cid,
+                edit_id,
+                &ma_cskcb,
+                &ma_gtin,
+                &updated_by,
+                mk.as_ref(),
+                &row,
+            )
+            .await
+        });
+
+        match res {
+            Ok(_) => {
+                self.grp_show_member_dialog = false;
+                self.refresh_group_data(cx);
+                self.refresh_contract_detail_records(cid, cx);
+                if self.sidebar_contract_id == Some(cid) {
+                    self.refresh_records(window, cx);
+                }
+                self.show_toast(
+                    if edit_id.is_some() {
+                        "Đã cập nhật thông tin nhân viên trong đoàn!"
+                    } else {
+                        "Đã thêm lẻ nhân viên vào đoàn khám!"
+                    },
+                    false,
+                    cx,
+                );
+            }
+            Err(e) => self.show_toast(&e, true, cx),
+        }
+    }
+
+    fn render_group_member_dialog(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let is_editing = self.grp_member_edit_id.is_some();
+        let gioi_tinh = self.grp_mem_gioi_tinh.clone();
+        let ma_tinh = self.grp_mem_matinh.clone();
+        let ma_xa = self.grp_mem_maxa.clone();
+        let ma_dantoc = self.grp_mem_ma_dantoc.clone();
+        let ma_nghe = self.grp_mem_ma_nghe.clone();
+        let kcb = self.grp_mem_ma_loai_kcb.clone();
+        let nhom_mau = self.grp_mem_nhom_mau.clone();
+
+        let gender_opts = vec![
+            ("1".to_string(), "Nam".to_string()),
+            ("2".to_string(), "Nữ".to_string()),
+            ("3".to_string(), "Khác".to_string()),
+        ];
+        let tinh_opts = self.query_catalog_options("TINH_TP", None);
+        let xa_opts = if ma_tinh.is_empty() {
+            vec![("".to_string(), "-- Chọn Tỉnh/TP trước --".to_string())]
+        } else {
+            self.query_catalog_options("XA_PHUONG", Some(&ma_tinh))
+        };
+        let dantoc_opts = self.query_catalog_options("DAN_TOC", None);
+        let nghe_opts = self.query_catalog_options("NGHE_NGHIEP", None);
+        let nhommau_opts = self.query_catalog_options("NHOM_MAU", None);
+        let mut kcb_opts = self.query_catalog_options("LOAI_KCB", None);
+        if kcb_opts.is_empty() {
+            kcb_opts = vec![
+                ("1".to_string(), "Khám sức khỏe định kỳ".to_string()),
+                ("2".to_string(), "Khám sức khỏe tuyển dụng".to_string()),
+                ("3".to_string(), "Khám sức khỏe lái xe".to_string()),
+            ];
+        }
+
+        div()
+            .absolute()
+            .inset_0()
+            .bg(gpui::rgba(0x00000080))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                div()
+                    .w(px(900.0))
+                    .max_h(px(720.0))
+                    .p(px(20.0))
+                    .rounded(px(10.0))
+                    .bg(rgb(bg_card()))
+                    .border_1()
+                    .border_color(rgb(border_col()))
+                    .shadow_lg()
+                    .flex()
+                    .flex_col()
+                    .gap(px(12.0))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_base()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .child(if is_editing {
+                                        "Sửa thông tin hành chính nhân viên"
+                                    } else {
+                                        "Thêm lẻ nhân viên vào đoàn khám"
+                                    }),
+                            )
+                            .child(
+                                Button::new("btn-dlg-mem-close")
+                                    .label("✕")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.grp_show_member_dialog = false;
+                                        this.open_dropdown = None;
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("dlg-mem-scroll")
+                            .flex_1()
+                            .overflow_y_scroll()
+                            .pr(px(4.0))
+                            .flex()
+                            .flex_col()
+                            .gap(px(12.0))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .flex_wrap()
+                                    .gap(px(12.0))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(180.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.0))
+                                            .child(field_label("Họ và tên", true))
+                                            .child(Input::new(&self.grp_mem_ho_ten).small()),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(160.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.0))
+                                            .child(field_label("Mã bệnh nhân (HIS)", false))
+                                            .child(Input::new(&self.grp_mem_ma_yte).small()),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(160.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.0))
+                                            .child(field_label("Số tiếp nhận", true))
+                                            .child(Input::new(&self.grp_mem_ma_tn).small()),
+                                    )
+                                    .child(self.render_date_picker_entity(
+                                        "grp-mem-ngay-sinh",
+                                        "Ngày sinh (dd/mm/yyyy)",
+                                        self.grp_mem_ngay_sinh.clone(),
+                                        cx,
+                                    )),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .flex_wrap()
+                                    .gap(px(12.0))
+                                    .child(self.render_select_dropdown(
+                                        "grp-mem-gioi-tinh",
+                                        "Giới tính",
+                                        &gioi_tinh,
+                                        gender_opts,
+                                        true,
+                                        |this, val, _, _| {
+                                            this.grp_mem_gioi_tinh = val;
+                                        },
+                                        cx,
+                                    ))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(160.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.0))
+                                            .child(field_label("Số CCCD / CMND", false))
+                                            .child(Input::new(&self.grp_mem_so_cccd).small()),
+                                    )
+                                    .child(self.render_date_picker_entity(
+                                        "grp-mem-ngaycap-cccd",
+                                        "Ngày cấp CCCD (dd/mm/yyyy)",
+                                        self.grp_mem_ngaycap_cccd.clone(),
+                                        cx,
+                                    ))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(180.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.0))
+                                            .child(field_label("Nơi cấp CCCD", false))
+                                            .child(Input::new(&self.grp_mem_noicap_cccd).small()),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .flex_wrap()
+                                    .gap(px(12.0))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(150.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.0))
+                                            .child(field_label("Số điện thoại", false))
+                                            .child(Input::new(&self.grp_mem_dien_thoai).small()),
+                                    )
+                                    .child(self.render_select_dropdown(
+                                        "grp-mem-tinh",
+                                        "Tỉnh / Thành phố cư trú",
+                                        &ma_tinh,
+                                        tinh_opts,
+                                        true,
+                                        |this, val, _, _| {
+                                            this.grp_mem_matinh = val.clone();
+                                            this.grp_mem_maxa =
+                                                this.get_default_catalog_code("XA_PHUONG", Some(&val));
+                                        },
+                                        cx,
+                                    ))
+                                    .child(self.render_select_dropdown(
+                                        "grp-mem-xa",
+                                        "Phường / Xã cư trú",
+                                        &ma_xa,
+                                        xa_opts,
+                                        true,
+                                        |this, val, _, _| {
+                                            this.grp_mem_maxa = val;
+                                        },
+                                        cx,
+                                    ))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(200.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.0))
+                                            .child(field_label("Địa chỉ chi tiết (Số nhà, thôn/tổ)", false))
+                                            .child(Input::new(&self.grp_mem_dia_chi).small()),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .flex_wrap()
+                                    .gap(px(12.0))
+                                    .child(self.render_select_dropdown(
+                                        "grp-mem-dantoc",
+                                        "Dân tộc",
+                                        &ma_dantoc,
+                                        dantoc_opts,
+                                        true,
+                                        |this, val, _, _| {
+                                            this.grp_mem_ma_dantoc = val;
+                                        },
+                                        cx,
+                                    ))
+                                    .child(self.render_select_dropdown(
+                                        "grp-mem-nghe",
+                                        "Nghề nghiệp",
+                                        &ma_nghe,
+                                        nghe_opts,
+                                        true,
+                                        |this, val, _, _| {
+                                            this.grp_mem_ma_nghe = val;
+                                        },
+                                        cx,
+                                    ))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(200.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.0))
+                                            .child(field_label("Nơi làm việc / Học tập", false))
+                                            .child(Input::new(&self.grp_mem_noi_lam_viec).small()),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .flex_wrap()
+                                    .gap(px(12.0))
+                                    .child(self.render_select_dropdown(
+                                        "grp-mem-loai-kcb",
+                                        "Loại hình khám (QĐ 3176)",
+                                        &kcb,
+                                        kcb_opts,
+                                        true,
+                                        |this, val, _, _| {
+                                            this.grp_mem_ma_loai_kcb = val;
+                                        },
+                                        cx,
+                                    ))
+                                    .child(self.render_date_picker_entity(
+                                        "grp-mem-ngay-vao",
+                                        "Ngày vào khám (dd/mm/yyyy)",
+                                        self.grp_mem_ngay_vao.clone(),
+                                        cx,
+                                    ))
+                                    .child(self.render_select_dropdown(
+                                        "grp-mem-nhom-mau",
+                                        "Nhóm máu",
+                                        &nhom_mau,
+                                        nhommau_opts,
+                                        true,
+                                        |this, val, _, _| {
+                                            this.grp_mem_nhom_mau = val;
+                                        },
+                                        cx,
+                                    ))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(180.0))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.0))
+                                            .child(field_label("Lý do khám", false))
+                                            .child(Input::new(&self.grp_mem_ly_do).small()),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .justify_end()
+                            .gap(px(8.0))
+                            .child(
+                                Button::new("btn-dlg-mem-cancel")
+                                    .label("Hủy")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.grp_show_member_dialog = false;
+                                        this.open_dropdown = None;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("btn-dlg-mem-save")
+                                    .label(if is_editing { "Lưu thay đổi" } else { "Thêm nhân viên" })
+                                    .small()
+                                    .primary()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.save_group_member(window, cx);
+                                    })),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn open_group_bulk_edit_dialog(
+        &mut self,
+        contract_id: i64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let company_name = self
+            .contracts_list
+            .iter()
+            .find(|c| c.id == contract_id)
+            .map(|c| c.company_name.clone())
+            .unwrap_or_default();
+        let def_nguon = self.get_default_catalog_code("NGUON_CHI_TRA", None);
+        let def_dt = self.get_default_catalog_code("DOI_TUONG", None);
+
+        self.grp_bulk_contract_id = Some(contract_id);
+        self.grp_bulk_apply_workplace = true;
+        self.grp_bulk_apply_nguon = true;
+        self.grp_bulk_apply_doituong = true;
+        self.grp_bulk_apply_lydo = true;
+        self.grp_bulk_nguon = if def_nguon.is_empty() { "9".into() } else { def_nguon };
+        self.grp_bulk_doituong = if def_dt.is_empty() { "13".into() } else { def_dt };
+        self.grp_bulk_workplace.update(cx, |s, cx| s.set_value(company_name, window, cx));
+        self.grp_bulk_lydo.update(cx, |s, cx| s.set_value("Khám sức khỏe định kỳ", window, cx));
+        self.open_dropdown = None;
+        self.grp_show_bulk_edit_dialog = true;
+        cx.notify();
+    }
+
+    fn save_group_bulk_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(cid) = self.grp_bulk_contract_id else {
+            return;
+        };
+        let noi_lv = if self.grp_bulk_apply_workplace {
+            Some(self.grp_bulk_workplace.read(cx).value().trim().to_string())
+        } else {
+            None
+        };
+        let nguon = if self.grp_bulk_apply_nguon {
+            Some(self.grp_bulk_nguon.clone())
+        } else {
+            None
+        };
+        let doituong = if self.grp_bulk_apply_doituong {
+            Some(self.grp_bulk_doituong.clone())
+        } else {
+            None
+        };
+        let lydo = if self.grp_bulk_apply_lydo {
+            Some(self.grp_bulk_lydo.read(cx).value().trim().to_string())
+        } else {
+            None
+        };
+
+        let state = self.state.clone();
+        let mk = self.master_key;
+        let updated_by = self
+            .current_user
+            .as_ref()
+            .map(|u| u.username.clone())
+            .unwrap_or_else(|| "system".into());
+
+        let res = self.run_sync(async move {
+            let pool = state.db.read().await;
+            db::bulk_update_contract_records_common(
+                &pool,
+                cid,
+                noi_lv,
+                nguon,
+                doituong,
+                lydo,
+                &updated_by,
+                mk.as_ref(),
+            )
+            .await
+        });
+
+        match res {
+            Ok(n) => {
+                self.grp_show_bulk_edit_dialog = false;
+                self.open_dropdown = None;
+                self.refresh_contract_detail_records(cid, cx);
+                if self.sidebar_contract_id == Some(cid) {
+                    self.refresh_records(window, cx);
+                }
+                self.show_toast(
+                    &format!("Đã cập nhật thông tin chung cho {} hồ sơ chưa khóa trong đoàn!", n),
+                    false,
+                    cx,
+                );
+            }
+            Err(e) => self.show_toast(&e, true, cx),
+        }
+    }
+
+    fn render_group_bulk_edit_dialog(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let nguon_opts = self.query_catalog_options("NGUON_CHI_TRA", None);
+        let doituong_opts = self.query_catalog_options("DOI_TUONG", None);
+        let apply_wp = self.grp_bulk_apply_workplace;
+        let apply_ng = self.grp_bulk_apply_nguon;
+        let apply_dt = self.grp_bulk_apply_doituong;
+        let apply_ld = self.grp_bulk_apply_lydo;
+        let cur_ng = self.grp_bulk_nguon.clone();
+        let cur_dt = self.grp_bulk_doituong.clone();
+
+        div()
+            .absolute()
+            .inset_0()
+            .bg(gpui::rgba(0x00000080))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                div()
+                    .w(px(620.0))
+                    .p(px(20.0))
+                    .rounded(px(10.0))
+                    .bg(rgb(bg_card()))
+                    .border_1()
+                    .border_color(rgb(border_col()))
+                    .shadow_lg()
+                    .flex()
+                    .flex_col()
+                    .gap(px(12.0))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_base()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .child("Điều chỉnh thông tin chung cho cả đoàn"),
+                            )
+                            .child(
+                                Button::new("btn-dlg-bulk-close")
+                                    .label("✕")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.grp_show_bulk_edit_dialog = false;
+                                        this.open_dropdown = None;
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(text_muted()))
+                            .child("Chọn các trường muốn đồng bộ cho toàn bộ hồ sơ chưa ký khóa trong hợp đồng này."),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.0))
+                            .child(
+                                Checkbox::new("chk-bulk-wp")
+                                    .checked(apply_wp)
+                                    .label("Cập nhật Nơi làm việc / Học tập")
+                                    .on_click(cx.listener(|this, v: &bool, _, cx| {
+                                        this.grp_bulk_apply_workplace = *v;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(Input::new(&self.grp_bulk_workplace).small()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.0))
+                            .child(
+                                Checkbox::new("chk-bulk-ng")
+                                    .checked(apply_ng)
+                                    .label("Cập nhật Nguồn chi trả")
+                                    .on_click(cx.listener(|this, v: &bool, _, cx| {
+                                        this.grp_bulk_apply_nguon = *v;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(self.render_select_dropdown(
+                                "grp-bulk-nguon",
+                                "",
+                                &cur_ng,
+                                nguon_opts,
+                                apply_ng,
+                                |this, val, _, _| {
+                                    this.grp_bulk_nguon = val;
+                                },
+                                cx,
+                            )),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.0))
+                            .child(
+                                Checkbox::new("chk-bulk-dt")
+                                    .checked(apply_dt)
+                                    .label("Cập nhật Đối tượng")
+                                    .on_click(cx.listener(|this, v: &bool, _, cx| {
+                                        this.grp_bulk_apply_doituong = *v;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(self.render_select_dropdown(
+                                "grp-bulk-doituong",
+                                "",
+                                &cur_dt,
+                                doituong_opts,
+                                apply_dt,
+                                |this, val, _, _| {
+                                    this.grp_bulk_doituong = val;
+                                },
+                                cx,
+                            )),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.0))
+                            .child(
+                                Checkbox::new("chk-bulk-ld")
+                                    .checked(apply_ld)
+                                    .label("Cập nhật Lý do khám")
+                                    .on_click(cx.listener(|this, v: &bool, _, cx| {
+                                        this.grp_bulk_apply_lydo = *v;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(Input::new(&self.grp_bulk_lydo).small()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .justify_end()
+                            .gap(px(8.0))
+                            .child(
+                                Button::new("btn-dlg-bulk-cancel")
+                                    .label("Hủy")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.grp_show_bulk_edit_dialog = false;
+                                        this.open_dropdown = None;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("btn-dlg-bulk-save")
+                                    .label("Áp dụng cho cả đoàn")
+                                    .small()
+                                    .primary()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.save_group_bulk_edit(window, cx);
+                                    })),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
+}
+
+/// Runs a native `rfd::FileDialog` on a dedicated OS thread so the Win32 modal
+/// message loop does not re-enter GPUI while `AppCell` is mutably borrowed.
+fn spawn_file_dialog<F, H>(cx: &mut Context<KskGpuiApp>, dialog_fn: F, on_picked: H)
+where
+    F: FnOnce() -> Option<std::path::PathBuf> + Send + 'static,
+    H: FnOnce(&mut KskGpuiApp, std::path::PathBuf, &mut Context<KskGpuiApp>) + 'static,
+{
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(dialog_fn());
+    });
+    cx.spawn(async move |this, cx| {
+        if let Ok(Some(path)) = rx.await {
+            let _ = this.update(cx, |app, cx| {
+                on_picked(app, path, cx);
+            });
+        }
+    })
+    .detach();
 }

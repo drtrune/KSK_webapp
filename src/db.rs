@@ -319,6 +319,7 @@ pub async fn seed_catalogs_from_asset(pool: &SqlitePool) -> Result<usize, sqlx::
     Ok(count)
 }
 
+#[allow(dead_code)]
 pub async fn get_db_info(pool: &SqlitePool, current_db_path: &str) -> DbInfo {
     let file_size_bytes = fs::metadata(current_db_path)
         .map(|m| m.len())
@@ -1022,6 +1023,221 @@ pub async fn get_existing_contract_cccd_set(
         .collect()
 }
 
+fn apply_group_row_to_payload(
+    payload: &mut Map<String, Value>,
+    r: &crate::models::GroupImportRow,
+    ma_cskcb: &str,
+    ma_gtin: &str,
+) {
+    payload.insert("MA_TIEP_NHAN".into(), Value::String(r.ma_tiep_nhan.clone()));
+    payload.insert("MA_Y_TE".into(), Value::String(r.ma_y_te.clone()));
+    payload.insert("HO_TEN".into(), Value::String(r.ho_ten.clone()));
+    payload.insert("NGAY_SINH".into(), Value::String(r.ngay_sinh.clone()));
+    payload.insert("GIOI_TINH".into(), Value::String(r.gioi_tinh.clone()));
+    payload.insert("SO_CCCD".into(), Value::String(r.so_cccd.clone()));
+    payload.insert("NGAYCAP_CCCD".into(), Value::String(r.ngaycap_cccd.clone()));
+    payload.insert("NOICAP_CCCD".into(), Value::String(r.noicap_cccd.clone()));
+    payload.insert("DIEN_THOAI".into(), Value::String(r.dien_thoai.clone()));
+    payload.insert("MATINH_CU_TRU".into(), Value::String(r.matinh_cu_tru.clone()));
+    payload.insert("MAXA_CU_TRU".into(), Value::String(r.maxa_cu_tru.clone()));
+    payload.insert("DIA_CHI".into(), Value::String(r.dia_chi.clone()));
+    payload.insert("MA_DAN_TOC".into(), Value::String(r.ma_dan_toc.clone()));
+    payload.insert("MA_NGHE_NGHIEP".into(), Value::String(r.ma_nghe_nghiep.clone()));
+    payload.insert(
+        "NOI_LAM_VIEC_HOC_TAP".into(),
+        Value::String(r.noi_lam_viec_hoc_tap.clone()),
+    );
+    payload.insert("MA_LOAI_KCB".into(), Value::String(r.ma_loai_kcb.clone()));
+    payload.insert("NGAY_VAO".into(), Value::String(r.ngay_vao.clone()));
+    payload.insert("NHOM_MAU".into(), Value::String(r.nhom_mau.clone()));
+    payload.insert("LY_DO_VV".into(), Value::String(r.ly_do_vv.clone()));
+    payload.insert("MA_CSKCB".into(), Value::String(ma_cskcb.to_string()));
+    payload.insert("MA_GTIN_CSKCB".into(), Value::String(ma_gtin.to_string()));
+    let ma_lk = format!("{}_{}", ma_cskcb, r.ma_tiep_nhan);
+    payload.insert("MA_LK".into(), Value::String(ma_lk));
+}
+
+pub async fn get_contract_record_for_edit(
+    pool: &SqlitePool,
+    record_id: i64,
+    master_key: Option<&[u8; 32]>,
+) -> Result<(i64, Map<String, Value>), String> {
+    let (status, enc_json) = sqlx::query_as::<_, (i64, String)>(
+        "SELECT status, payload_json FROM ksk_records WHERE id = ?",
+    )
+    .bind(record_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "Không tìm thấy hồ sơ!".to_string())?;
+    let json_str = crate::crypto::decrypt_field(master_key, &enc_json);
+    let payload: Map<String, Value> = serde_json::from_str(&json_str).unwrap_or_default();
+    Ok((status, payload))
+}
+
+pub async fn upsert_group_member_record(
+    pool: &SqlitePool,
+    contract_id: i64,
+    edit_record_id: Option<i64>,
+    ma_cskcb: &str,
+    ma_gtin: &str,
+    updated_by: &str,
+    master_key: Option<&[u8; 32]>,
+    row: &crate::models::GroupImportRow,
+) -> Result<(), String> {
+    let ma_tn = row.ma_tiep_nhan.trim();
+    let ho_ten = row.ho_ten.trim();
+    if ma_tn.is_empty() || ho_ten.is_empty() {
+        return Err("Mã tiếp nhận và Họ tên không được để trống!".into());
+    }
+
+    let dup = if let Some(rid) = edit_record_id {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM ksk_records WHERE ma_tiep_nhan = ? AND id != ? LIMIT 1",
+        )
+        .bind(ma_tn)
+        .bind(rid)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?
+    } else {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM ksk_records WHERE ma_tiep_nhan = ? LIMIT 1",
+        )
+        .bind(ma_tn)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?
+    };
+    if dup.is_some() {
+        return Err(format!("Mã tiếp nhận '{}' đã tồn tại!", ma_tn));
+    }
+
+    if let Some(rid) = edit_record_id {
+        let (status, mut payload) = get_contract_record_for_edit(pool, rid, master_key).await?;
+        if status == 2 {
+            return Err("Hồ sơ đã ký khóa, không thể chỉnh sửa!".into());
+        }
+        apply_group_row_to_payload(&mut payload, row, ma_cskcb, ma_gtin);
+        let json_str = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+        let (enc_ho_ten, enc_ngay_sinh, enc_so_cccd, enc_json_str) =
+            crate::crypto::encrypt_record_fields(
+                master_key,
+                &row.ho_ten,
+                &row.ngay_sinh,
+                &row.so_cccd,
+                &json_str,
+            );
+        sqlx::query(
+            "UPDATE ksk_records SET ma_tiep_nhan = ?, ma_y_te = ?, ho_ten = ?, gioi_tinh = ?, ngay_sinh = ?, so_cccd = ?, ngay_vao = ?, payload_json = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND contract_id = ?",
+        )
+        .bind(ma_tn)
+        .bind(&row.ma_y_te)
+        .bind(&enc_ho_ten)
+        .bind(&row.gioi_tinh)
+        .bind(&enc_ngay_sinh)
+        .bind(&enc_so_cccd)
+        .bind(&row.ngay_vao)
+        .bind(&enc_json_str)
+        .bind(updated_by)
+        .bind(rid)
+        .bind(contract_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    } else {
+        let mut payload = Map::new();
+        apply_group_row_to_payload(&mut payload, row, ma_cskcb, ma_gtin);
+        let json_str = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+        let (enc_ho_ten, enc_ngay_sinh, enc_so_cccd, enc_json_str) =
+            crate::crypto::encrypt_record_fields(
+                master_key,
+                &row.ho_ten,
+                &row.ngay_sinh,
+                &row.so_cccd,
+                &json_str,
+            );
+        sqlx::query(
+            "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, payload_json, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'doan', ?, ?, ?)",
+        )
+        .bind(ma_tn)
+        .bind(&row.ma_y_te)
+        .bind(&enc_ho_ten)
+        .bind(&row.gioi_tinh)
+        .bind(&enc_ngay_sinh)
+        .bind(&enc_so_cccd)
+        .bind(&row.ngay_vao)
+        .bind(contract_id)
+        .bind(&enc_json_str)
+        .bind(updated_by)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+pub async fn bulk_update_contract_records_common(
+    pool: &SqlitePool,
+    contract_id: i64,
+    noi_lam_viec: Option<String>,
+    nguon_chi_tra: Option<String>,
+    doi_tuong: Option<String>,
+    ly_do_vv: Option<String>,
+    updated_by: &str,
+    master_key: Option<&[u8; 32]>,
+) -> Result<usize, String> {
+    if noi_lam_viec.is_none() && nguon_chi_tra.is_none() && doi_tuong.is_none() && ly_do_vv.is_none() {
+        return Err("Vui lòng chọn ít nhất một trường để cập nhật!".into());
+    }
+    let rows = sqlx::query_as::<_, (i64, i64, String)>(
+        "SELECT id, status, payload_json FROM ksk_records WHERE contract_id = ?",
+    )
+    .bind(contract_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let mut updated = 0usize;
+    for (rid, status, enc_json) in rows {
+        if status == 2 {
+            continue;
+        }
+        let json_str = crate::crypto::decrypt_field(master_key, &enc_json);
+        let mut payload: Map<String, Value> = serde_json::from_str(&json_str).unwrap_or_default();
+        if let Some(ref v) = noi_lam_viec {
+            payload.insert("NOI_LAM_VIEC_HOC_TAP".into(), Value::String(v.clone()));
+        }
+        if let Some(ref v) = nguon_chi_tra {
+            payload.insert("NGUON_CHI_TRA".into(), Value::String(v.clone()));
+        }
+        if let Some(ref v) = doi_tuong {
+            payload.insert("DOI_TUONG".into(), Value::String(v.clone()));
+        }
+        if let Some(ref v) = ly_do_vv {
+            payload.insert("LY_DO_VV".into(), Value::String(v.clone()));
+        }
+        let new_json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+        let enc_payload = match master_key {
+            Some(mk) => crate::crypto::encrypt_field(mk, &new_json),
+            None => new_json,
+        };
+        sqlx::query(
+            "UPDATE ksk_records SET payload_json = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(&enc_payload)
+        .bind(updated_by)
+        .bind(rid)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+        updated += 1;
+    }
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok(updated)
+}
+
 pub async fn batch_insert_group_records(
     pool: &SqlitePool,
     contract_id: i64,
@@ -1041,32 +1257,7 @@ pub async fn batch_insert_group_records(
             continue;
         }
         let mut payload = Map::new();
-        payload.insert("MA_TIEP_NHAN".into(), Value::String(r.ma_tiep_nhan.clone()));
-        payload.insert("MA_Y_TE".into(), Value::String(r.ma_y_te.clone()));
-        payload.insert("HO_TEN".into(), Value::String(r.ho_ten.clone()));
-        payload.insert("NGAY_SINH".into(), Value::String(r.ngay_sinh.clone()));
-        payload.insert("GIOI_TINH".into(), Value::String(r.gioi_tinh.clone()));
-        payload.insert("SO_CCCD".into(), Value::String(r.so_cccd.clone()));
-        payload.insert("NGAYCAP_CCCD".into(), Value::String(r.ngaycap_cccd.clone()));
-        payload.insert("NOICAP_CCCD".into(), Value::String(r.noicap_cccd.clone()));
-        payload.insert("DIEN_THOAI".into(), Value::String(r.dien_thoai.clone()));
-        payload.insert("MATINH_CU_TRU".into(), Value::String(r.matinh_cu_tru.clone()));
-        payload.insert("MAXA_CU_TRU".into(), Value::String(r.maxa_cu_tru.clone()));
-        payload.insert("DIA_CHI".into(), Value::String(r.dia_chi.clone()));
-        payload.insert("MA_DAN_TOC".into(), Value::String(r.ma_dan_toc.clone()));
-        payload.insert("MA_NGHE_NGHIEP".into(), Value::String(r.ma_nghe_nghiep.clone()));
-        payload.insert(
-            "NOI_LAM_VIEC_HOC_TAP".into(),
-            Value::String(r.noi_lam_viec_hoc_tap.clone()),
-        );
-        payload.insert("MA_LOAI_KCB".into(), Value::String(r.ma_loai_kcb.clone()));
-        payload.insert("NGAY_VAO".into(), Value::String(r.ngay_vao.clone()));
-        payload.insert("NHOM_MAU".into(), Value::String(r.nhom_mau.clone()));
-        payload.insert("LY_DO_VV".into(), Value::String(r.ly_do_vv.clone()));
-        payload.insert("MA_CSKCB".into(), Value::String(ma_cskcb.to_string()));
-        payload.insert("MA_GTIN_CSKCB".into(), Value::String(ma_gtin.to_string()));
-        let ma_lk = format!("{}_{}", ma_cskcb, r.ma_tiep_nhan);
-        payload.insert("MA_LK".into(), Value::String(ma_lk));
+        apply_group_row_to_payload(&mut payload, r, ma_cskcb, ma_gtin);
 
         let json_str = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
         let (enc_ho_ten, enc_ngay_sinh, enc_so_cccd, enc_json_str) =

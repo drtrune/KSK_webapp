@@ -1,3 +1,6 @@
+// Legacy Axum HTTP handlers are retained alongside active desktop helpers.
+#![allow(dead_code)]
+
 use crate::config::AppConfig;
 use crate::db::{
     get_db_info, hash_password, init_db, seed_catalogs_from_asset, upsert_patient_from_his,
@@ -1502,7 +1505,7 @@ fn build_record_payload_map(record: &KskRecordRow) -> Map<String, Value> {
 
 async fn load_print_catalog_map(pool: &SqlitePool) -> Map<String, Value> {
     let cat_rows = sqlx::query_as::<_, (String, String, String)>(
-        "SELECT cat_type, code, name FROM catalogs WHERE is_active = 1 AND cat_type IN ('TINH_TP', 'XA_PHUONG', 'DAN_TOC', 'NGHE_NGHIEP', 'LOAI_KCB', 'NHOM_MAU')",
+        "SELECT cat_type, code, name FROM catalogs WHERE is_active = 1 AND cat_type IN ('TINH_TP', 'XA_PHUONG', 'DAN_TOC', 'NGHE_NGHIEP', 'DOI_TUONG', 'NGUON_CHI_TRA', 'LOAI_KCB', 'NHOM_MAU')",
     )
     .fetch_all(pool)
     .await
@@ -1789,6 +1792,101 @@ pub async fn generate_group_print_html(
         .collect();
     let filename = format!("ksk_doan_{}_{}.html", safe_code, if is_reception_print { "phoikham" } else { "ketqua" });
     Ok((filename, html, count))
+}
+
+pub async fn generate_record_pdf(
+    pool: &SqlitePool,
+    cfg: &AppConfig,
+    record_id: i64,
+    is_reception_print: bool,
+    master_key: Option<&[u8; 32]>,
+) -> Result<(String, Vec<u8>), String> {
+    let row: Option<KskRecordRow> = sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
+        .bind(record_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
+
+    let Some(mut record) = row else {
+        return Err("Không tìm thấy hồ sơ KSK".to_string());
+    };
+    crate::crypto::decrypt_record_row(master_key, &mut record);
+    let payload_map = build_record_payload_map(&record);
+    let cat_map = load_print_catalog_map(pool).await;
+    let ma_tn = payload_map
+        .get("MA_TIEP_NHAN")
+        .and_then(|v| v.as_str())
+        .unwrap_or("KSK")
+        .to_string();
+    let title = format!(
+        "KSK {} - {}",
+        ma_tn,
+        if is_reception_print { "Phôi tiếp nhận" } else { "Phiếu KSK" }
+    );
+    let pdf_bytes = crate::pdf_print::generate_records_pdf(
+        &[payload_map],
+        cfg,
+        &cat_map,
+        is_reception_print,
+        &title,
+    )?;
+    let safe_ma: String = ma_tn
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .collect();
+    let filename = format!(
+        "ksk_{}_{}.pdf",
+        safe_ma,
+        if is_reception_print { "phoikham" } else { "ketqua" }
+    );
+    Ok((filename, pdf_bytes))
+}
+
+pub async fn generate_group_print_pdf(
+    pool: &SqlitePool,
+    cfg: &AppConfig,
+    contract_id: i64,
+    is_reception_print: bool,
+    master_key: Option<&[u8; 32]>,
+) -> Result<(String, Vec<u8>, usize), String> {
+    let rows = crate::db::list_contract_records(pool, contract_id, master_key).await;
+    if rows.is_empty() {
+        return Err("Hợp đồng này chưa có hồ sơ nào để xuất PDF!".into());
+    }
+    let count = rows.len();
+    let payload_maps: Vec<Map<String, Value>> = rows.iter().map(build_record_payload_map).collect();
+    let cat_map = load_print_catalog_map(pool).await;
+
+    let contract_code: String = sqlx::query_scalar("SELECT contract_code FROM exam_contracts WHERE id = ?")
+        .bind(contract_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| format!("HD{}", contract_id));
+
+    let title = format!(
+        "In cả đoàn {} - {}",
+        contract_code,
+        if is_reception_print { "Phôi tiếp nhận" } else { "Phiếu KSK hoàn chỉnh" }
+    );
+    let pdf_bytes = crate::pdf_print::generate_records_pdf(
+        &payload_maps,
+        cfg,
+        &cat_map,
+        is_reception_print,
+        &title,
+    )?;
+    let safe_code: String = contract_code
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .collect();
+    let filename = format!(
+        "ksk_doan_{}_{}.pdf",
+        safe_code,
+        if is_reception_print { "phoikham" } else { "ketqua" }
+    );
+    Ok((filename, pdf_bytes, count))
 }
 
 pub async fn generate_docx_bytes(

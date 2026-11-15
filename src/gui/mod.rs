@@ -26,8 +26,8 @@ use crate::{
     config::AppConfig,
     db,
     handlers::{
-        AppState, generate_csv_bytes, generate_docx_bytes, generate_group_print_html,
-        generate_print_html, query_filtered_records,
+        AppState, generate_csv_bytes, generate_docx_bytes, generate_group_print_pdf,
+        generate_record_pdf, query_filtered_records,
     },
     models::{
         CatalogItem, Company, ExamContractSummary, GroupImportRow, KskRecordRow, UpdateManifest,
@@ -126,6 +126,7 @@ pub struct KskGpuiApp {
     // Clinical Disease Tree & Subtab
     pub active_clinical_subtab: String,
     pub active_noi_subtab: String,
+    #[allow(dead_code)]
     pub clinical_tree_mode: bool,
     pub expanded_diseases: HashSet<String>,
     pub expand_all_diseases: bool,
@@ -174,6 +175,38 @@ pub struct KskGpuiApp {
     pub grp_import_contract_id: Option<i64>,
     pub grp_import_file_path: String,
     pub grp_import_rows: Vec<GroupImportRow>,
+    pub grp_show_member_dialog: bool,
+    pub grp_member_contract_id: Option<i64>,
+    pub grp_member_edit_id: Option<i64>,
+    pub grp_mem_ma_tn: Entity<InputState>,
+    pub grp_mem_ma_yte: Entity<InputState>,
+    pub grp_mem_ho_ten: Entity<InputState>,
+    pub grp_mem_ngay_sinh: Entity<InputState>,
+    pub grp_mem_gioi_tinh: String,
+    pub grp_mem_so_cccd: Entity<InputState>,
+    pub grp_mem_ngaycap_cccd: Entity<InputState>,
+    pub grp_mem_noicap_cccd: Entity<InputState>,
+    pub grp_mem_dien_thoai: Entity<InputState>,
+    pub grp_mem_matinh: String,
+    pub grp_mem_maxa: String,
+    pub grp_mem_dia_chi: Entity<InputState>,
+    pub grp_mem_ma_dantoc: String,
+    pub grp_mem_ma_nghe: String,
+    pub grp_mem_noi_lam_viec: Entity<InputState>,
+    pub grp_mem_ma_loai_kcb: String,
+    pub grp_mem_ngay_vao: Entity<InputState>,
+    pub grp_mem_nhom_mau: String,
+    pub grp_mem_ly_do: Entity<InputState>,
+    pub grp_show_bulk_edit_dialog: bool,
+    pub grp_bulk_contract_id: Option<i64>,
+    pub grp_bulk_apply_workplace: bool,
+    pub grp_bulk_workplace: Entity<InputState>,
+    pub grp_bulk_apply_nguon: bool,
+    pub grp_bulk_nguon: String,
+    pub grp_bulk_apply_doituong: bool,
+    pub grp_bulk_doituong: String,
+    pub grp_bulk_apply_lydo: bool,
+    pub grp_bulk_lydo: Entity<InputState>,
 
     // Admin Tab
     pub admin_sub_tab: String,
@@ -571,6 +604,38 @@ impl KskGpuiApp {
             grp_import_contract_id: None,
             grp_import_file_path: String::new(),
             grp_import_rows: Vec::new(),
+            grp_show_member_dialog: false,
+            grp_member_contract_id: None,
+            grp_member_edit_id: None,
+            grp_mem_ma_tn: cx.new(|cx| InputState::new(window, cx).placeholder("VD: HD01-0001")),
+            grp_mem_ma_yte: cx.new(|cx| InputState::new(window, cx).placeholder("Mã y tế")),
+            grp_mem_ho_ten: cx.new(|cx| InputState::new(window, cx).placeholder("Họ và tên")),
+            grp_mem_ngay_sinh: cx.new(|cx| InputState::new(window, cx).placeholder("dd/mm/yyyy")),
+            grp_mem_gioi_tinh: "1".into(),
+            grp_mem_so_cccd: cx.new(|cx| InputState::new(window, cx).placeholder("Số CCCD")),
+            grp_mem_ngaycap_cccd: cx.new(|cx| InputState::new(window, cx).placeholder("dd/mm/yyyy")),
+            grp_mem_noicap_cccd: cx.new(|cx| InputState::new(window, cx).placeholder("Nơi cấp CCCD")),
+            grp_mem_dien_thoai: cx.new(|cx| InputState::new(window, cx).placeholder("Số điện thoại")),
+            grp_mem_matinh: String::new(),
+            grp_mem_maxa: String::new(),
+            grp_mem_dia_chi: cx.new(|cx| InputState::new(window, cx).placeholder("Số nhà, đường...")),
+            grp_mem_ma_dantoc: "01".into(),
+            grp_mem_ma_nghe: "00".into(),
+            grp_mem_noi_lam_viec: cx.new(|cx| InputState::new(window, cx).placeholder("Công ty / Bộ phận...")),
+            grp_mem_ma_loai_kcb: "1".into(),
+            grp_mem_ngay_vao: cx.new(|cx| InputState::new(window, cx).placeholder("dd/mm/yyyy")),
+            grp_mem_nhom_mau: String::new(),
+            grp_mem_ly_do: cx.new(|cx| InputState::new(window, cx).placeholder("Khám sức khỏe")),
+            grp_show_bulk_edit_dialog: false,
+            grp_bulk_contract_id: None,
+            grp_bulk_apply_workplace: true,
+            grp_bulk_workplace: cx.new(|cx| InputState::new(window, cx).placeholder("Nơi làm việc / Học tập")),
+            grp_bulk_apply_nguon: true,
+            grp_bulk_nguon: "9".into(),
+            grp_bulk_apply_doituong: true,
+            grp_bulk_doituong: "13".into(),
+            grp_bulk_apply_lydo: true,
+            grp_bulk_lydo: cx.new(|cx| InputState::new(window, cx).placeholder("Khám sức khỏe định kỳ")),
             admin_sub_tab: "config".into(),
             adm_cskcb,
             adm_ma_cskcb,
@@ -1185,13 +1250,13 @@ impl KskGpuiApp {
         let mk = self.master_key;
         let res = self.run_sync(async move {
             let pool = state.db.read().await;
-            generate_print_html(&pool, &cfg, rid, is_reception, mk.as_ref()).await
+            generate_record_pdf(&pool, &cfg, rid, is_reception, mk.as_ref()).await
         });
         match res {
-            Ok((filename, html)) => {
+            Ok((filename, pdf_bytes)) => {
                 let path = std::env::temp_dir().join(filename);
-                if let Err(e) = std::fs::write(&path, html.as_bytes()) {
-                    self.show_toast(&format!("Lỗi tạo file in: {}", e), true, cx);
+                if let Err(e) = std::fs::write(&path, &pdf_bytes) {
+                    self.show_toast(&format!("Lỗi tạo file PDF: {}", e), true, cx);
                     return;
                 }
                 let path_str = path.to_string_lossy().to_string();
@@ -1199,11 +1264,11 @@ impl KskGpuiApp {
                     .args(["/C", "start", "", &path_str])
                     .spawn()
                 {
-                    Ok(_) => self.show_toast("Đã mở giao diện in A4!", false, cx),
-                    Err(e) => self.show_toast(&format!("Không mở được trình duyệt in: {}", e), true, cx),
+                    Ok(_) => self.show_toast("Đã xuất PDF A4!", false, cx),
+                    Err(e) => self.show_toast(&format!("Không mở được file PDF: {}", e), true, cx),
                 }
             }
-            Err(e) => self.show_toast(&format!("Lỗi tạo mẫu in: {}", e), true, cx),
+            Err(e) => self.show_toast(&format!("Lỗi tạo PDF: {}", e), true, cx),
         }
     }
 
@@ -1218,13 +1283,13 @@ impl KskGpuiApp {
         let mk = self.master_key;
         let res = self.run_sync(async move {
             let pool = state.db.read().await;
-            generate_group_print_html(&pool, &cfg, contract_id, is_reception, mk.as_ref()).await
+            generate_group_print_pdf(&pool, &cfg, contract_id, is_reception, mk.as_ref()).await
         });
         match res {
-            Ok((filename, html, count)) => {
+            Ok((filename, pdf_bytes, count)) => {
                 let path = std::env::temp_dir().join(filename);
-                if let Err(e) = std::fs::write(&path, html.as_bytes()) {
-                    self.show_toast(&format!("Lỗi tạo file in đoàn: {}", e), true, cx);
+                if let Err(e) = std::fs::write(&path, &pdf_bytes) {
+                    self.show_toast(&format!("Lỗi tạo file PDF đoàn: {}", e), true, cx);
                     return;
                 }
                 let path_str = path.to_string_lossy().to_string();
@@ -1233,11 +1298,11 @@ impl KskGpuiApp {
                     .spawn()
                 {
                     Ok(_) => self.show_toast(
-                        &format!("Đã mở mẫu in A4 cho {} hồ sơ trong đoàn!", count),
+                        &format!("Đã xuất PDF A4 cho {} hồ sơ trong đoàn!", count),
                         false,
                         cx,
                     ),
-                    Err(e) => self.show_toast(&format!("Không mở được trình duyệt in: {}", e), true, cx),
+                    Err(e) => self.show_toast(&format!("Không mở được file PDF: {}", e), true, cx),
                 }
             }
             Err(e) => self.show_toast(&e, true, cx),

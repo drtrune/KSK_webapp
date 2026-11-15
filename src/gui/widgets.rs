@@ -879,7 +879,7 @@ impl KskGpuiApp {
         placeholder: &str,
         required: bool,
         editable: bool,
-        include_hhmm: bool,
+        _include_hhmm: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
