@@ -1473,24 +1473,7 @@ const PRINT_HTML_TEMPLATE: &str = include_str!("../ui/tabs/print.html");
 const ALPINE_JS_BUNDLE: &str = include_str!("../ui/js/alpine.min.js");
 const JSBARCODE_BUNDLE: &str = include_str!("../ui/js/JsBarcode.all.min.js");
 
-pub async fn generate_print_html(
-    pool: &SqlitePool,
-    cfg: &AppConfig,
-    record_id: i64,
-    is_reception_print: bool,
-    master_key: Option<&[u8; 32]>,
-) -> Result<(String, String), String> {
-    let row: Option<KskRecordRow> = sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
-        .bind(record_id)
-        .fetch_optional(pool)
-        .await
-        .unwrap_or(None);
-
-    let Some(mut record) = row else {
-        return Err("Không tìm thấy hồ sơ để in".into());
-    };
-    crate::crypto::decrypt_record_row(master_key, &mut record);
-
+fn build_record_payload_map(record: &KskRecordRow) -> Map<String, Value> {
     let mut payload_map: Map<String, Value> =
         serde_json::from_str(&record.payload_json).unwrap_or_default();
     payload_map
@@ -1514,7 +1497,10 @@ pub async fn generate_print_html(
     payload_map
         .entry("NGAY_VAO")
         .or_insert_with(|| Value::String(record.ngay_vao.clone()));
+    payload_map
+}
 
+async fn load_print_catalog_map(pool: &SqlitePool) -> Map<String, Value> {
     let cat_rows = sqlx::query_as::<_, (String, String, String)>(
         "SELECT cat_type, code, name FROM catalogs WHERE is_active = 1 AND cat_type IN ('TINH_TP', 'XA_PHUONG', 'DAN_TOC', 'NGHE_NGHIEP', 'LOAI_KCB', 'NHOM_MAU')",
     )
@@ -1531,11 +1517,21 @@ pub async fn generate_print_html(
             m.insert(code, Value::String(name));
         }
     }
+    cat_map
+}
 
-    let form_json = serde_json::to_string(&payload_map)
-        .unwrap_or_else(|_| "{}".into())
+fn build_print_html_doc(
+    records: &[Map<String, Value>],
+    cat_map: &Map<String, Value>,
+    cfg: &AppConfig,
+    is_reception_print: bool,
+    title: &str,
+    toolbar_label: &str,
+) -> String {
+    let records_json = serde_json::to_string(records)
+        .unwrap_or_else(|_| "[]".into())
         .replace("</", "<\\/");
-    let cat_json = serde_json::to_string(&cat_map)
+    let cat_json = serde_json::to_string(cat_map)
         .unwrap_or_else(|_| "{}".into())
         .replace("</", "<\\/");
     let fac_json = serde_json::json!({
@@ -1545,13 +1541,32 @@ pub async fn generate_print_html(
     .to_string()
     .replace("</", "<\\/");
 
-    let title = format!("In KSK - {}", record.ma_tiep_nhan);
-    let html = format!(
+    let (style_part, area_raw) = PRINT_HTML_TEMPLATE
+        .split_once("<div id=\"print-area\"")
+        .unwrap_or(("", PRINT_HTML_TEMPLATE));
+    let inner_after_open = area_raw
+        .split_once('>')
+        .map(|(_, rest)| rest)
+        .unwrap_or(area_raw);
+    let inner_pages = inner_after_open
+        .trim_end()
+        .strip_suffix("</div>")
+        .unwrap_or(inner_after_open);
+    let mut looped_pages = inner_pages.to_string();
+    for p in ["p1", "p2", "p3", "p4", "p5"] {
+        looped_pages = looped_pages.replace(
+            &format!("id=\"print_barcode_{}\"", p),
+            &format!(":id=\"'print_barcode_' + idx + '_{}'\"", p),
+        );
+    }
+
+    format!(
         r#"<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
   <title>{title}</title>
+  {style_part}
   <style>
     @media screen {{
       body {{
@@ -1590,12 +1605,15 @@ pub async fn generate_print_html(
         right: 16px;
         z-index: 9999;
         display: flex;
-        gap: 8px;
-        background: rgba(15, 23, 42, 0.88);
-        padding: 8px 12px;
+        align-items: center;
+        gap: 10px;
+        background: rgba(15, 23, 42, 0.9);
+        color: #f8fafc;
+        padding: 8px 14px;
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.25);
         font-family: system-ui, -apple-system, sans-serif;
+        font-size: 13px;
       }}
       .print-toolbar button {{
         border: none;
@@ -1611,13 +1629,17 @@ pub async fn generate_print_html(
     }}
     @media print {{
       .no-print {{ display: none !important; }}
+      .patient-bundle:not(:last-of-type) .print-page:last-child {{
+        break-after: page !important;
+        page-break-after: always !important;
+      }}
     }}
   </style>
   <script>{jsbarcode}</script>
   <script>
     function kskPrintApp() {{
       return {{
-        form: {form_json},
+        records: {records_json},
         facility: {fac_json},
         printModeReception: {is_rec},
         catalogsMap: {cat_json},
@@ -1635,22 +1657,25 @@ pub async fn generate_print_html(
         }},
         init() {{
           this.$nextTick(() => {{
-            const code = this.form.MA_TIEP_NHAN || '0';
             if (typeof JsBarcode !== 'undefined') {{
-              ['p1', 'p2', 'p3', 'p4', 'p5'].forEach(p => {{
-                const el = document.querySelector('#print_barcode_' + p);
-                if (el) {{
-                  JsBarcode('#print_barcode_' + p, code, {{
-                    format: 'CODE128',
-                    displayValue: false,
-                    margin: 0,
-                    width: 2.1,
-                    height: 40
-                  }});
-                }}
+              this.records.forEach((form, idx) => {{
+                const code = (form && form.MA_TIEP_NHAN) || '0';
+                ['p1', 'p2', 'p3', 'p4', 'p5'].forEach(p => {{
+                  const id = '#print_barcode_' + idx + '_' + p;
+                  const el = document.querySelector(id);
+                  if (el) {{
+                    JsBarcode(id, code, {{
+                      format: 'CODE128',
+                      displayValue: false,
+                      margin: 0,
+                      width: 2.1,
+                      height: 40
+                    }});
+                  }}
+                }});
               }});
             }}
-            setTimeout(() => window.print(), 280);
+            setTimeout(() => window.print(), 320);
           }});
         }}
       }};
@@ -1660,23 +1685,110 @@ pub async fn generate_print_html(
 </head>
 <body x-data="kskPrintApp()">
   <div class="print-toolbar no-print">
-    <button type="button" onclick="window.print()">In phiếu ngay (Ctrl+P)</button>
+    <span>{toolbar_label}</span>
+    <button type="button" onclick="window.print()">In ngay (Ctrl+P)</button>
   </div>
-  {body}
+  <div id="print-area" class="print-only text-black bg-white"
+    style="font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.3;">
+    <template x-for="(form, idx) in records" :key="idx">
+      <div class="patient-bundle">
+        {looped_pages}
+      </div>
+    </template>
+  </div>
 </body>
 </html>"#,
         title = title,
+        style_part = style_part,
         jsbarcode = JSBARCODE_BUNDLE,
-        form_json = form_json,
+        records_json = records_json,
         fac_json = fac_json,
         is_rec = if is_reception_print { "true" } else { "false" },
         cat_json = cat_json,
         alpine = ALPINE_JS_BUNDLE,
-        body = PRINT_HTML_TEMPLATE,
-    );
+        toolbar_label = toolbar_label,
+        looped_pages = looped_pages,
+    )
+}
 
+pub async fn generate_print_html(
+    pool: &SqlitePool,
+    cfg: &AppConfig,
+    record_id: i64,
+    is_reception_print: bool,
+    master_key: Option<&[u8; 32]>,
+) -> Result<(String, String), String> {
+    let row: Option<KskRecordRow> = sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
+        .bind(record_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
+
+    let Some(mut record) = row else {
+        return Err("Không tìm thấy hồ sơ để in".into());
+    };
+    crate::crypto::decrypt_record_row(master_key, &mut record);
+
+    let payload_map = build_record_payload_map(&record);
+    let cat_map = load_print_catalog_map(pool).await;
+    let title = format!("In KSK - {}", record.ma_tiep_nhan);
+    let toolbar = format!("{} ({})", record.ho_ten, record.ma_tiep_nhan);
+    let html = build_print_html_doc(
+        &[payload_map],
+        &cat_map,
+        cfg,
+        is_reception_print,
+        &title,
+        &toolbar,
+    );
     let filename = format!("ksk_print_{}.html", record.id);
     Ok((filename, html))
+}
+
+pub async fn generate_group_print_html(
+    pool: &SqlitePool,
+    cfg: &AppConfig,
+    contract_id: i64,
+    is_reception_print: bool,
+    master_key: Option<&[u8; 32]>,
+) -> Result<(String, String, usize), String> {
+    let rows = crate::db::list_contract_records(pool, contract_id, master_key).await;
+    if rows.is_empty() {
+        return Err("Hợp đồng này chưa có hồ sơ nào để xuất mẫu in!".into());
+    }
+    let count = rows.len();
+    let payload_maps: Vec<Map<String, Value>> = rows.iter().map(build_record_payload_map).collect();
+    let cat_map = load_print_catalog_map(pool).await;
+
+    let contract_code: String = sqlx::query_scalar("SELECT contract_code FROM exam_contracts WHERE id = ?")
+        .bind(contract_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| format!("HD{}", contract_id));
+
+    let mode_label = if is_reception_print {
+        "Phôi tiếp nhận"
+    } else {
+        "Phiếu KSK hoàn chỉnh"
+    };
+    let title = format!("In cả đoàn {} - {}", contract_code, mode_label);
+    let toolbar = format!("Đoàn {} • {} ({} hồ sơ)", contract_code, mode_label, count);
+    let html = build_print_html_doc(
+        &payload_maps,
+        &cat_map,
+        cfg,
+        is_reception_print,
+        &title,
+        &toolbar,
+    );
+    let safe_code: String = contract_code
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .collect();
+    let filename = format!("ksk_doan_{}_{}.html", safe_code, if is_reception_print { "phoikham" } else { "ketqua" });
+    Ok((filename, html, count))
 }
 
 pub async fn generate_docx_bytes(
@@ -3289,5 +3401,28 @@ mod tests {
             .read_to_string(&mut ct)
             .unwrap();
         assert!(ct.contains("/word/header1.xml"));
+    }
+
+    #[test]
+    fn test_build_group_print_html_doc() {
+        let mut r1 = Map::new();
+        r1.insert("MA_TIEP_NHAN".into(), Value::String("HD01-0001".into()));
+        r1.insert("HO_TEN".into(), Value::String("NGUYEN VAN A".into()));
+        let mut r2 = Map::new();
+        r2.insert("MA_TIEP_NHAN".into(), Value::String("HD01-0002".into()));
+        r2.insert("HO_TEN".into(), Value::String("TRAN THI B".into()));
+        let cfg = AppConfig::default();
+        let html = build_print_html_doc(
+            &[r1, r2],
+            &Map::new(),
+            &cfg,
+            true,
+            "In đoàn HD01",
+            "Đoàn HD01 (2 hồ sơ)",
+        );
+        assert!(html.contains("HD01-0001"));
+        assert!(html.contains("HD01-0002"));
+        assert!(html.contains("x-for=\"(form, idx) in records\""));
+        assert!(html.contains("print_barcode_' + idx + '_p1"));
     }
 }

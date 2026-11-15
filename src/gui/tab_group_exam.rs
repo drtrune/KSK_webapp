@@ -857,6 +857,24 @@ impl KskGpuiApp {
                                             })),
                                     )
                                     .child(
+                                        Button::new("btn-detail-print-group-rec")
+                                            .label("In phôi tiếp nhận cả đoàn (A4)")
+                                            .small()
+                                            .secondary()
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.print_group_html(cid, true, cx);
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("btn-detail-print-group-full")
+                                            .label("In phiếu KSK cả đoàn (A4)")
+                                            .small()
+                                            .secondary()
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.print_group_html(cid, false, cx);
+                                            })),
+                                    )
+                                    .child(
                                         Button::new("btn-detail-edit")
                                             .label("Sửa hợp đồng")
                                             .small()
