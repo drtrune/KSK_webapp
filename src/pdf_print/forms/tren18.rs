@@ -5,7 +5,7 @@ use crate::config::AppConfig;
 
 use super::super::cursor::PdfPageCursor;
 use super::super::primitives::{
-    draw_checkbox, draw_dashed_line, draw_text, wrap_lines, CONTENT_W, FONT_BODY, LINE_H,
+    draw_checkbox, draw_text, wrap_lines, CONTENT_W, FONT_BODY, LINE_H,
     MARGIN_L,
 };
 use super::super::values::FormValues;
@@ -334,7 +334,6 @@ fn render_clinical_section(fv: &FormValues, cur: &mut PdfPageCursor) {
         );
         draw_inline_slot(c, lx, rx, c.y, "Các bệnh về mắt (nếu có):", fv.text(&["BENH_KHAC_MAT", "KHAM_MAT"]), false);
         c.y -= LINE_H;
-        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, (lx + 48.0).min(rx), c.y, "Phân loại:", fv.text(&["KHAM_MAT_PL", "PL_MAT"]), true);
     });
 
@@ -362,7 +361,6 @@ fn render_clinical_section(fv: &FormValues, cur: &mut PdfPageCursor) {
         );
         draw_inline_slot(c, lx, rx, c.y, "Các bệnh về tai mũi họng (nếu có):", fv.text(&["BENH_KHAC_TAI_MUI_HONG", "KHAM_TMH"]), false);
         c.y -= LINE_H;
-        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, (lx + 48.0).min(rx), c.y, "Phân loại:", fv.text(&["KHAM_TAI_MUI_HONG_PL", "PL_TMH"]), true);
     });
 
@@ -376,7 +374,6 @@ fn render_clinical_section(fv: &FormValues, cur: &mut PdfPageCursor) {
         c.y -= LINE_H;
         draw_inline_slot(c, lx, rx, c.y, "Các bệnh về răng hàm mặt (nếu có):", fv.text(&["BENH_KHAC_RANG_HAM_MAT", "KHAM_RHM"]), false);
         c.y -= LINE_H;
-        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, (lx + 48.0).min(rx), c.y, "Phân loại:", fv.text(&["KHAM_RANG_HAM_MAT_PL", "PL_RHM"]), true);
     });
 }
