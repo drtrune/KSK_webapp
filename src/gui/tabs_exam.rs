@@ -271,6 +271,7 @@ impl KskGpuiApp {
                                     .items_center()
                                     .gap(px(6.0))
                                     .when(!self.is_creating_new && self.selected_record_id.is_some(), |el| {
+                                        let can_full = self.can_print_full_ksk();
                                         el.child(
                                             Button::new("btn-banner-print-rec")
                                                 .label("🖨 In Tiếp Nhận")
@@ -280,24 +281,17 @@ impl KskGpuiApp {
                                                     this.print_record_html(true, cx);
                                                 })),
                                         )
-                                        .child(
-                                            Button::new("btn-banner-print-ksk")
-                                                .label("📄 In Giấy KSK")
-                                                .small()
-                                                .primary()
-                                                .on_click(cx.listener(|this, _, _, cx| {
-                                                    this.print_record_html(false, cx);
-                                                })),
-                                        )
-                                        .child(
-                                            Button::new("btn-banner-export-docx")
-                                                .label("📝 Xuất Word")
-                                                .small()
-                                                .secondary()
-                                                .on_click(cx.listener(|this, _, _, cx| {
-                                                    this.export_docx(false, cx);
-                                                })),
-                                        )
+                                        .when(can_full, |b| {
+                                            b.child(
+                                                Button::new("btn-banner-print-ksk")
+                                                    .label("📄 In Giấy KSK")
+                                                    .small()
+                                                    .primary()
+                                                    .on_click(cx.listener(|this, _, _, cx| {
+                                                        this.print_record_html(false, cx);
+                                                    })),
+                                            )
+                                        })
                                     })
                                     .when(show_rec_nav, |el| {
                                         el.child(
@@ -1051,36 +1045,6 @@ impl KskGpuiApp {
                                             )),
                                     )
                                 }),
-                        )
-                    })
-                    .when(!self.is_creating_new && self.selected_record_id.is_some(), |el| {
-                        el.child(
-                            div()
-                                .pt(px(8.0))
-                                .border_t_1()
-                                .border_color(rgb(border_col()))
-                                .flex()
-                                .flex_row()
-                                .justify_end()
-                                .gap(px(8.0))
-                                .child(
-                                    Button::new("btn-print-reception-html")
-                                        .label("In Phiếu Tiếp Nhận (A4)")
-                                        .small()
-                                        .primary()
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.print_record_html(true, cx);
-                                        })),
-                                )
-                                .child(
-                                    Button::new("btn-print-reception-docx")
-                                        .label("Xuất DOCX")
-                                        .small()
-                                        .secondary()
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.export_docx(true, cx);
-                                        })),
-                                ),
                         )
                     }),
             )
@@ -2883,23 +2847,14 @@ impl KskGpuiApp {
                                 )
                             }),
                     )
-                    .when(self.selected_record_id.is_some(), |el| {
+                    .when(self.can_print_full_ksk(), |el| {
                         el.child(
                             Button::new("btn-print-full-html")
-                                .label("In Giấy KSK (A4)")
+                                .label("📄 In Giấy KSK (A4)")
                                 .small()
                                 .primary()
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.print_record_html(false, cx);
-                                })),
-                        )
-                        .child(
-                            Button::new("btn-export-docx")
-                                .label("Xuất DOCX")
-                                .small()
-                                .secondary()
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.export_docx(false, cx);
                                 })),
                         )
                     }),
@@ -3205,7 +3160,7 @@ impl KskGpuiApp {
                                         )
                                     }),
                             )
-                            .when(self.selected_record_id.is_some(), |b| {
+                            .when(self.can_print_full_ksk(), |b| {
                                 b.child(
                                     div()
                                         .flex()
@@ -3213,20 +3168,11 @@ impl KskGpuiApp {
                                         .gap(px(8.0))
                                         .child(
                                             Button::new("btn-tpl-print-pdf")
-                                                .label("In Giấy KSK (A4)")
+                                                .label("📄 In Giấy KSK (A4)")
                                                 .small()
                                                 .primary()
                                                 .on_click(cx.listener(|this, _, _, cx| {
                                                     this.print_record_html(false, cx);
-                                                })),
-                                        )
-                                        .child(
-                                            Button::new("btn-tpl-export-docx")
-                                                .label("Xuất DOCX")
-                                                .small()
-                                                .secondary()
-                                                .on_click(cx.listener(|this, _, _, cx| {
-                                                    this.export_docx(false, cx);
                                                 })),
                                         ),
                                 )

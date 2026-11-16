@@ -1569,6 +1569,42 @@ impl KskGpuiApp {
             .insert("_EXAMINED_SECTIONS".to_string(), list.join(","));
     }
 
+    pub fn can_print_full_ksk(&self) -> bool {
+        if self.is_creating_new || self.selected_record_id.is_none() {
+            return false;
+        }
+        if self.current_record_status >= 1 {
+            return true;
+        }
+        let selected_tpls = crate::templates::parse_template_list(&self.current_record_templates);
+        let active_tpl = if selected_tpls.contains(&self.active_record_template) {
+            self.active_record_template.as_str()
+        } else {
+            selected_tpls.first().map(|s| s.as_str()).unwrap_or("TREN_18")
+        };
+        if active_tpl == "TREN_18" {
+            let is_male = self.get_form_val("GIOI_TINH") == "1";
+            self.is_section_examined("reception")
+                && self.is_section_examined("history")
+                && self.is_section_examined("physical")
+                && self.is_section_examined("clin_noi")
+                && self.is_section_examined("clin_ngoai")
+                && self.is_section_examined("clin_dalieu")
+                && (is_male || self.is_section_examined("clin_san"))
+                && self.is_section_examined("clin_mat")
+                && self.is_section_examined("clin_tmh")
+                && self.is_section_examined("clin_rhm")
+                && self.is_section_examined("paraclinical")
+                && self.is_section_examined("conclusion")
+        } else {
+            self.is_section_examined("reception")
+                && self.is_section_examined(&format!("tpl_{}_history", active_tpl))
+                && self.is_section_examined(&format!("tpl_{}_physical", active_tpl))
+                && self.is_section_examined(&format!("tpl_{}_clinical", active_tpl))
+                && self.is_section_examined(&format!("tpl_{}_conclusion", active_tpl))
+        }
+    }
+
     pub fn auto_enter_edit_for_current_view(
         &mut self,
         window: &mut Window,
@@ -2222,6 +2258,7 @@ impl KskGpuiApp {
         }
     }
 
+    #[allow(dead_code)]
     pub fn export_docx(&mut self, is_reception: bool, cx: &mut Context<Self>) {
         self.open_print_template_modal(true, is_reception, cx);
     }
