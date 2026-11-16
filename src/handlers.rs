@@ -31,6 +31,11 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 const EMBEDDED_TEMPLATE_DOCX: &[u8] = include_bytes!("../asset/template18.docx");
+const EMBEDDED_TEMPLATE_6_DOCX: &[u8] = include_bytes!("../asset/template6.docx");
+const EMBEDDED_TEMPLATE_6_18_DOCX: &[u8] = include_bytes!("../asset/template6_18.docx");
+const EMBEDDED_TEMPLATE_MAUGIAO_DOCX: &[u8] = include_bytes!("../asset/template_maugiao.docx");
+const EMBEDDED_TEMPLATE_HOCSINH_DOCX: &[u8] = include_bytes!("../asset/template_hocsinh.docx");
+const EMBEDDED_TEMPLATE_LAIXE_DOCX: &[u8] = include_bytes!("../asset/template_laixe.docx");
 
 pub struct AppState {
     pub db: RwLock<SqlitePool>,
@@ -1801,6 +1806,17 @@ pub async fn generate_record_pdf(
     is_reception_print: bool,
     master_key: Option<&[u8; 32]>,
 ) -> Result<(String, Vec<u8>), String> {
+    generate_record_pdf_for_templates(pool, cfg, record_id, is_reception_print, &[], master_key).await
+}
+
+pub async fn generate_record_pdf_for_templates(
+    pool: &SqlitePool,
+    cfg: &AppConfig,
+    record_id: i64,
+    is_reception_print: bool,
+    selected_templates: &[String],
+    master_key: Option<&[u8; 32]>,
+) -> Result<(String, Vec<u8>), String> {
     let row: Option<KskRecordRow> = sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
         .bind(record_id)
         .fetch_optional(pool)
@@ -1811,20 +1827,34 @@ pub async fn generate_record_pdf(
         return Err("Không tìm thấy hồ sơ KSK".to_string());
     };
     crate::crypto::decrypt_record_row(master_key, &mut record);
-    let payload_map = build_record_payload_map(&record);
+    let base_map = build_record_payload_map(&record);
     let cat_map = load_print_catalog_map(pool).await;
-    let ma_tn = payload_map
+    let ma_tn = base_map
         .get("MA_TIEP_NHAN")
         .and_then(|v| v.as_str())
         .unwrap_or("KSK")
         .to_string();
+
+    let tpls: Vec<String> = if selected_templates.is_empty() {
+        crate::templates::parse_template_list(&record.exam_templates)
+    } else {
+        selected_templates.to_vec()
+    };
+
+    let mut payload_maps = Vec::with_capacity(tpls.len());
+    for tpl in &tpls {
+        let mut m = base_map.clone();
+        m.insert("_PRINT_TEMPLATE".to_string(), Value::String(tpl.clone()));
+        payload_maps.push(m);
+    }
+
     let title = format!(
         "KSK {} - {}",
         ma_tn,
         if is_reception_print { "Phôi tiếp nhận" } else { "Phiếu KSK" }
     );
     let pdf_bytes = crate::pdf_print::generate_records_pdf(
-        &[payload_map],
+        &payload_maps,
         cfg,
         &cat_map,
         is_reception_print,
@@ -1896,6 +1926,17 @@ pub async fn generate_docx_bytes(
     is_reception_print: bool,
     master_key: Option<&[u8; 32]>,
 ) -> Result<(String, Vec<u8>), String> {
+    generate_docx_bytes_for_template(pool, cfg, record_id, is_reception_print, "", master_key).await
+}
+
+pub async fn generate_docx_bytes_for_template(
+    pool: &SqlitePool,
+    cfg: &AppConfig,
+    record_id: i64,
+    is_reception_print: bool,
+    explicit_template: &str,
+    master_key: Option<&[u8; 32]>,
+) -> Result<(String, Vec<u8>), String> {
     let row: Option<KskRecordRow> = sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
         .bind(record_id)
         .fetch_optional(pool)
@@ -1907,6 +1948,15 @@ pub async fn generate_docx_bytes(
     };
     crate::crypto::decrypt_record_row(master_key, &mut record);
 
+    let tpl_code = if !explicit_template.trim().is_empty() {
+        explicit_template.trim().to_string()
+    } else {
+        crate::templates::parse_template_list(&record.exam_templates)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "TREN_18".to_string())
+    };
+
     let payload: Map<String, Value> =
         serde_json::from_str(&record.payload_json).unwrap_or_default();
     let get = |k: &str| -> String {
@@ -1916,6 +1966,10 @@ pub async fn generate_docx_bytes(
             .unwrap_or("")
             .trim()
             .to_string()
+    };
+    let get_ns = |raw_k: &str| -> String {
+        let k = crate::templates::namespaced_key(&tpl_code, raw_k);
+        get(&k)
     };
 
     let dan_toc_name = lookup_catalog_name(pool, "DAN_TOC", &get("MA_DAN_TOC")).await;
@@ -1973,8 +2027,8 @@ pub async fn generate_docx_bytes(
         8,
         format!(
             "3. Ngày tháng năm sinh: {}   (Tuổi: {})",
-            if ngay_sinh.is_empty() { "……/……/…………".to_string() } else { ngay_sinh },
-            if tuoi_str.is_empty() { "……".to_string() } else { tuoi_str }
+            if ngay_sinh.is_empty() { "……/……/…………" } else { &ngay_sinh },
+            if tuoi_str.is_empty() { "……" } else { &tuoi_str }
         ),
     );
     replacements.insert(
@@ -2259,8 +2313,256 @@ pub async fn generate_docx_bytes(
         }
     }
 
-    let template_bytes =
-        fs::read(&cfg.template_docx_path).unwrap_or_else(|_| EMBEDDED_TEMPLATE_DOCX.to_vec());
+    if tpl_code != "TREN_18" {
+        replacements.clear();
+        let dia_chi_full = [get("DIA_CHI"), xa_name.clone(), tinh_name.clone()]
+            .into_iter()
+            .filter(|s| !s.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let date_sig = format!("{}, ngày {} tháng {} năm {}", cfg.dia_danh, d_str, m_str, y_str);
+
+        match tpl_code.as_str() {
+            "LAI_XE" => {
+                replacements.insert(4, format!("Số: {}/GKSKLX/{}/{}", so_phieu, cfg.ma_cskcb, &y_str[y_str.len().saturating_sub(2)..]));
+                replacements.insert(12, format!("1. Họ và tên (viết chữ in hoa): {}", get("HO_TEN").to_uppercase()));
+                replacements.insert(13, format!("2. Giới: {} Nam          {} Nữ", if gt == "1" { "☑" } else { "☐" }, if gt == "2" { "☑" } else { "☐" }));
+                replacements.insert(14, format!("3. Ngày tháng năm sinh: {}          (Tuổi: {})", ngay_sinh, tuoi_str));
+                replacements.insert(15, format!("4. Số CCCD/CC/Hộ chiếu/Định danh công dân: {}", get("SO_CCCD")));
+                replacements.insert(16, format!("5. Cấp ngày: {}   Tại: {}", ngaycap_cccd, noicap_cccd));
+                replacements.insert(17, format!("6. Chỗ ở hiện tại: {}", dia_chi_full));
+                let hang_lx = {
+                    let h = get("HANG_BANG_LAI");
+                    if !h.is_empty() { h } else { get_ns("HANG_BANG_LAI_KL") }
+                };
+                replacements.insert(18, format!("7. Đề nghị khám sức khỏe để lái xe hạng: {}", hang_lx));
+                let tsgd_co = get_ns("TSGD_MAC_BENH") == "Có" || get_ns("TSGD_MAC_BENH") == "1";
+                replacements.insert(24, format!("a) {} Không ;      b) {} Có ;", if !tsgd_co { "☑" } else { "☐" }, if tsgd_co { "☑" } else { "☐" }));
+                if !get_ns("TSGD_TEN_BENH").is_empty() {
+                    replacements.insert(25, format!("Nếu “có”, đề nghị ghi cụ thể tên bệnh: {}", get_ns("TSGD_TEN_BENH")));
+                }
+                let lx_pairs: &[(usize, usize, &str)] = &[
+                    (31, 32, "TSBT_1"), (34, 35, "TSBT_11"),
+                    (37, 38, "TSBT_2"), (40, 41, "TSBT_12"),
+                    (43, 44, "TSBT_3"), (46, 47, "TSBT_13"),
+                    (49, 50, "TSBT_4"), (52, 53, "TSBT_14"),
+                    (55, 56, "TSBT_5"), (58, 59, "TSBT_15"),
+                    (61, 62, "TSBT_6"), (64, 65, "TSBT_16"),
+                    (67, 68, "TSBT_7"), (70, 71, "TSBT_17"),
+                    (73, 74, "TSBT_8"), (76, 77, "TSBT_18"),
+                    (79, 80, "TSBT_9"), (82, 83, "TSBT_19"),
+                    (85, 86, "TSBT_10"), (88, 89, "TSBT_20"),
+                ];
+                for (p_y, p_n, k) in lx_pairs {
+                    let v = get_ns(k);
+                    let is_yes = v == "Có" || v == "1";
+                    replacements.insert(*p_y, if is_yes { "X" } else { "" }.to_string());
+                    replacements.insert(*p_n, if !is_yes && !v.is_empty() { "X" } else { "" }.to_string());
+                }
+                if !get_ns("TSBT_TEN_BENH").is_empty() {
+                    replacements.insert(91, format!("Nếu “có”, đề nghị ghi cụ thể tên bệnh: {}", get_ns("TSBT_TEN_BENH")));
+                }
+                if !get_ns("TSBT_DANG_DIEU_TRI").is_empty() {
+                    replacements.insert(95, get_ns("TSBT_DANG_DIEU_TRI"));
+                }
+                replacements.insert(99, format!("{} Người đề nghị khám sức khỏe (Ký và ghi rõ họ, tên)", date_sig));
+                if !is_reception_print {
+                    if !get_ns("KLS_TAM_THAN").is_empty() { replacements.insert(107, get_ns("KLS_TAM_THAN")); }
+                    if !get_ns("KL_TAM_THAN").is_empty() { replacements.insert(109, format!("Kết luận: {}", get_ns("KL_TAM_THAN"))); }
+                    if !get_ns("KLS_THAN_KINH").is_empty() { replacements.insert(111, get_ns("KLS_THAN_KINH")); }
+                    if !get_ns("KL_THAN_KINH").is_empty() { replacements.insert(113, format!("Kết luận: {}", get_ns("KL_THAN_KINH"))); }
+                    if !get_ns("MAT_KK_MP").is_empty() || !get_ns("MAT_KK_MT").is_empty() {
+                        replacements.insert(116, format!("+ Không kính:   Mắt phải: {}    Mắt trái: {}", get_ns("MAT_KK_MP"), get_ns("MAT_KK_MT")));
+                    }
+                    if !get_ns("MAT_CK_MP").is_empty() || !get_ns("MAT_CK_MT").is_empty() {
+                        replacements.insert(117, format!("+ Có kính:      Mắt phải: {}    Mắt trái: {}", get_ns("MAT_CK_MP"), get_ns("MAT_CK_MT")));
+                    }
+                    if !get_ns("MAT_2M_KK").is_empty() || !get_ns("MAT_2M_CK").is_empty() {
+                        replacements.insert(118, format!("- Thị lực nhìn xa hai mắt: Không kính: {}   Có kính: {}", get_ns("MAT_2M_KK"), get_ns("MAT_2M_CK")));
+                    }
+                    if !get_ns("MAT_BENH").is_empty() { replacements.insert(134, get_ns("MAT_BENH")); }
+                    if !get_ns("KL_MAT").is_empty() { replacements.insert(160, format!("Kết luận: {}", get_ns("KL_MAT"))); }
+                    if !get_ns("TMH_TT_THUONG").is_empty() || !get_ns("TMH_TT_THAM").is_empty() {
+                        replacements.insert(164, format!("         + Tai trái:    Nói thường: {} m;    Nói thầm: {} m", get_ns("TMH_TT_THUONG"), get_ns("TMH_TT_THAM")));
+                    }
+                    if !get_ns("TMH_TP_THUONG").is_empty() || !get_ns("TMH_TP_THAM").is_empty() {
+                        replacements.insert(165, format!("         + Tai phải:    Nói thường: {} m;    Nói thầm: {} m", get_ns("TMH_TP_THUONG"), get_ns("TMH_TP_THAM")));
+                    }
+                    if !get_ns("TMH_BENH").is_empty() { replacements.insert(167, get_ns("TMH_BENH")); }
+                    if !get_ns("KL_TMH").is_empty() { replacements.insert(176, format!("Kết luận: {}", get_ns("KL_TMH"))); }
+                    if !get_ns("MACH").is_empty() { replacements.insert(179, format!("+ Mạch: {} lần/phút;", get_ns("MACH"))); }
+                    if !get_ns("HUYET_AP").is_empty() { replacements.insert(180, format!("+ Huyết áp: {} mmHg", get_ns("HUYET_AP"))); }
+                    if !get_ns("KLS_TIM_MACH").is_empty() { replacements.insert(181, get_ns("KLS_TIM_MACH")); }
+                    if !get_ns("KL_TIM_MACH").is_empty() { replacements.insert(183, format!("Kết luận: {}", get_ns("KL_TIM_MACH"))); }
+                    if !get_ns("KLS_HO_HAP").is_empty() { replacements.insert(186, get_ns("KLS_HO_HAP")); }
+                    if !get_ns("KL_HO_HAP").is_empty() { replacements.insert(189, format!("Kết luận: {}", get_ns("KL_HO_HAP"))); }
+                    if !get_ns("KLS_CXK").is_empty() { replacements.insert(192, get_ns("KLS_CXK")); }
+                    if !get_ns("KL_CXK").is_empty() { replacements.insert(194, format!("Kết luận: {}", get_ns("KL_CXK"))); }
+                    if !get_ns("KLS_NOI_TIET").is_empty() { replacements.insert(196, get_ns("KLS_NOI_TIET")); }
+                    if !get_ns("KL_NOI_TIET").is_empty() { replacements.insert(198, format!("Kết luận: {}", get_ns("KL_NOI_TIET"))); }
+                    if !get_ns("XN_MA_TUY").is_empty() { replacements.insert(213, format!("Kết quả: {}", get_ns("XN_MA_TUY"))); }
+                    if !get_ns("XN_KHAC_KQ").is_empty() { replacements.insert(216, format!("a) Kết quả: {}", get_ns("XN_KHAC_KQ"))); }
+                    if !get_ns("XN_KHAC_KL").is_empty() { replacements.insert(218, format!("b) Kết luận: {}", get_ns("XN_KHAC_KL"))); }
+                    let kl_lx = format!("{} {}", get_ns("KET_LUAN_SK"), hang_lx).trim().to_string();
+                    if !kl_lx.is_empty() { replacements.insert(222, kl_lx); }
+                    if !get_ns("KET_LUAN_BENH").is_empty() { replacements.insert(223, format!("Bệnh/tật (nếu có): {}", get_ns("KET_LUAN_BENH"))); }
+                    replacements.insert(227, format!("{}   NGƯỜI KẾT LUẬN: {}", date_sig, get_ns("BS_KET_LUAN")));
+                }
+            }
+            "DUOI_6" => {
+                replacements.insert(5, format!("Số: {}/GKSK-BV", so_phieu));
+                replacements.insert(10, format!("1. Họ và tên (In hoa): {}    2. Số CCCD/Mã định danh: {}", get("HO_TEN").to_uppercase(), get("SO_CCCD")));
+                replacements.insert(11, format!("3. Ngày sinh: {}    4. Giới: {} Nam   {} Nữ", ngay_sinh, if gt == "1" { "☑" } else { "☐" }, if gt == "2" { "☑" } else { "☐" }));
+                replacements.insert(12, format!("5. Sinh non: {}    6. Tuần thai khi sinh: {} tuần", get("SINH_NON"), get("TUAN_THAI_KHI_SINH")));
+                replacements.insert(13, format!("7. Dân tộc: {}    8. Đối tượng: {}", dan_toc_name, doi_tuong_name));
+                replacements.insert(14, format!("Nguồn chi trả: {}", nguon_chi_tra_name));
+                replacements.insert(15, format!("Nhóm máu: {}", nhom_mau));
+                replacements.insert(16, format!("Nơi ở hiện tại: Tỉnh/thành: {}; Phường/xã: {}; Số nhà/thôn/xóm: {}", tinh_name, xa_name, get("DIA_CHI")));
+                replacements.insert(17, format!("Họ tên người đi cùng trẻ/Người giám hộ: {}", get("HO_TEN_NGUOI_GIAM_HO")));
+                replacements.insert(18, format!("Mối quan hệ với trẻ: {}", get("MOI_QUAN_HE_VOI_TRE")));
+                replacements.insert(19, format!("Số điện thoại liên hệ: {}    15. Mã định danh người đi cùng trẻ: {}", get("DIEN_THOAI_GIAM_HO"), get("CCCD_NGUOI_GIAM_HO")));
+                replacements.insert(20, format!("16. Ngày khám: {}    17. Cơ sở khám: {}", nv, cfg.ten_cskcb));
+                replacements.insert(22, format!("Bản thân: {} ({})", get_ns("TSBT_MAC_BENH"), get_ns("TSBT_MA_BENH")));
+                replacements.insert(23, format!("Gia đình: {} ({})", get_ns("TSGD_MAC_BENH"), get_ns("TSGD_MA_BENH")));
+                replacements.insert(24, format!("Tiền sử tiếp xúc với người bệnh lao: {}", get_ns("TS_TIEP_XUC_LAO")));
+                if !is_reception_print {
+                    replacements.insert(37, format!("Nhiệt độ: {} độ C ({})", get_ns("NHIET_DO"), get_ns("DANH_GIA_NHIET_DO")));
+                    replacements.insert(38, format!("Mạch: {} lần/phút ({})   Nhịp thở: {} lần/phút ({})", get_ns("MACH"), get_ns("DANH_GIA_MACH"), get_ns("NHIP_THO"), get_ns("DANH_GIA_NHIP_THO")));
+                    replacements.insert(43, format!("Chiều dài (cm): {}   Chiều dài/Tuổi: {} SD", get_ns("CHIEU_DAI"), get_ns("CHIEU_DAI_TUOI_SD")));
+                    replacements.insert(44, format!("Cân nặng (kg): {}   Cân nặng/Tuổi: {} SD", get_ns("CAN_NANG"), get_ns("CAN_NANG_TUOI_SD")));
+                    replacements.insert(45, format!("Vòng đầu (cm): {} ({})   Chu vi vòng cánh tay (mm): {}", get_ns("VONG_DAU"), get_ns("DANH_GIA_VONG_DAU"), get_ns("VONG_CANH_TAY")));
+                    if !get_ns("KET_LUAN_SK").is_empty() || !get_ns("KET_LUAN_BENH").is_empty() {
+                        replacements.insert(159, format!("Ghi rõ: {} {}", get_ns("KET_LUAN_SK"), get_ns("KET_LUAN_BENH")));
+                    }
+                    replacements.insert(163, date_sig);
+                }
+            }
+            "TU_6_DUOI_18" => {
+                replacements.insert(3, format!("Số: {}/GKSK-BV", so_phieu));
+                replacements.insert(8, format!("Họ và tên (viết chữ in hoa): {}", get("HO_TEN").to_uppercase()));
+                replacements.insert(9, format!("Giới tính: {} Nam  {} Nữ    3. Ngày tháng năm sinh: {}; Tuổi: {}", if gt == "1" { "☑" } else { "☐" }, if gt == "2" { "☑" } else { "☐" }, ngay_sinh, tuoi_str));
+                replacements.insert(10, format!("Số CCCD/Hộ chiếu/Mã định danh: {}", get("SO_CCCD")));
+                replacements.insert(11, format!("Cấp ngày: {}   Nơi cấp: {}", ngaycap_cccd, noicap_cccd));
+                replacements.insert(12, format!("Dân tộc: {}    7. Đối tượng: {}", dan_toc_name, doi_tuong_name));
+                replacements.insert(13, format!("Nguồn chi trả: {}", nguon_chi_tra_name));
+                replacements.insert(14, format!("Nhóm máu: {} (nếu có)", nhom_mau));
+                replacements.insert(15, format!("Nơi ở hiện tại: Tỉnh/thành: {}; Phường/xã: {}; Số nhà/thôn/xóm: {}", tinh_name, xa_name, get("DIA_CHI")));
+                replacements.insert(16, format!("Họ tên người đi cùng trẻ/Người giám hộ: {}", get("HO_TEN_NGUOI_GIAM_HO")));
+                replacements.insert(17, format!("Mối quan hệ với trẻ: {}", get("MOI_QUAN_HE_VOI_TRE")));
+                replacements.insert(18, format!("Lý do khám sức khỏe: {}", get("LY_DO_VV")));
+                replacements.insert(23, format!("1. Tiền sử gia đình: {} ({})", get_ns("TSGD_MAC_BENH"), get_ns("TSGD_TEN_BENH")));
+                replacements.insert(28, format!("a) Sản khoa: {} ({})", get_ns("TSBT_SAN_KHOA"), get_ns("TSBT_SAN_KHOA_MA_BENH")));
+                replacements.insert(80, format!("Nếu “có”: ghi cụ thể tên bệnh: {}", get_ns("TSBT_TEN_BENH_BAM_SINH")));
+                replacements.insert(85, get_ns("TSBT_GHI_RO_DIEU_TRI"));
+                replacements.insert(90, format!("{}   Người đề nghị khám sức khỏe", date_sig));
+                if !is_reception_print {
+                    replacements.insert(98, format!("Chiều cao: {} cm; - Cân nặng: {} Kg;", get_ns("CHIEU_CAO"), get_ns("CAN_NANG")));
+                    replacements.insert(99, format!("Chỉ số BMI: {}", get_ns("CHI_SO_BMI")));
+                    replacements.insert(100, format!("Mạch: {} lần/phút; - Huyết áp: {} mmHg", get_ns("MACH"), get_ns("HUYET_AP")));
+                    replacements.insert(141, format!("Không kính: Mắt phải: {}   Mắt trái: {}", get_ns("MAT_KHONG_KINH_PHAI"), get_ns("MAT_KHONG_KINH_TRAI")));
+                    replacements.insert(142, format!("Có kính: Mắt phải: {}   Mắt trái: {}", get_ns("MAT_CO_KINH_PHAI"), get_ns("MAT_CO_KINH_TRAI")));
+                    replacements.insert(144, format!("Các bệnh về mắt (nếu có): {}", get_ns("MAT_BENH")));
+                    replacements.insert(149, format!("Tai trái: Nói thường: {} m; Nói thầm: {} m", get_ns("TMH_TAI_TRAI_NOI_THUONG"), get_ns("TMH_TAI_TRAI_NOI_THAM")));
+                    replacements.insert(150, format!("Tai phải: Nói thường: {} m; Nói thầm: {} m", get_ns("TMH_TAI_PHAI_NOI_THUONG"), get_ns("TMH_TAI_PHAI_NOI_THAM")));
+                    replacements.insert(152, format!("Các bệnh về tai mũi họng (nếu có): {}", get_ns("TMH_BENH")));
+                    replacements.insert(158, format!("Hàm trên: {}", get_ns("RHM_HAM_TREN")));
+                    replacements.insert(159, format!("Hàm dưới: {}", get_ns("RHM_HAM_DUOI")));
+                    replacements.insert(161, format!("Các bệnh về răng hàm mặt (nếu có): {}", get_ns("RHM_BENH")));
+                    replacements.insert(171, format!("Kết quả: {}", get_ns("CLS_KET_QUA")));
+                    replacements.insert(180, format!("Tình trạng sức khỏe; mắc các bệnh, tật (nếu có): {} {}", get_ns("KET_LUAN_BENH"), get_ns("CAC_VAN_DE_SUC_KHOE")));
+                    replacements.insert(187, format!("2. Phân loại sức khỏe (theo quy định của Bộ Y tế): {}", get_ns("PHAN_LOAI_SK")));
+                    replacements.insert(189, date_sig);
+                }
+            }
+            "MAU_GIAO" => {
+                replacements.insert(3, format!("Số: {}/GKSK-MN-{}/26", so_phieu, cfg.ma_cskcb));
+                replacements.insert(8, format!("1. Họ và tên (In hoa): {}", get("HO_TEN").to_uppercase()));
+                replacements.insert(9, format!("2. Số CC/CCCD/Hộ chiếu/Mã định danh: {}", get("SO_CCCD")));
+                replacements.insert(10, format!("3. Ngày sinh: {}    4. Giới: {} Nam   {} Nữ", ngay_sinh, if gt == "1" { "☑" } else { "☐" }, if gt == "2" { "☑" } else { "☐" }));
+                replacements.insert(11, format!("5. Sinh non: {}    6. Tuần thai khi sinh: {} tuần", get("SINH_NON"), get("TUAN_THAI_KHI_SINH")));
+                replacements.insert(12, format!("7. Dân tộc: {}    8. Đối tượng: trẻ em trong các cơ sở giáo dục mầm non", dan_toc_name));
+                replacements.insert(13, format!("9. Nguồn chi trả: {}", nguon_chi_tra_name));
+                replacements.insert(14, format!("10. Nhóm máu: {} (nếu có)", nhom_mau));
+                replacements.insert(15, format!("11. Nơi ở hiện tại: Tỉnh/thành: {}; Phường/xã: {}", tinh_name, xa_name));
+                replacements.insert(16, format!("Số nhà/thôn/xóm: {}", get("DIA_CHI")));
+                replacements.insert(17, format!("12. Tên cơ sở giáo dục đang theo học: {}", get("TEN_CSGD")));
+                replacements.insert(19, format!("13. Họ tên người đi cùng trẻ/Người giám hộ: {}", get("HO_TEN_NGUOI_GIAM_HO")));
+                replacements.insert(20, format!("14. Mối quan hệ với trẻ: {}", get("MOI_QUAN_HE_VOI_TRE")));
+                replacements.insert(21, format!("15. Số điện thoại liên hệ: {}", get("DIEN_THOAI_GIAM_HO")));
+                replacements.insert(22, format!("16. Mã định danh/CC/CCCD người đi cùng trẻ: {}", get("CCCD_NGUOI_GIAM_HO")));
+                replacements.insert(23, format!("17. Ngày kiểm tra sức khỏe: {}", nv));
+                replacements.insert(24, format!("18. Cơ sở kiểm tra sức khỏe: {}", cfg.ten_cskcb));
+                replacements.insert(26, format!("- Bản thân: {} ({})", get_ns("TSBT_MAC_BENH"), get_ns("TSBT_MA_BENH")));
+                replacements.insert(27, format!("- Gia đình: {} ({})", get_ns("TSGD_MAC_BENH"), get_ns("TSGD_MA_BENH")));
+                replacements.insert(28, format!("- Tiền sử tiếp xúc với người bệnh lao: {}", get_ns("TS_TIEP_XUC_LAO")));
+                if !is_reception_print {
+                    replacements.insert(32, format!("Nhiệt độ: {} độ C ({})", get_ns("NHIET_DO"), get_ns("DANH_GIA_NHIET_DO")));
+                    replacements.insert(33, format!("Mạch: {} lần/phút ({})", get_ns("MACH"), get_ns("DANH_GIA_MACH")));
+                    replacements.insert(34, format!("Nhịp thở: {} lần/phút ({})", get_ns("NHIP_THO"), get_ns("DANH_GIA_NHIP_THO")));
+                    replacements.insert(38, format!("Chiều dài (cm): {}    Chiều dài/Tuổi: {} SD", get_ns("CHIEU_DAI"), get_ns("CHIEU_DAI_TUOI_SD")));
+                    replacements.insert(39, format!("Cân nặng (kg): {}    Cân nặng/Tuổi: {} SD", get_ns("CAN_NANG"), get_ns("CAN_NANG_TUOI_SD")));
+                    replacements.insert(40, format!("Vòng đầu (cm): {} ({})", get_ns("VONG_DAU"), get_ns("DANH_GIA_VONG_DAU")));
+                    replacements.insert(41, format!("Chu vi vòng cánh tay (mm): {}", get_ns("VONG_CANH_TAY")));
+                    replacements.insert(132, format!("Ghi rõ: {} {}", get_ns("KET_LUAN_SK"), get_ns("KET_LUAN_BENH")));
+                    replacements.insert(136, format!("Cần được tư vấn/chuyển khám chuyên khoa: {}", get_ns("TU_VAN_CHUYEN_KHOA")));
+                    replacements.insert(140, date_sig);
+                }
+            }
+            "HS_PHO_THONG" => {
+                replacements.insert(3, format!("Số: {}/GKSK-HS-{}/26", so_phieu, cfg.ma_cskcb));
+                replacements.insert(7, format!("1. Họ và tên (viết chữ in hoa): {}", get("HO_TEN").to_uppercase()));
+                replacements.insert(8, format!("2. Giới tính: {} Nam  {} Nữ   3. Ngày tháng năm sinh: {}; Tuổi: {}", if gt == "1" { "☑" } else { "☐" }, if gt == "2" { "☑" } else { "☐" }, ngay_sinh, tuoi_str));
+                replacements.insert(9, format!("4. Số CC/CCCD/Hộ chiếu/Mã định danh: {}", get("SO_CCCD")));
+                replacements.insert(10, format!("5. Cấp ngày: {}   Nơi cấp: {}", ngaycap_cccd, noicap_cccd));
+                replacements.insert(11, format!("6. Dân tộc: {}   7. Đối tượng: Học sinh trong các cơ sở giáo dục phổ thông", dan_toc_name));
+                replacements.insert(12, format!("8. Nguồn chi trả: {}", nguon_chi_tra_name));
+                replacements.insert(13, format!("9. Nhóm máu: {} (nếu có)", nhom_mau));
+                replacements.insert(15, format!("- Nơi ở hiện tại: Tỉnh/thành: {}; Phường/xã: {}", tinh_name, xa_name));
+                replacements.insert(16, format!("Số nhà/thôn/xóm: {}", get("DIA_CHI")));
+                replacements.insert(17, format!("- Tên cơ sở giáo dục đang theo học: {}", get("TEN_CSGD")));
+                replacements.insert(18, format!("11. Lý do khám sức khỏe: {}", get("LY_DO_VV")));
+                replacements.insert(24, format!("1. Tiền sử gia đình: {} ({})", get_ns("TSGD_MAC_BENH"), get_ns("TSGD_TEN_BENH")));
+                replacements.insert(32, format!("a) Sản khoa: {} ({})", get_ns("TSBT_SAN_KHOA"), get_ns("TSBT_SAN_KHOA_MA_BENH")));
+                replacements.insert(90, format!("Nếu “có”: ghi cụ thể tên bệnh: {}", get_ns("TSBT_TEN_BENH_BAM_SINH")));
+                replacements.insert(93, format!("Nếu “có”, ghi rõ tên bệnh và liệt kê các thuốc đang dùng: {}", get_ns("TSBT_GHI_RO_DIEU_TRI")));
+                if !is_reception_print {
+                    replacements.insert(97, format!("- Chiều cao: {} cm;", get_ns("CHIEU_CAO")));
+                    replacements.insert(98, format!("- Cân nặng: {} Kg;", get_ns("CAN_NANG")));
+                    replacements.insert(99, format!("- Chỉ số BMI: {};", get_ns("CHI_SO_BMI")));
+                    replacements.insert(100, format!("- Mạch: {} lần/phút;", get_ns("MACH")));
+                    replacements.insert(101, format!("- Huyết áp: {} mmHg.", get_ns("HUYET_AP")));
+                    replacements.insert(106, format!("Không kính: Mắt phải: {}    Mắt trái: {}", get_ns("MAT_KHONG_KINH_PHAI"), get_ns("MAT_KHONG_KINH_TRAI")));
+                    replacements.insert(107, format!("Có kính: Mắt phải: {}    Mắt trái: {}", get_ns("MAT_CO_KINH_PHAI"), get_ns("MAT_CO_KINH_TRAI")));
+                    replacements.insert(108, format!("Các bệnh về mắt (nếu có): {}", get_ns("MAT_BENH")));
+                    replacements.insert(112, format!("Tai trái: Nói thường: {} m; Nói thầm: {} m", get_ns("TMH_TAI_TRAI_NOI_THUONG"), get_ns("TMH_TAI_TRAI_NOI_THAM")));
+                    replacements.insert(113, format!("Tai phải: Nói thường: {} m; Nói thầm: {} m", get_ns("TMH_TAI_PHAI_NOI_THUONG"), get_ns("TMH_TAI_PHAI_NOI_THAM")));
+                    replacements.insert(114, format!("Các bất thường về tai mũi họng (nếu có): {}", get_ns("TMH_BENH")));
+                    replacements.insert(118, format!("Hàm trên: {}", get_ns("RHM_HAM_TREN")));
+                    replacements.insert(119, format!("Hàm dưới: {}", get_ns("RHM_HAM_DUOI")));
+                    replacements.insert(120, format!("- Các bất thường khác về răng hàm mặt (nếu có ghi rõ): {}", get_ns("RHM_BENH")));
+                    replacements.insert(131, format!("Tình trạng sức khỏe, mắc các bệnh tật (nếu có): {} {}", get_ns("KET_LUAN_TINH_TRANG_SK"), get_ns("KET_LUAN_BENH")));
+                    replacements.insert(132, format!("Cần được tư vấn/ chuyển khám chuyên khoa: {} / {} ({})", get_ns("CAN_TU_VAN"), get_ns("CHUYEN_CSKCB"), get_ns("GHI_RO_CHUYEN_CSKCB")));
+                    replacements.insert(136, date_sig);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let template_bytes: Vec<u8> = match tpl_code.as_str() {
+        "LAI_XE" => fs::read("asset/template_laixe.docx")
+            .unwrap_or_else(|_| EMBEDDED_TEMPLATE_LAIXE_DOCX.to_vec()),
+        "DUOI_6" => fs::read("asset/template6.docx")
+            .unwrap_or_else(|_| EMBEDDED_TEMPLATE_6_DOCX.to_vec()),
+        "TU_6_DUOI_18" => fs::read("asset/template6_18.docx")
+            .unwrap_or_else(|_| EMBEDDED_TEMPLATE_6_18_DOCX.to_vec()),
+        "MAU_GIAO" => fs::read("asset/template_maugiao.docx")
+            .unwrap_or_else(|_| EMBEDDED_TEMPLATE_MAUGIAO_DOCX.to_vec()),
+        "HS_PHO_THONG" => fs::read("asset/template_hocsinh.docx")
+            .unwrap_or_else(|_| EMBEDDED_TEMPLATE_HOCSINH_DOCX.to_vec()),
+        _ => fs::read(&cfg.template_docx_path)
+            .unwrap_or_else(|_| EMBEDDED_TEMPLATE_DOCX.to_vec()),
+    };
 
     let ma_tn_header = if record.ma_tiep_nhan.trim().is_empty() {
         get("MA_TIEP_NHAN")
@@ -2276,10 +2578,10 @@ pub async fn generate_docx_bytes(
                 .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' { c } else { '_' })
                 .collect::<String>();
             let prefix = if is_reception_print { "Phieu_TiepNhan" } else { "Phieu_KSK" };
-            let filename = format!("{}_{}.docx", prefix, safe_ma_tn);
+            let filename = format!("{}_{}_{}.docx", prefix, tpl_code, safe_ma_tn);
             Ok((filename, docx_bytes))
         }
-        Err(e) => Err(format!("Lỗi tạo file Word từ template18.docx: {}", e)),
+        Err(e) => Err(format!("Lỗi tạo file Word ({}): {}", tpl_code, e)),
     }
 }
 
@@ -3499,6 +3801,19 @@ mod tests {
             .read_to_string(&mut ct)
             .unwrap();
         assert!(ct.contains("/word/header1.xml"));
+
+        for raw_tpl in [
+            EMBEDDED_TEMPLATE_6_DOCX,
+            EMBEDDED_TEMPLATE_6_18_DOCX,
+            EMBEDDED_TEMPLATE_MAUGIAO_DOCX,
+            EMBEDDED_TEMPLATE_HOCSINH_DOCX,
+            EMBEDDED_TEMPLATE_LAIXE_DOCX,
+        ] {
+            let mut r = HashMap::new();
+            r.insert(4, "TEST HEADER".to_string());
+            let out = build_filled_docx(raw_tpl, &r, "TN20269999").unwrap();
+            assert!(out.len() > 1000);
+        }
     }
 
     #[test]

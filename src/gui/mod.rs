@@ -12,7 +12,7 @@ use std::{
 
 use gpui::{
     AnyElement, AppContext as _, Context, Entity, InteractiveElement, IntoElement, ParentElement,
-    Render, Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, rgb,
+    Render, StatefulInteractiveElement, Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, rgb,
 };
 use gpui_component::{
     Sizable,
@@ -26,8 +26,8 @@ use crate::{
     config::AppConfig,
     db,
     handlers::{
-        AppState, generate_csv_bytes, generate_docx_bytes, generate_group_print_pdf,
-        generate_record_pdf, query_filtered_records,
+        AppState, generate_csv_bytes, generate_docx_bytes_for_template, generate_group_print_pdf,
+        generate_record_pdf_for_templates, query_filtered_records,
     },
     models::{
         CatalogItem, Company, ExamContractSummary, GroupImportRow, KskRecordRow, UpdateManifest,
@@ -37,8 +37,8 @@ use crate::{
 };
 
 use self::widgets::{
-    bg_app, bg_card, bg_subtle, border_col, DANGER_BG, DANGER_COL, PRIMARY_COL,
-    SUCCESS_BG, SUCCESS_COL, text_main, text_muted, WARN_BG, WARN_COL, card_box,
+    bg_app, bg_card, bg_subtle, border_col, DANGER_BG, DANGER_COL, PRIMARY_COL, primary_light,
+    SUCCESS_BG, SUCCESS_COL, text_main, text_muted, WARN_BG, WARN_COL, badge, card_box,
     field_label, role_label_vi,
 };
 
@@ -401,6 +401,8 @@ pub struct KskGpuiApp {
     pub confirm_lock_modal: bool,
     pub lock_missing_sections: Vec<String>,
     pub confirm_logout_modal: bool,
+    pub print_modal_action: Option<(bool, bool)>,
+    pub print_modal_templates: Vec<String>,
 
     // Sidebar
     pub sidebar_open: bool,
@@ -851,6 +853,8 @@ impl KskGpuiApp {
             confirm_lock_modal: false,
             lock_missing_sections: Vec::new(),
             confirm_logout_modal: false,
+            print_modal_action: None,
+            print_modal_templates: Vec::new(),
             sidebar_open: true,
             sidebar_exam_mode: "le".into(),
             sidebar_contract_id: None,
@@ -2043,16 +2047,57 @@ impl KskGpuiApp {
         }
     }
 
+    pub fn open_print_template_modal(
+        &mut self,
+        is_docx: bool,
+        is_reception: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected_record_id.is_none() {
+            return;
+        }
+        let mut tpls = crate::templates::parse_template_list(&self.current_record_templates);
+        if tpls.is_empty() {
+            tpls.push(self.active_record_template.clone());
+        }
+        self.print_modal_templates = tpls;
+        self.print_modal_action = Some((is_docx, is_reception));
+        self.open_dropdown = None;
+        cx.notify();
+    }
+
     pub fn print_record_html(&mut self, is_reception: bool, cx: &mut Context<Self>) {
+        self.open_print_template_modal(false, is_reception, cx);
+    }
+
+    pub fn execute_print_record_html(
+        &mut self,
+        is_reception: bool,
+        templates: Vec<String>,
+        cx: &mut Context<Self>,
+    ) {
         let Some(rid) = self.selected_record_id else {
             return;
         };
+        if templates.is_empty() {
+            self.show_toast("Vui lòng chọn ít nhất 1 mẫu để in!", true, cx);
+            return;
+        }
         let state = self.state.clone();
         let cfg = self.cfg.clone();
         let mk = self.master_key;
+        let tpls_for_toast = templates.len();
         let res = self.run_sync(async move {
             let pool = state.db.read().await;
-            generate_record_pdf(&pool, &cfg, rid, is_reception, mk.as_ref()).await
+            generate_record_pdf_for_templates(
+                &pool,
+                &cfg,
+                rid,
+                is_reception,
+                &templates,
+                mk.as_ref(),
+            )
+            .await
         });
         match res {
             Ok((filename, pdf_bytes)) => {
@@ -2066,7 +2111,11 @@ impl KskGpuiApp {
                     .args(["/C", "start", "", &path_str])
                     .spawn()
                 {
-                    Ok(_) => self.show_toast("Đã xuất PDF A4!", false, cx),
+                    Ok(_) => self.show_toast(
+                        &format!("Đã xuất PDF A4 ({} mẫu)!", tpls_for_toast),
+                        false,
+                        cx,
+                    ),
                     Err(e) => self.show_toast(&format!("Không mở được file PDF: {}", e), true, cx),
                 }
             }
@@ -2112,35 +2161,60 @@ impl KskGpuiApp {
     }
 
     pub fn export_docx(&mut self, is_reception: bool, cx: &mut Context<Self>) {
+        self.open_print_template_modal(true, is_reception, cx);
+    }
+
+    pub fn execute_export_docx(
+        &mut self,
+        is_reception: bool,
+        templates: Vec<String>,
+        cx: &mut Context<Self>,
+    ) {
         let Some(rid) = self.selected_record_id else {
             return;
         };
-        let state = self.state.clone();
-        let cfg = self.cfg.clone();
-        let mk = self.master_key;
-        let res = self.run_sync(async move {
-            let pool = state.db.read().await;
-            generate_docx_bytes(&pool, &cfg, rid, is_reception, mk.as_ref()).await
-        });
-        match res {
-            Ok((filename, bytes)) => {
-                if let Some(path) = rfd::FileDialog::new()
-                    .set_file_name(&filename)
-                    .add_filter("Word Document", &["docx"])
-                    .save_file()
-                {
-                    if let Err(e) = std::fs::write(&path, bytes) {
-                        self.show_toast(&format!("Lỗi ghi file: {}", e), true, cx);
-                    } else {
-                        self.show_toast(
-                            &format!("Đã xuất file: {}", path.display()),
-                            false,
-                            cx,
-                        );
+        if templates.is_empty() {
+            self.show_toast("Vui lòng chọn ít nhất 1 mẫu để xuất DOCX!", true, cx);
+            return;
+        }
+        let mut saved_count = 0usize;
+        for tpl_code in templates {
+            let state = self.state.clone();
+            let cfg = self.cfg.clone();
+            let mk = self.master_key;
+            let tpl_c = tpl_code.clone();
+            let res = self.run_sync(async move {
+                let pool = state.db.read().await;
+                generate_docx_bytes_for_template(&pool, &cfg, rid, is_reception, &tpl_c, mk.as_ref())
+                    .await
+            });
+            match res {
+                Ok((filename, bytes)) => {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .set_file_name(&filename)
+                        .add_filter("Word Document", &["docx"])
+                        .save_file()
+                    {
+                        if let Err(e) = std::fs::write(&path, bytes) {
+                            self.show_toast(&format!("Lỗi ghi file: {}", e), true, cx);
+                            return;
+                        } else {
+                            saved_count += 1;
+                        }
                     }
                 }
+                Err(e) => {
+                    self.show_toast(&format!("Lỗi xuất DOCX: {}", e), true, cx);
+                    return;
+                }
             }
-            Err(e) => self.show_toast(&format!("Lỗi xuất DOCX: {}", e), true, cx),
+        }
+        if saved_count > 0 {
+            self.show_toast(
+                &format!("Đã xuất thành công {} file Word (.docx)!", saved_count),
+                false,
+                cx,
+            );
         }
     }
 
@@ -3753,6 +3827,9 @@ impl Render for KskGpuiApp {
                     if this.pending_nav.is_some() {
                         this.pending_nav = None;
                         cx.notify();
+                    } else if this.print_modal_action.is_some() {
+                        this.print_modal_action = None;
+                        cx.notify();
                     } else if this.confirm_lock_modal {
                         this.confirm_lock_modal = false;
                         cx.notify();
@@ -4119,15 +4196,220 @@ impl Render for KskGpuiApp {
                         ),
                 )
             })
-            .when(self.pending_nav.is_some() || self.confirm_lock_modal || self.confirm_logout_modal, |el| {
-                el.child(self.render_ux_modals(window, cx))
-            })
+            .when(
+                self.pending_nav.is_some()
+                    || self.confirm_lock_modal
+                    || self.confirm_logout_modal
+                    || self.print_modal_action.is_some(),
+                |el| {
+                    el.child(self.render_ux_modals(window, cx))
+                },
+            )
             .into_any_element()
     }
 }
 
 impl KskGpuiApp {
     fn render_ux_modals(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        if let Some((is_docx, is_reception)) = self.print_modal_action {
+            let record_tpls = crate::templates::parse_template_list(&self.current_record_templates);
+            let ticked = self.print_modal_templates.clone();
+            let title_str = match (is_docx, is_reception) {
+                (true, true) => "Chọn mẫu xuất Phôi Tiếp Nhận (.docx)",
+                (true, false) => "Chọn mẫu xuất Phiếu KSK (.docx)",
+                (false, true) => "Chọn mẫu in Phôi Tiếp Nhận (PDF A4)",
+                (false, false) => "Chọn mẫu in Giấy KSK (PDF A4)",
+            };
+            let confirm_lbl = if is_docx {
+                format!("Xuất DOCX ({} mẫu)", ticked.len())
+            } else {
+                format!("In PDF A4 ({} mẫu)", ticked.len())
+            };
+            return div()
+                .id("ux-print-tpl-backdrop")
+                .absolute()
+                .inset_0()
+                .bg(gpui::hsla(0., 0., 0., 0.45))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    card_box()
+                        .w(px(500.0))
+                        .child(
+                            div()
+                                .text_base()
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(rgb(text_main()))
+                                .child(title_str),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(text_muted()))
+                                .child("Tích chọn một hoặc nhiều mẫu phiếu khám bên dưới để in / xuất file:"),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .gap(px(8.0))
+                                .child(
+                                    Button::new("btn-print-tpl-rec-only")
+                                        .label("Chỉ mẫu của hồ sơ")
+                                        .small()
+                                        .secondary()
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.print_modal_templates =
+                                                crate::templates::parse_template_list(
+                                                    &this.current_record_templates,
+                                                );
+                                            cx.notify();
+                                        })),
+                                )
+                                .child(
+                                    Button::new("btn-print-tpl-select-all")
+                                        .label("Chọn tất cả (6 mẫu)")
+                                        .small()
+                                        .secondary()
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.print_modal_templates =
+                                                crate::templates::ALL_TEMPLATES
+                                                    .iter()
+                                                    .map(|(c, _, _)| (*c).to_string())
+                                                    .collect();
+                                            cx.notify();
+                                        })),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(6.0))
+                                .children(crate::templates::ALL_TEMPLATES.iter().map(
+                                    |(code, short_lbl, full_lbl)| {
+                                        let code_s = (*code).to_string();
+                                        let is_checked = ticked.contains(&code_s);
+                                        let in_rec = record_tpls.contains(&code_s);
+                                        div()
+                                            .id(gpui::SharedString::from(format!(
+                                                "chk-print-tpl-{}",
+                                                code
+                                            )))
+                                            .px(px(12.0))
+                                            .py(px(8.0))
+                                            .rounded(px(6.0))
+                                            .border_1()
+                                            .border_color(rgb(if is_checked {
+                                                PRIMARY_COL
+                                            } else {
+                                                border_col()
+                                            }))
+                                            .bg(rgb(if is_checked {
+                                                primary_light()
+                                            } else {
+                                                bg_subtle()
+                                            }))
+                                            .cursor_pointer()
+                                            .flex()
+                                            .flex_row()
+                                            .items_center()
+                                            .justify_between()
+                                            .gap(px(8.0))
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                if let Some(pos) = this
+                                                    .print_modal_templates
+                                                    .iter()
+                                                    .position(|x| x == &code_s)
+                                                {
+                                                    if this.print_modal_templates.len() > 1 {
+                                                        this.print_modal_templates.remove(pos);
+                                                    }
+                                                } else {
+                                                    this.print_modal_templates.push(code_s.clone());
+                                                }
+                                                cx.notify();
+                                            }))
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .flex_col()
+                                                    .gap(px(2.0))
+                                                    .child(
+                                                        div()
+                                                            .text_sm()
+                                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                            .text_color(rgb(if is_checked {
+                                                                PRIMARY_COL
+                                                            } else {
+                                                                text_main()
+                                                            }))
+                                                            .child(format!(
+                                                                "{} {}",
+                                                                if is_checked { "☑" } else { "☐" },
+                                                                short_lbl
+                                                            )),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .text_xs()
+                                                            .text_color(rgb(text_muted()))
+                                                            .child(*full_lbl),
+                                                    ),
+                                            )
+                                            .when(in_rec, |el| {
+                                                el.child(badge(
+                                                    "Mẫu của hồ sơ",
+                                                    SUCCESS_BG,
+                                                    SUCCESS_COL,
+                                                ))
+                                            })
+                                    },
+                                )),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .justify_end()
+                                .gap(px(8.0))
+                                .pt(px(4.0))
+                                .child(
+                                    Button::new("btn-print-tpl-cancel")
+                                        .label("Hủy")
+                                        .small()
+                                        .secondary()
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.print_modal_action = None;
+                                            cx.notify();
+                                        })),
+                                )
+                                .child(
+                                    Button::new("btn-print-tpl-confirm")
+                                        .label(confirm_lbl)
+                                        .small()
+                                        .primary()
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            let chosen = this.print_modal_templates.clone();
+                                            this.print_modal_action = None;
+                                            if is_docx {
+                                                this.execute_export_docx(is_reception, chosen, cx);
+                                            } else {
+                                                this.execute_print_record_html(
+                                                    is_reception,
+                                                    chosen,
+                                                    cx,
+                                                );
+                                            }
+                                            cx.notify();
+                                        })),
+                                ),
+                        ),
+                )
+                .into_any_element();
+        }
+
         if let Some(pending) = self.pending_nav.clone() {
             let p_save = pending.clone();
             let p_discard = pending;

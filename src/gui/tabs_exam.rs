@@ -529,10 +529,11 @@ impl KskGpuiApp {
         let has_any_tpl = |targets: &[&str]| -> bool {
             active_tpls.iter().any(|c| targets.contains(&c.as_str()))
         };
-        let show_cccd_issue = has_any_tpl(&["TREN_18", "TU_6_DUOI_18", "HS_PHO_THONG"]);
-        let show_phone_self = has_any_tpl(&["TREN_18", "TU_6_DUOI_18", "HS_PHO_THONG"]);
+        let show_cccd_issue = has_any_tpl(&["TREN_18", "LAI_XE", "TU_6_DUOI_18", "HS_PHO_THONG"]);
+        let show_phone_self = has_any_tpl(&["TREN_18", "LAI_XE", "TU_6_DUOI_18", "HS_PHO_THONG"]);
         let show_job_workplace = has_any_tpl(&["TREN_18"]);
         let show_ly_do = has_any_tpl(&["TREN_18", "TU_6_DUOI_18", "DUOI_6", "HS_PHO_THONG"]);
+        let show_laixe_rank = has_any_tpl(&["LAI_XE"]);
         let show_csgd_doctor = has_any_tpl(&["MAU_GIAO", "HS_PHO_THONG"]);
         let show_guardian = has_any_tpl(&["TU_6_DUOI_18", "DUOI_6", "MAU_GIAO"]);
         let show_guardian_rel = has_any_tpl(&["DUOI_6", "MAU_GIAO"]);
@@ -815,7 +816,7 @@ impl KskGpuiApp {
                                 }),
                         )
                     })
-                    .when((rec_sub.is_none() || rec_sub == Some(2)) && has_u18 && (show_csgd_doctor || show_guardian || show_sinh_non), |el| {
+                    .when((rec_sub.is_none() || rec_sub == Some(2)) && has_u18 && (show_laixe_rank || show_csgd_doctor || show_guardian || show_sinh_non), |el| {
                         let sinh_non = self.get_form_val("SINH_NON");
                         let qh_tre = self.get_form_val("MOI_QUAN_HE_VOI_TRE");
                         let sn_opts = vec![
@@ -846,6 +847,24 @@ impl KskGpuiApp {
                                         .text_color(rgb(PRIMARY_COL))
                                         .child("Thông tin bổ sung theo mẫu đang chọn"),
                                 )
+                                .when(show_laixe_rank, |sub| {
+                                    sub.child(
+                                        div()
+                                            .flex()
+                                            .flex_row()
+                                            .flex_wrap()
+                                            .gap(px(12.0))
+                                            .child(self.render_form_input(
+                                                "HANG_BANG_LAI",
+                                                "7. Đề nghị khám sức khỏe để lái xe hạng (A1, A, B1, B, C1, C, D...)",
+                                                "B1, B2, C...",
+                                                false,
+                                                editable,
+                                                window,
+                                                cx,
+                                            )),
+                                    )
+                                })
                                 .when(show_csgd_doctor, |sub| {
                                     sub.child(
                                         div()
@@ -3071,13 +3090,28 @@ impl KskGpuiApp {
                             )
                             .when(self.selected_record_id.is_some(), |b| {
                                 b.child(
-                                    Button::new("btn-tpl-print-pdf")
-                                        .label("In Giấy KSK (A4)")
-                                        .small()
-                                        .primary()
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.print_record_html(false, cx);
-                                        })),
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .gap(px(8.0))
+                                        .child(
+                                            Button::new("btn-tpl-print-pdf")
+                                                .label("In Giấy KSK (A4)")
+                                                .small()
+                                                .primary()
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.print_record_html(false, cx);
+                                                })),
+                                        )
+                                        .child(
+                                            Button::new("btn-tpl-export-docx")
+                                                .label("Xuất DOCX")
+                                                .small()
+                                                .secondary()
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.export_docx(false, cx);
+                                                })),
+                                        ),
                                 )
                             }),
                     ),
