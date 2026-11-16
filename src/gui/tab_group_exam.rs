@@ -108,6 +108,54 @@ impl KskGpuiApp {
                                     })),
                             )
                             .child(
+                                Button::new("btn-grp-split-db")
+                                    .label("📤 Tách DB đi khám")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.grp_split_selected_ids = this
+                                            .contracts_list
+                                            .iter()
+                                            .filter(|c| c.status == 0)
+                                            .map(|c| c.id)
+                                            .collect();
+                                        this.grp_show_split_dialog = true;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("btn-grp-merge-db")
+                                    .label("📥 Gộp DB khám ngoài")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|_this, _, _, cx| {
+                                        spawn_file_dialog(
+                                            cx,
+                                            || {
+                                                rfd::FileDialog::new()
+                                                    .add_filter("SQLite DB", &["db", "sqlite"])
+                                                    .pick_file()
+                                            },
+                                            |this, path, cx| {
+                                                let path_s = path.to_string_lossy().to_string();
+                                                let state = this.state.clone();
+                                                let res = this.run_sync(async move {
+                                                    let pool = state.db.read().await;
+                                                    db::preview_merge_contract_db(&pool, &path_s).await
+                                                });
+                                                match res {
+                                                    Ok(prev) => {
+                                                        this.grp_merge_overwrite_all = false;
+                                                        this.grp_merge_preview = Some(prev);
+                                                        cx.notify();
+                                                    }
+                                                    Err(e) => this.show_toast(&e, true, cx),
+                                                }
+                                            },
+                                        );
+                                    })),
+                            )
+                            .child(
                                 Button::new("btn-grp-refresh")
                                     .label("↻ Làm mới")
                                     .small()
@@ -394,6 +442,17 @@ impl KskGpuiApp {
                                                                     })),
                                                             )
                                                             .child(
+                                                                Button::new(SharedString::from(format!("btn-cont-split-{}", cont_id)))
+                                                                    .label("📤 Tách DB")
+                                                                    .small()
+                                                                    .secondary()
+                                                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                                                        this.grp_split_selected_ids = vec![cont_id];
+                                                                        this.grp_show_split_dialog = true;
+                                                                        cx.notify();
+                                                                    })),
+                                                            )
+                                                            .child(
                                                                 Button::new(SharedString::from(format!("btn-cont-exam-{}", cont_id)))
                                                                     .label("Khám đoàn này")
                                                                     .small()
@@ -430,6 +489,12 @@ impl KskGpuiApp {
             })
             .when(self.grp_show_contract_dialog, |el| {
                 el.child(self.render_contract_dialog(cx))
+            })
+            .when(self.grp_show_split_dialog, |el| {
+                el.child(self.render_split_db_dialog(cx))
+            })
+            .when(self.grp_merge_preview.is_some(), |el| {
+                el.child(self.render_merge_db_dialog(window, cx))
             })
             .into_any_element()
     }
@@ -2817,6 +2882,439 @@ impl KskGpuiApp {
                                     .primary()
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.save_group_bulk_edit(window, cx);
+                                    })),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_split_db_dialog(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let contracts = self.contracts_list.clone();
+        let selected = self.grp_split_selected_ids.clone();
+        let total_selected_records: i64 = contracts
+            .iter()
+            .filter(|c| selected.contains(&c.id))
+            .map(|c| c.total_records)
+            .sum();
+
+        div()
+            .id("grp-split-db-backdrop")
+            .absolute()
+            .inset_0()
+            .bg(gpui::hsla(0., 0., 0., 0.45))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                card_box()
+                    .w(px(620.0))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_base()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(rgb(text_main()))
+                                    .child("📤 Tách Database đi khám ngoại viện"),
+                            )
+                            .child(badge(
+                                format!("Đã chọn {} HĐ ({} hồ sơ)", selected.len(), total_selected_records),
+                                primary_light(),
+                                PRIMARY_COL,
+                            )),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(text_muted()))
+                            .child("Chọn 1 hoặc nhiều hợp đồng cho đợt đi khám ngoài. File .db xuất ra giữ nguyên tài khoản đăng nhập và danh mục để làm việc offline trên laptop."),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .gap(px(8.0))
+                            .child(
+                                Button::new("btn-split-sel-open")
+                                    .label("Chọn tất cả HĐ đang mở")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.grp_split_selected_ids = this
+                                            .contracts_list
+                                            .iter()
+                                            .filter(|c| c.status == 0)
+                                            .map(|c| c.id)
+                                            .collect();
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("btn-split-sel-clear")
+                                    .label("Bỏ chọn hết")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.grp_split_selected_ids.clear();
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("grp-split-contract-list")
+                            .max_h(px(300.0))
+                            .overflow_y_scroll()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.0))
+                            .children(contracts.into_iter().map(|ct| {
+                                let cid = ct.id;
+                                let is_sel = selected.contains(&cid);
+                                div()
+                                    .id(SharedString::from(format!("split-chk-{}", cid)))
+                                    .px(px(10.0))
+                                    .py(px(8.0))
+                                    .rounded(px(6.0))
+                                    .cursor_pointer()
+                                    .border_1()
+                                    .border_color(rgb(if is_sel { PRIMARY_COL } else { border_col() }))
+                                    .bg(rgb(if is_sel { primary_light() } else { bg_subtle() }))
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .justify_between()
+                                    .gap(px(8.0))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        if let Some(pos) = this
+                                            .grp_split_selected_ids
+                                            .iter()
+                                            .position(|x| *x == cid)
+                                        {
+                                            this.grp_split_selected_ids.remove(pos);
+                                        } else {
+                                            this.grp_split_selected_ids.push(cid);
+                                        }
+                                        cx.notify();
+                                    }))
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(2.0))
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .text_color(rgb(if is_sel { PRIMARY_COL } else { text_main() }))
+                                                    .child(format!(
+                                                        "{} [{}] {} — {}",
+                                                        if is_sel { "☑" } else { "☐" },
+                                                        ct.contract_code,
+                                                        ct.company_name,
+                                                        ct.title
+                                                    )),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(rgb(text_muted()))
+                                                    .child(format!(
+                                                        "Ngày khám: {}  •  Hồ sơ hiện có: {}/{}",
+                                                        if ct.exam_date.is_empty() { "-" } else { &ct.exam_date },
+                                                        ct.total_records,
+                                                        ct.expected_count
+                                                    )),
+                                            ),
+                                    )
+                                    .child(if ct.status == 0 {
+                                        badge("Đang mở", SUCCESS_BG, SUCCESS_COL)
+                                    } else {
+                                        badge("Đã đóng", WARN_BG, WARN_COL)
+                                    })
+                            })),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .justify_end()
+                            .gap(px(8.0))
+                            .pt(px(4.0))
+                            .child(
+                                Button::new("btn-split-cancel")
+                                    .label("Hủy")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.grp_show_split_dialog = false;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("btn-split-export")
+                                    .label(format!("📤 Chọn nơi lưu file .db ({} HĐ)", selected.len()))
+                                    .small()
+                                    .primary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        let ids = this.grp_split_selected_ids.clone();
+                                        if ids.is_empty() {
+                                            this.show_toast("Vui lòng chọn ít nhất 1 hợp đồng!", true, cx);
+                                            return;
+                                        }
+                                        let default_name = format!(
+                                            "KSK_NgoaiVien_{}.db",
+                                            chrono::Local::now().format("%Y%m%d_%H%M")
+                                        );
+                                        spawn_file_dialog(
+                                            cx,
+                                            move || {
+                                                rfd::FileDialog::new()
+                                                    .set_file_name(&default_name)
+                                                    .add_filter("SQLite DB", &["db"])
+                                                    .save_file()
+                                            },
+                                            move |this, path, cx| {
+                                                let path_s = path.to_string_lossy().to_string();
+                                                let state = this.state.clone();
+                                                let res = this.run_sync(async move {
+                                                    let pool = state.db.read().await;
+                                                    db::export_contracts_split_db(&pool, &ids, &path_s).await
+                                                });
+                                                match res {
+                                                    Ok(sum) => {
+                                                        this.grp_show_split_dialog = false;
+                                                        this.show_toast(
+                                                            &format!(
+                                                                "Đã tách {} HĐ ({} công ty, {} hồ sơ) [{}] ra {}",
+                                                                sum.contract_count,
+                                                                sum.company_count,
+                                                                sum.record_count,
+                                                                sum.contract_codes.join(", "),
+                                                                sum.dest_path
+                                                            ),
+                                                            false,
+                                                            cx,
+                                                        );
+                                                        cx.notify();
+                                                    }
+                                                    Err(e) => this.show_toast(&e, true, cx),
+                                                }
+                                            },
+                                        );
+                                    })),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_merge_db_dialog(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let Some(prev) = self.grp_merge_preview.clone() else {
+            return div().into_any_element();
+        };
+        let overwrite_all = self.grp_merge_overwrite_all;
+        let source_path = prev.source_path.clone();
+
+        div()
+            .id("grp-merge-db-backdrop")
+            .absolute()
+            .inset_0()
+            .bg(gpui::hsla(0., 0., 0., 0.45))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                card_box()
+                    .w(px(640.0))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_base()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(rgb(text_main()))
+                                    .child("📥 Xem trước & Gộp dữ liệu khám ngoài"),
+                            )
+                            .child(badge(
+                                format!(
+                                    "{} HĐ · {} cập nhật · {} thêm mới",
+                                    prev.contracts.len(),
+                                    prev.total_updated,
+                                    prev.total_inserted
+                                ),
+                                primary_light(),
+                                PRIMARY_COL,
+                            )),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(text_muted()))
+                            .child(format!(
+                                "File: {}  •  Xuất lúc: {}  •  Tổng hồ sơ: {}",
+                                prev.source_path,
+                                if prev.exported_at.is_empty() { "-" } else { &prev.exported_at },
+                                prev.total_records
+                            )),
+                    )
+                    .when(!prev.same_master_key, |el| {
+                        el.child(
+                            div()
+                                .p(px(8.0))
+                                .rounded(px(6.0))
+                                .bg(rgb(DANGER_BG))
+                                .text_xs()
+                                .text_color(rgb(DANGER_COL))
+                                .child("⚠ Cảnh báo: File DB này có Recovery/Master Key khác với DB hiện tại! Hãy đảm bảo file được tách từ cùng hệ thống."),
+                        )
+                    })
+                    .child(
+                        div()
+                            .id("grp-merge-contract-list")
+                            .max_h(px(220.0))
+                            .overflow_y_scroll()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.0))
+                            .children(prev.contracts.into_iter().map(|item| {
+                                div()
+                                    .p(px(10.0))
+                                    .rounded(px(6.0))
+                                    .border_1()
+                                    .border_color(rgb(border_col()))
+                                    .bg(rgb(bg_subtle()))
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(2.0))
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .text_color(rgb(text_main()))
+                                                    .child(format!(
+                                                        "[{}] {} ({}) — {}",
+                                                        item.contract_code,
+                                                        item.company_name,
+                                                        item.company_code,
+                                                        item.title
+                                                    )),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(rgb(text_muted()))
+                                                    .child(format!(
+                                                        "Tổng: {}  •  Cập nhật: {}  •  Thêm mới: {}",
+                                                        item.total_records,
+                                                        item.updated_count,
+                                                        item.inserted_count
+                                                    )),
+                                            ),
+                                    )
+                            })),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.0))
+                            .child(field_label("Chế độ xử lý khi trùng Mã tiếp nhận:", false))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .gap(px(8.0))
+                                    .child(
+                                        Button::new("btn-merge-mode-smart")
+                                            .label("Gộp thông minh (Giữ CLS ở BV + Kết quả khám ngoài)")
+                                            .small()
+                                            .when(!overwrite_all, |b| b.primary())
+                                            .when(overwrite_all, |b| b.secondary())
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.grp_merge_overwrite_all = false;
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("btn-merge-mode-overwrite")
+                                            .label("Ghi đè toàn bộ từ file khám ngoài")
+                                            .small()
+                                            .when(overwrite_all, |b| b.primary())
+                                            .when(!overwrite_all, |b| b.secondary())
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.grp_merge_overwrite_all = true;
+                                                cx.notify();
+                                            })),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .justify_end()
+                            .gap(px(8.0))
+                            .pt(px(4.0))
+                            .child(
+                                Button::new("btn-merge-cancel")
+                                    .label("Hủy")
+                                    .small()
+                                    .secondary()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.grp_merge_preview = None;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("btn-merge-confirm")
+                                    .label("📥 Xác nhận Gộp vào CSDL")
+                                    .small()
+                                    .primary()
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        let state = this.state.clone();
+                                        let src_p = source_path.clone();
+                                        let mk = this.master_key;
+                                        let ow = this.grp_merge_overwrite_all;
+                                        let res = this.run_sync(async move {
+                                            let pool = state.db.read().await;
+                                            db::merge_contract_db(&pool, &src_p, mk.as_ref(), ow).await
+                                        });
+                                        match res {
+                                            Ok((upd, ins)) => {
+                                                this.grp_merge_preview = None;
+                                                this.refresh_group_data(cx);
+                                                this.refresh_records(window, cx);
+                                                this.show_toast(
+                                                    &format!(
+                                                        "Đã gộp thành công: {} hồ sơ cập nhật, {} hồ sơ thêm mới!",
+                                                        upd, ins
+                                                    ),
+                                                    false,
+                                                    cx,
+                                                );
+                                            }
+                                            Err(e) => this.show_toast(&e, true, cx),
+                                        }
                                     })),
                             ),
                     ),

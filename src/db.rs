@@ -1365,3 +1365,714 @@ pub async fn batch_insert_group_records(
     tx.commit().await.map_err(|e| e.to_string())?;
     Ok((inserted, skipped))
 }
+
+#[derive(Debug, Clone)]
+pub struct SplitExportSummary {
+    pub dest_path: String,
+    pub contract_count: usize,
+    pub company_count: usize,
+    pub record_count: usize,
+    pub contract_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MergeContractItem {
+    pub company_code: String,
+    pub company_name: String,
+    pub contract_code: String,
+    pub title: String,
+    pub total_records: usize,
+    pub updated_count: usize,
+    pub inserted_count: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct MergePreviewSummary {
+    pub source_path: String,
+    pub exported_at: String,
+    pub contracts: Vec<MergeContractItem>,
+    pub total_records: usize,
+    pub total_updated: usize,
+    pub total_inserted: usize,
+    pub same_master_key: bool,
+}
+
+async fn open_readonly_sqlite(path: &str) -> Result<SqlitePool, String> {
+    if !std::path::Path::new(path).exists() {
+        return Err(format!("Không tìm thấy file CSDL: {}", path));
+    }
+    let conn_str = format!("sqlite:{}", path);
+    let options = SqliteConnectOptions::from_str(&conn_str)
+        .map_err(|e| e.to_string())?
+        .create_if_missing(false)
+        .read_only(true)
+        .busy_timeout(Duration::from_secs(10));
+    SqlitePoolOptions::new()
+        .max_connections(2)
+        .connect_with(options)
+        .await
+        .map_err(|e| format!("Không thể mở file SQLite {}: {}", path, e))
+}
+
+pub async fn export_contracts_split_db(
+    source_pool: &SqlitePool,
+    contract_ids: &[i64],
+    dest_path: &str,
+) -> Result<SplitExportSummary, String> {
+    if contract_ids.is_empty() {
+        return Err("Vui lòng chọn ít nhất 1 hợp đồng để tách DB!".into());
+    }
+    let dest_p = std::path::Path::new(dest_path);
+    if dest_p.exists() {
+        fs::remove_file(dest_p)
+            .map_err(|e| format!("Không thể ghi đè file đích ({}): {}", dest_path, e))?;
+    }
+
+    let dest_pool = init_db(dest_path)
+        .await
+        .map_err(|e| format!("Lỗi khởi tạo DB tách: {}", e))?;
+
+    let mut tx = dest_pool.begin().await.map_err(|e| e.to_string())?;
+
+    // Xóa dữ liệu seed mặc định để chép nguyên vẹn users, app_settings, catalogs từ DB chính
+    sqlx::query("DELETE FROM users").execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM app_settings").execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM catalogs").execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM catalog_meta").execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+    let users: Vec<(String, String, String, String, i64, String, String)> = sqlx::query_as(
+        "SELECT username, password_hash, full_name, role, is_locked, wrapped_mk, created_at FROM users",
+    )
+    .fetch_all(source_pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    for (u, ph, fnm, role, locked, wmk, cat) in users {
+        sqlx::query(
+            "INSERT INTO users (username, password_hash, full_name, role, is_locked, wrapped_mk, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(u)
+        .bind(ph)
+        .bind(fnm)
+        .bind(role)
+        .bind(locked)
+        .bind(wmk)
+        .bind(cat)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    let settings: Vec<(String, String)> = sqlx::query_as("SELECT key, value FROM app_settings")
+        .fetch_all(source_pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    for (k, v) in settings {
+        sqlx::query("INSERT INTO app_settings (key, value) VALUES (?, ?)")
+            .bind(k)
+            .bind(v)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    let catalogs: Vec<(String, String, String, String, i64, i64)> = sqlx::query_as(
+        "SELECT cat_type, code, name, parent_code, is_active, is_default FROM catalogs",
+    )
+    .fetch_all(source_pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    for (ct, code, name, parent, act, def) in catalogs {
+        sqlx::query(
+            "INSERT INTO catalogs (cat_type, code, name, parent_code, is_active, is_default) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(ct)
+        .bind(code)
+        .bind(name)
+        .bind(parent)
+        .bind(act)
+        .bind(def)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    let metas: Vec<(String, String)> = sqlx::query_as("SELECT cat_type, updated_at FROM catalog_meta")
+        .fetch_all(source_pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    for (ct, ua) in metas {
+        sqlx::query("INSERT INTO catalog_meta (cat_type, updated_at) VALUES (?, ?)")
+            .bind(ct)
+            .bind(ua)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    let mut company_map: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+    let mut contract_codes: Vec<String> = Vec::new();
+    let mut record_count = 0usize;
+
+    for &src_cid in contract_ids {
+        let contract_row: Option<(i64, String, String, String, i64, i64, String, String, String, String)> = sqlx::query_as(
+            "SELECT company_id, contract_code, title, exam_date, expected_count, status, scan_file_path, default_templates, note, created_at FROM exam_contracts WHERE id = ?",
+        )
+        .bind(src_cid)
+        .fetch_optional(source_pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let Some((src_comp_id, c_code, title, ex_date, exp_cnt, status, scan, def_tpl, note, created_at)) = contract_row else {
+            continue;
+        };
+
+        let dest_comp_id = if let Some(&id) = company_map.get(&src_comp_id) {
+            id
+        } else {
+            let comp: (String, String, String, String, String, String, String, i64, String) = sqlx::query_as(
+                "SELECT code, name, tax_code, address, contact_person, contact_phone, note, is_active, created_at FROM companies WHERE id = ?",
+            )
+            .bind(src_comp_id)
+            .fetch_one(source_pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            let res = sqlx::query(
+                "INSERT INTO companies (code, name, tax_code, address, contact_person, contact_phone, note, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(comp.0)
+            .bind(comp.1)
+            .bind(comp.2)
+            .bind(comp.3)
+            .bind(comp.4)
+            .bind(comp.5)
+            .bind(comp.6)
+            .bind(comp.7)
+            .bind(comp.8)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+            let nid = res.last_insert_rowid();
+            company_map.insert(src_comp_id, nid);
+            nid
+        };
+
+        let c_res = sqlx::query(
+            "INSERT INTO exam_contracts (company_id, contract_code, title, exam_date, expected_count, status, scan_file_path, default_templates, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(dest_comp_id)
+        .bind(&c_code)
+        .bind(&title)
+        .bind(&ex_date)
+        .bind(exp_cnt)
+        .bind(status)
+        .bind(&scan)
+        .bind(&def_tpl)
+        .bind(&note)
+        .bind(&created_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+        let dest_cid = c_res.last_insert_rowid();
+        contract_codes.push(c_code);
+
+        let recs: Vec<(String, String, String, String, String, String, String, i64, String, String, String, String, String)> = sqlx::query_as(
+            "SELECT ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, exam_templates, payload_json, updated_by, created_at FROM ksk_records WHERE contract_id = ?",
+        )
+        .bind(src_cid)
+        .fetch_all(source_pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        for (ma_tn, ma_yt, ht, gt, ns, cccd, nv, st, mode, tpls, payload, uby, cat) in recs {
+            sqlx::query(
+                "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, exam_templates, payload_json, updated_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(ma_tn)
+            .bind(ma_yt)
+            .bind(ht)
+            .bind(gt)
+            .bind(ns)
+            .bind(cccd)
+            .bind(nv)
+            .bind(st)
+            .bind(mode)
+            .bind(dest_cid)
+            .bind(tpls)
+            .bind(payload)
+            .bind(uby)
+            .bind(cat)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+            record_count += 1;
+        }
+    }
+
+    let now_str = chrono::Local::now().format("%d/%m/%Y %H:%M").to_string();
+    sqlx::query(
+        "INSERT INTO app_settings (key, value) VALUES ('split_contract_codes', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(contract_codes.join(","))
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    sqlx::query(
+        "INSERT INTO app_settings (key, value) VALUES ('split_exported_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(&now_str)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let summary = SplitExportSummary {
+        dest_path: dest_path.to_string(),
+        contract_count: contract_codes.len(),
+        company_count: company_map.len(),
+        record_count,
+        contract_codes,
+    };
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+    dest_pool.close().await;
+    Ok(summary)
+}
+
+pub async fn preview_merge_contract_db(
+    target_pool: &SqlitePool,
+    source_path: &str,
+) -> Result<MergePreviewSummary, String> {
+    let src_pool = open_readonly_sqlite(source_path).await?;
+
+    let src_mk: Option<(String,)> =
+        sqlx::query_as("SELECT value FROM app_settings WHERE key = 'recovery_wrapped_mk'")
+            .fetch_optional(&src_pool)
+            .await
+            .ok()
+            .flatten();
+    let tgt_mk: Option<(String,)> =
+        sqlx::query_as("SELECT value FROM app_settings WHERE key = 'recovery_wrapped_mk'")
+            .fetch_optional(target_pool)
+            .await
+            .ok()
+            .flatten();
+    let same_master_key = match (src_mk, tgt_mk) {
+        (Some((a,)), Some((b,))) => a == b,
+        _ => true,
+    };
+
+    let exported_at: String =
+        sqlx::query_as::<_, (String,)>("SELECT value FROM app_settings WHERE key = 'split_exported_at'")
+            .fetch_optional(&src_pool)
+            .await
+            .ok()
+            .flatten()
+            .map(|(v,)| v)
+            .unwrap_or_default();
+
+    let src_contracts: Vec<(i64, String, String, String, String)> = sqlx::query_as(
+        "SELECT c.id, co.code, co.name, c.contract_code, c.title \
+         FROM exam_contracts c JOIN companies co ON co.id = c.company_id \
+         ORDER BY c.id ASC",
+    )
+    .fetch_all(&src_pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut items = Vec::new();
+    let mut total_records = 0usize;
+    let mut total_updated = 0usize;
+    let mut total_inserted = 0usize;
+
+    for (src_cid, co_code, co_name, c_code, title) in src_contracts {
+        let ma_tns: Vec<(String,)> =
+            sqlx::query_as("SELECT ma_tiep_nhan FROM ksk_records WHERE contract_id = ?")
+                .bind(src_cid)
+                .fetch_all(&src_pool)
+                .await
+                .map_err(|e| e.to_string())?;
+        let mut updated_count = 0usize;
+        let mut inserted_count = 0usize;
+        for (ma_tn,) in &ma_tns {
+            let exists: Option<(i64,)> =
+                sqlx::query_as("SELECT id FROM ksk_records WHERE ma_tiep_nhan = ?")
+                    .bind(ma_tn)
+                    .fetch_optional(target_pool)
+                    .await
+                    .ok()
+                    .flatten();
+            if exists.is_some() {
+                updated_count += 1;
+            } else {
+                inserted_count += 1;
+            }
+        }
+        total_records += ma_tns.len();
+        total_updated += updated_count;
+        total_inserted += inserted_count;
+        items.push(MergeContractItem {
+            company_code: co_code,
+            company_name: co_name,
+            contract_code: c_code,
+            title,
+            total_records: ma_tns.len(),
+            updated_count,
+            inserted_count,
+        });
+    }
+
+    src_pool.close().await;
+    Ok(MergePreviewSummary {
+        source_path: source_path.to_string(),
+        exported_at,
+        contracts: items,
+        total_records,
+        total_updated,
+        total_inserted,
+        same_master_key,
+    })
+}
+
+pub async fn merge_contract_db(
+    target_pool: &SqlitePool,
+    source_path: &str,
+    mk: Option<&[u8; 32]>,
+    overwrite_all: bool,
+) -> Result<(usize, usize), String> {
+    let src_pool = open_readonly_sqlite(source_path).await?;
+    let src_contracts: Vec<(i64, i64, String, String, String, i64, i64, String, String, String, String)> = sqlx::query_as(
+        "SELECT id, company_id, contract_code, title, exam_date, expected_count, status, scan_file_path, default_templates, note, created_at FROM exam_contracts ORDER BY id ASC",
+    )
+    .fetch_all(&src_pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if src_contracts.is_empty() {
+        src_pool.close().await;
+        return Err("File DB nguồn không chứa hợp đồng nào để gộp!".into());
+    }
+
+    let mut tx = target_pool.begin().await.map_err(|e| e.to_string())?;
+    let mut updated = 0usize;
+    let mut inserted = 0usize;
+
+    for (src_cid, src_comp_id, c_code, title, ex_date, exp_cnt, c_status, scan, def_tpl, c_note, c_cat) in src_contracts {
+        let comp: (String, String, String, String, String, String, String, i64, String) = sqlx::query_as(
+            "SELECT code, name, tax_code, address, contact_person, contact_phone, note, is_active, created_at FROM companies WHERE id = ?",
+        )
+        .bind(src_comp_id)
+        .fetch_one(&src_pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let target_comp_id: i64 = if let Some((eid,)) =
+            sqlx::query_as::<_, (i64,)>("SELECT id FROM companies WHERE code = ?")
+                .bind(&comp.0)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| e.to_string())?
+        {
+            eid
+        } else {
+            let r = sqlx::query(
+                "INSERT INTO companies (code, name, tax_code, address, contact_person, contact_phone, note, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(comp.0)
+            .bind(comp.1)
+            .bind(comp.2)
+            .bind(comp.3)
+            .bind(comp.4)
+            .bind(comp.5)
+            .bind(comp.6)
+            .bind(comp.7)
+            .bind(comp.8)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+            r.last_insert_rowid()
+        };
+
+        let target_cid: i64 = if let Some((ecid,)) =
+            sqlx::query_as::<_, (i64,)>("SELECT id FROM exam_contracts WHERE contract_code = ?")
+                .bind(&c_code)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| e.to_string())?
+        {
+            ecid
+        } else {
+            let r = sqlx::query(
+                "INSERT INTO exam_contracts (company_id, contract_code, title, exam_date, expected_count, status, scan_file_path, default_templates, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(target_comp_id)
+            .bind(&c_code)
+            .bind(&title)
+            .bind(&ex_date)
+            .bind(exp_cnt)
+            .bind(c_status)
+            .bind(&scan)
+            .bind(&def_tpl)
+            .bind(&c_note)
+            .bind(&c_cat)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+            r.last_insert_rowid()
+        };
+
+        let recs: Vec<(String, String, String, String, String, String, String, i64, String, String, String, String, String)> = sqlx::query_as(
+            "SELECT ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, exam_templates, payload_json, updated_by, created_at FROM ksk_records WHERE contract_id = ?",
+        )
+        .bind(src_cid)
+        .fetch_all(&src_pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        for (ma_tn, ma_yt, s_ht, s_gt, s_ns, s_cccd, s_nv, s_st, s_mode, s_tpls, s_payload, s_uby, s_cat) in recs {
+            let existing: Option<(i64, i64, String, String, String)> = sqlx::query_as(
+                "SELECT id, status, exam_templates, payload_json, ma_y_te FROM ksk_records WHERE ma_tiep_nhan = ?",
+            )
+            .bind(&ma_tn)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            if let Some((t_id, t_st, t_tpls, t_payload_enc, t_mayt)) = existing {
+                if overwrite_all {
+                    sqlx::query(
+                        "UPDATE ksk_records SET ma_y_te = ?, ho_ten = ?, gioi_tinh = ?, ngay_sinh = ?, so_cccd = ?, ngay_vao = ?, status = ?, exam_mode = ?, contract_id = ?, exam_templates = ?, payload_json = ?, updated_by = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+                    )
+                    .bind(&ma_yt)
+                    .bind(&s_ht)
+                    .bind(&s_gt)
+                    .bind(&s_ns)
+                    .bind(&s_cccd)
+                    .bind(&s_nv)
+                    .bind(s_st)
+                    .bind(&s_mode)
+                    .bind(target_cid)
+                    .bind(&s_tpls)
+                    .bind(&s_payload)
+                    .bind(&s_uby)
+                    .bind(t_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                } else {
+                    // Gộp thông minh: giữ dữ liệu máy chủ, bổ sung/cập nhật từ file khám ngoài và hợp nhất _EXAMINED_SECTIONS
+                    let t_plain = crate::crypto::decrypt_field(mk, &t_payload_enc);
+                    let s_plain = crate::crypto::decrypt_field(mk, &s_payload);
+                    let mut merged_map: Map<String, Value> =
+                        serde_json::from_str(&t_plain).unwrap_or_default();
+                    let src_map: Map<String, Value> =
+                        serde_json::from_str(&s_plain).unwrap_or_default();
+
+                    for (k, v) in src_map {
+                        if k == "_EXAMINED_SECTIONS" {
+                            let mut set: Vec<String> = merged_map
+                                .get("_EXAMINED_SECTIONS")
+                                .and_then(|x| x.as_str())
+                                .unwrap_or("")
+                                .split(',')
+                                .map(|x| x.trim().to_string())
+                                .filter(|x| !x.is_empty())
+                                .collect();
+                            if let Some(sv) = v.as_str() {
+                                for part in sv.split(',').map(|x| x.trim()).filter(|x| !x.is_empty()) {
+                                    if !set.iter().any(|x| x == part) {
+                                        set.push(part.to_string());
+                                    }
+                                }
+                            }
+                            merged_map.insert(k, Value::String(set.join(",")));
+                        } else if let Some(sv) = v.as_str() {
+                            if !sv.trim().is_empty() {
+                                merged_map.insert(k, Value::String(sv.to_string()));
+                            }
+                        } else if !v.is_null() {
+                            merged_map.insert(k, v);
+                        }
+                    }
+
+                    let mut tpl_list = crate::templates::parse_template_list(&t_tpls);
+                    for tp in crate::templates::parse_template_list(&s_tpls) {
+                        if !tpl_list.contains(&tp) {
+                            tpl_list.push(tp);
+                        }
+                    }
+                    let merged_tpls = crate::templates::format_template_list(&tpl_list);
+                    let merged_json = serde_json::to_string(&merged_map).map_err(|e| e.to_string())?;
+                    let merged_payload_enc = match mk {
+                        Some(key) => crate::crypto::encrypt_field(key, &merged_json),
+                        None => merged_json,
+                    };
+                    let final_ma_yt = if ma_yt.trim().is_empty() { t_mayt } else { ma_yt };
+                    let final_st = t_st.max(s_st);
+
+                    sqlx::query(
+                        "UPDATE ksk_records SET ma_y_te = ?, ho_ten = ?, gioi_tinh = ?, ngay_sinh = ?, so_cccd = ?, ngay_vao = ?, status = ?, exam_templates = ?, payload_json = ?, updated_by = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+                    )
+                    .bind(final_ma_yt)
+                    .bind(&s_ht)
+                    .bind(&s_gt)
+                    .bind(&s_ns)
+                    .bind(&s_cccd)
+                    .bind(&s_nv)
+                    .bind(final_st)
+                    .bind(&merged_tpls)
+                    .bind(&merged_payload_enc)
+                    .bind(&s_uby)
+                    .bind(t_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                }
+                updated += 1;
+            } else {
+                sqlx::query(
+                    "INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, exam_templates, payload_json, updated_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                )
+                .bind(&ma_tn)
+                .bind(&ma_yt)
+                .bind(&s_ht)
+                .bind(&s_gt)
+                .bind(&s_ns)
+                .bind(&s_cccd)
+                .bind(&s_nv)
+                .bind(s_st)
+                .bind(&s_mode)
+                .bind(target_cid)
+                .bind(&s_tpls)
+                .bind(&s_payload)
+                .bind(&s_uby)
+                .bind(&s_cat)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| e.to_string())?;
+                inserted += 1;
+            }
+        }
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+    src_pool.close().await;
+    Ok((updated, inserted))
+}
+
+#[cfg(test)]
+mod split_merge_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_split_multi_contracts_and_smart_merge() {
+        let tmp = std::env::temp_dir().join(format!("ksk_split_merge_{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&tmp).unwrap();
+        let main_db = tmp.join("main.db");
+        let split_db = tmp.join("outreach.db");
+        let main_str = main_db.to_string_lossy().to_string();
+        let split_str = split_db.to_string_lossy().to_string();
+
+        let main_pool = init_db(&main_str).await.unwrap();
+        let (mk, _rk) = initialize_master_key_for_admin(&main_pool, "123456").await.unwrap();
+
+        let comp_id = sqlx::query("INSERT INTO companies (code, name) VALUES ('CTY01', 'Cong ty A')")
+            .execute(&main_pool)
+            .await
+            .unwrap()
+            .last_insert_rowid();
+        let c1_id = sqlx::query("INSERT INTO exam_contracts (company_id, contract_code, title) VALUES (?, 'HD01', 'Dot 1')")
+            .bind(comp_id)
+            .execute(&main_pool)
+            .await
+            .unwrap()
+            .last_insert_rowid();
+        let c2_id = sqlx::query("INSERT INTO exam_contracts (company_id, contract_code, title) VALUES (?, 'HD02', 'Dot 2')")
+            .bind(comp_id)
+            .execute(&main_pool)
+            .await
+            .unwrap()
+            .last_insert_rowid();
+
+        let (ht1, ns1, cccd1, p1) = crate::crypto::encrypt_record_fields(
+            Some(&mk),
+            "NGUYEN VAN A",
+            "01/01/1990",
+            "052090000001",
+            r#"{"HO_TEN":"NGUYEN VAN A","_EXAMINED_SECTIONS":"reception"}"#,
+        );
+        sqlx::query("INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, exam_templates, payload_json) VALUES ('TN01', 'BN01', ?, '1', ?, ?, '16/11/2026', 0, 'doan', ?, 'TREN_18', ?)")
+            .bind(&ht1).bind(&ns1).bind(&cccd1).bind(c1_id).bind(&p1)
+            .execute(&main_pool).await.unwrap();
+
+        let (ht2, ns2, cccd2, p2) = crate::crypto::encrypt_record_fields(
+            Some(&mk),
+            "TRAN THI B",
+            "02/02/1992",
+            "052092000002",
+            r#"{"HO_TEN":"TRAN THI B","_EXAMINED_SECTIONS":"reception"}"#,
+        );
+        sqlx::query("INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, exam_templates, payload_json) VALUES ('TN02', 'BN02', ?, '2', ?, ?, '16/11/2026', 0, 'doan', ?, 'TREN_18', ?)")
+            .bind(&ht2).bind(&ns2).bind(&cccd2).bind(c2_id).bind(&p2)
+            .execute(&main_pool).await.unwrap();
+
+        // 1. Tách cả 2 hợp đồng ra outreach.db
+        let summary = export_contracts_split_db(&main_pool, &[c1_id, c2_id], &split_str).await.unwrap();
+        assert_eq!(summary.contract_count, 2);
+        assert_eq!(summary.record_count, 2);
+
+        // 2. Trên main.db: nhập kết quả CLS cho TN01
+        let main_cls_payload = crate::crypto::encrypt_field(
+            &mk,
+            r#"{"HO_TEN":"NGUYEN VAN A","CLS_HUYET_HOC":"Bình thường","_EXAMINED_SECTIONS":"reception,paraclinical"}"#,
+        );
+        sqlx::query("UPDATE ksk_records SET payload_json = ? WHERE ma_tiep_nhan = 'TN01'")
+            .bind(&main_cls_payload).execute(&main_pool).await.unwrap();
+
+        // 3. Trên outreach.db: khám lâm sàng cho TN01 + thêm người mới TN03 vào HD01
+        let split_pool = init_db(&split_str).await.unwrap();
+        let split_clin_payload = crate::crypto::encrypt_field(
+            &mk,
+            r#"{"HO_TEN":"NGUYEN VAN A","NOI_KHOA_TUAN_HOAN":"Bình thường","_EXAMINED_SECTIONS":"reception,clin_noi"}"#,
+        );
+        sqlx::query("UPDATE ksk_records SET payload_json = ?, status = 1 WHERE ma_tiep_nhan = 'TN01'")
+            .bind(&split_clin_payload).execute(&split_pool).await.unwrap();
+
+        let (ht3, ns3, cccd3, p3) = crate::crypto::encrypt_record_fields(
+            Some(&mk),
+            "LE VAN C",
+            "03/03/1995",
+            "052095000003",
+            r#"{"HO_TEN":"LE VAN C","_EXAMINED_SECTIONS":"reception"}"#,
+        );
+        let split_c1_id: (i64,) = sqlx::query_as("SELECT id FROM exam_contracts WHERE contract_code = 'HD01'")
+            .fetch_one(&split_pool).await.unwrap();
+        sqlx::query("INSERT INTO ksk_records (ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh, so_cccd, ngay_vao, status, exam_mode, contract_id, exam_templates, payload_json) VALUES ('TN03', 'BN03', ?, '1', ?, ?, '16/11/2026', 1, 'doan', ?, 'TREN_18', ?)")
+            .bind(&ht3).bind(&ns3).bind(&cccd3).bind(split_c1_id.0).bind(&p3)
+            .execute(&split_pool).await.unwrap();
+        split_pool.close().await;
+
+        // 4. Preview & Merge về main.db
+        let preview = preview_merge_contract_db(&main_pool, &split_str).await.unwrap();
+        assert_eq!(preview.contracts.len(), 2);
+        assert_eq!(preview.total_updated, 2);
+        assert_eq!(preview.total_inserted, 1);
+        assert!(preview.same_master_key);
+
+        let (upd, ins) = merge_contract_db(&main_pool, &split_str, Some(&mk), false).await.unwrap();
+        assert_eq!(upd, 2);
+        assert_eq!(ins, 1);
+
+        // 5. Xác minh TN01 giữ cả CLS của BV và Lâm sàng của Laptop
+        let (st1, enc_p1): (i64, String) = sqlx::query_as("SELECT status, payload_json FROM ksk_records WHERE ma_tiep_nhan = 'TN01'")
+            .fetch_one(&main_pool).await.unwrap();
+        assert_eq!(st1, 1);
+        let dec1 = crate::crypto::decrypt_field(Some(&mk), &enc_p1);
+        let m1: Map<String, Value> = serde_json::from_str(&dec1).unwrap();
+        assert_eq!(m1.get("CLS_HUYET_HOC").and_then(|v| v.as_str()), Some("Bình thường"));
+        assert_eq!(m1.get("NOI_KHOA_TUAN_HOAN").and_then(|v| v.as_str()), Some("Bình thường"));
+        let ex1 = m1.get("_EXAMINED_SECTIONS").and_then(|v| v.as_str()).unwrap_or("");
+        assert!(ex1.contains("paraclinical") && ex1.contains("clin_noi"));
+
+        main_pool.close().await;
+        let _ = fs::remove_dir_all(&tmp);
+    }
+}
