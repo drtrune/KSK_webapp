@@ -331,7 +331,13 @@ impl<'a> PdfPageCursor<'a> {
         right_sub: &str,
         right_name: &str,
     ) {
-        let need_h = if right_name.trim().is_empty() { 28.0 } else { 34.0 };
+        let need_h = if !right_name.trim().is_empty() {
+            34.0
+        } else if cam_doan_text.is_some() {
+            22.0
+        } else {
+            28.0
+        };
         self.ensure_space(need_h);
         if self.y < TOP_Y - 1.0 {
             self.y -= 4.0;

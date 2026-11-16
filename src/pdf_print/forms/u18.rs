@@ -193,7 +193,7 @@ fn render_history(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig) {
     // c) & d)
     cur.ensure_space(32.0);
     if cur.y < super::super::primitives::TOP_Y - 1.0 {
-        cur.y -= 6.5;
+        cur.y -= 4.5;
     }
     draw_text(
         &cur.layer,
