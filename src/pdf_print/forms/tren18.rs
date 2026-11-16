@@ -397,25 +397,22 @@ fn render_paraclinical_section(fv: &FormValues, cur: &mut PdfPageCursor) {
     draw_exam_table_header(cur, col1_w, col2_w, "Nội dung khám", "Họ tên, chữ ký của Bác sỹ");
     let bs_cls = fv.text(&["BS_CLS"]);
 
-    draw_exam_custom_row(cur, col1_w, col2_w, 26.0, bs_cls, |c, lx, rx| {
+    draw_exam_custom_row(cur, col1_w, col2_w, 31.0, bs_cls, |c, lx, rx| {
         draw_text(&c.layer, &c.fonts.bold, FONT_BODY, lx, c.y, "a) Xét nghiệm máu:");
         c.y -= LINE_H;
         draw_inline_slot(c, lx, rx, c.y, "- Huyết học (tổng phân tích tế bào máu):", fv.text(&["CLS_HUYET_HOC", "XN_HUYET_HOC"]), false);
         c.y -= LINE_H;
         draw_inline_two(c, lx, rx, "- Đường máu:", fv.text(&["CLS_DUONG_MAU", "XN_DUONG_MAU"]), "Urê:", fv.text(&["CLS_URE", "XN_URE"]));
-        let got_gpt = format!(
-            "{} {}",
-            fv.text(&["CLS_ASAT_GOT", "XN_GOT"]),
-            fv.text(&["CLS_ALAT_GPT", "XN_GPT"])
-        );
+        draw_inline_slot(c, lx, rx, c.y, "  Creatinin:", fv.text(&["CLS_CREATININ", "XN_CREATININ"]), false);
+        c.y -= LINE_H;
         draw_inline_two(
             c,
             lx,
             rx,
-            "  Creatinin:",
-            fv.text(&["CLS_CREATININ", "XN_CREATININ"]),
-            "ASAT(GOT)/ALAT(GPT):",
-            got_gpt.trim(),
+            "  ASAT (GOT):",
+            fv.text(&["CLS_ASAT_GOT", "XN_GOT"]),
+            "ALAT (GPT):",
+            fv.text(&["CLS_ALAT_GPT", "XN_GPT"]),
         );
     });
 
