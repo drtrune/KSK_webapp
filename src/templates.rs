@@ -851,6 +851,31 @@ pub fn get_template_groups(template_code: &str, tab: &str) -> &'static [Template
     }
 }
 
+/// Tìm định nghĩa trường theo mã mẫu và khóa trường (không có prefix).
+pub fn find_field(template_code: &str, raw_key: &str) -> Option<&'static TemplateField> {
+    for tab in ["history", "physical", "clinical", "conclusion"] {
+        for grp in get_template_groups(template_code, tab) {
+            for field in grp.fields {
+                if field.key == raw_key {
+                    return Some(field);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Trả về danh sách nhãn các lựa chọn của một trường Select trong mẫu.
+pub fn field_options(template_code: &str, raw_key: &str) -> Vec<&'static str> {
+    match find_field(template_code, raw_key) {
+        Some(f) => match f.kind {
+            TemplateFieldKind::Select(opts) => opts.iter().map(|(val, _)| *val).collect(),
+            _ => Vec::new(),
+        },
+        None => Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
