@@ -1,6 +1,6 @@
 use super::cursor::PdfPageCursor;
 use super::primitives::{
-    approx_text_w_mm, draw_checkbox, draw_dashed_line, draw_dotted_line, draw_line,
+    approx_text_w_mm, draw_checkbox, draw_dotted_line, draw_line,
     draw_rect_stroke, draw_text, draw_text_centered, wrap_lines, BOTTOM_Y, CONTENT_W, FONT_BODY,
     FONT_SMALL, LINE_H, MARGIN_L, MARGIN_R, PAGE_W,
 };
@@ -467,17 +467,8 @@ pub fn draw_exam_spec_row(
     }
 
     let y_top = cur.y;
-    // Khung ô trái bao trọn kết quả + phân loại, ngăn giữa bằng nét gạch đứt
+    // Khung ô trái bao trọn kết quả + phân loại (không gạch đứt ngăn giữa)
     draw_rect_stroke(&cur.layer, MARGIN_L, y_top - total_h, col1_w, total_h, 0.45);
-    draw_dashed_line(
-        &cur.layer,
-        MARGIN_L + 1.0,
-        y_top - h_top,
-        MARGIN_L + col1_w - 1.0,
-        1.6,
-        1.2,
-        0.35,
-    );
     // Khung ô phải (chữ ký bác sĩ)
     draw_rect_stroke(&cur.layer, MARGIN_L + col1_w, y_top - total_h, col2_w, total_h, 0.45);
 
@@ -491,12 +482,13 @@ pub fn draw_exam_spec_row(
         ry -= LINE_H;
     }
 
-    // Hàng phân loại / kết luận
+    // Hàng phân loại / kết luận (gạch ngắn)
     let py = y_top - h_top - 4.6;
     draw_text(&cur.layer, &cur.fonts.regular, FONT_BODY, MARGIN_L + 2.0, py, pl_label);
     let pl_w = approx_text_w_mm(pl_label, FONT_BODY);
     let px = MARGIN_L + 2.0 + pl_w + 2.0;
-    draw_dotted_line(&cur.layer, px, py - 0.8, MARGIN_L + col1_w - 2.0);
+    let pl_end = (px + 28.0).min(MARGIN_L + col1_w - 2.0);
+    draw_dotted_line(&cur.layer, px, py - 0.8, pl_end);
     if !pl_val.trim().is_empty() {
         draw_text(&cur.layer, &cur.fonts.bold, FONT_BODY, px + 0.8, py, pl_val.trim());
     }

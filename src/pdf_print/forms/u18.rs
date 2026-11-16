@@ -28,8 +28,8 @@ pub fn render(
 
     let so_phieu = fv.admin("SO_PHIEU");
     let so_line = format!(
-        "Số: {}/GKSK-TE18-{}/{}",
-        if so_phieu.is_empty() { "......" } else { so_phieu },
+        "Số: {}/GKSK-{}/{}",
+        if so_phieu.is_empty() { "......................" } else { so_phieu },
         cfg.ma_cskcb,
         fv.exam_year_2d()
     );
@@ -43,6 +43,8 @@ pub fn render(
 
     render_admin(&fv, &mut cur);
     render_history(&fv, &mut cur, cfg);
+
+    cur.next_page();
     render_physical_and_clinical(&fv, &mut cur);
     render_paraclinical_and_conclusion(&fv, &mut cur, cfg);
 }

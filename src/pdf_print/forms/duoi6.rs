@@ -53,8 +53,8 @@ pub fn render(
 
     let so_phieu = fv.admin("SO_PHIEU");
     let so_line = format!(
-        "Số: {}/GKSK-TE6-{}/{}",
-        if so_phieu.is_empty() { "......" } else { so_phieu },
+        "Số: {}/GKSK-{}/{}",
+        if so_phieu.is_empty() { "......................" } else { so_phieu },
         cfg.ma_cskcb,
         fv.exam_year_2d()
     );
@@ -67,7 +67,6 @@ pub fn render(
     );
 
     render_admin_and_history_boxed(&fv, &mut cur, cfg);
-    cur.next_page();
     render_exam_boxed(&fv, &mut cur, cfg);
 }
 
@@ -78,15 +77,26 @@ fn render_admin_and_history_boxed(fv: &FormValues, cur: &mut PdfPageCursor, cfg:
     let rx = bx.x + bx.w - 2.5;
     let mid = lx + (rx - lx) * 0.50;
 
-    draw_inline_two(
+    draw_inline_slot(
         cur,
         lx,
         rx,
+        cur.y,
         "1. Họ và tên (In hoa):",
         &fv.admin("HO_TEN").to_uppercase(),
-        "2. Số CCCD/Định danh:",
-        fv.admin("SO_CCCD"),
+        true,
     );
+    cur.y -= LINE_H;
+    draw_inline_slot(
+        cur,
+        lx,
+        rx,
+        cur.y,
+        "2. Số CCCD/Hộ chiếu/Mã định danh:",
+        fv.admin("SO_CCCD"),
+        false,
+    );
+    cur.y -= LINE_H;
 
     draw_inline_slot(cur, lx, mid - 3.0, cur.y, "3. Ngày sinh:", fv.admin("NGAY_SINH"), false);
     let gt = fv.admin("GIOI_TINH");
@@ -426,7 +436,7 @@ fn render_exam_boxed(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig) 
     write_lines(cur, clx, crx, "Ghi rõ:", &ghi_ro, 2);
     for line in super::super::primitives::wrap_lines(
         "Tư vấn và hẹn khám lần sau hoặc chuyển cơ sở khám bệnh, chữa bệnh để khám chuyên khoa, điều trị bệnh:",
-        crx - clx,
+        crx - clx - 6.0,
         FONT_BODY,
     ) {
         draw_text(&cur.layer, &cur.fonts.bold, FONT_BODY, clx, cur.y, &line);

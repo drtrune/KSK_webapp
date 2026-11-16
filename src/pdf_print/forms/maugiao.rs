@@ -30,7 +30,7 @@ pub fn render(
     let so_phieu = fv.admin("SO_PHIEU");
     let so_line = format!(
         "Số: {}/GKSK-MN-{}/{}",
-        if so_phieu.is_empty() { "......" } else { so_phieu },
+        if so_phieu.is_empty() { "......................" } else { so_phieu },
         cfg.ma_cskcb,
         fv.exam_year_2d()
     );

@@ -11,6 +11,7 @@ mod primitives;
 mod values;
 mod widgets;
 
+#[cfg(test)]
 pub use primitives::encode_code128b;
 use primitives::{load_fonts, PdfFonts, PAGE_H, PAGE_W};
 

@@ -150,21 +150,28 @@ pub fn draw_line(
     layer.add_line(line);
 }
 
-/// Vẽ dòng kẻ mảnh màu xám cho người khám điền tay.
+/// Vẽ dòng kẻ đứt nét mảnh màu xám cho người khám điền tay.
 pub fn draw_dotted_line(layer: &PdfLayerReference, x1: f32, y: f32, x2: f32) {
     if x2 <= x1 + 1.0 {
         return;
     }
     layer.set_outline_color(gray_line());
-    layer.set_outline_thickness(0.35);
-    let line = Line {
-        points: vec![
-            (Point::new(Mm(x1), Mm(y)), false),
-            (Point::new(Mm(x2), Mm(y)), false),
-        ],
-        is_closed: false,
-    };
-    layer.add_line(line);
+    layer.set_outline_thickness(0.30);
+    let dash = 0.85_f32;
+    let gap = 0.95_f32;
+    let mut x = x1;
+    while x < x2 {
+        let end = (x + dash).min(x2);
+        let line = Line {
+            points: vec![
+                (Point::new(Mm(x), Mm(y)), false),
+                (Point::new(Mm(end), Mm(y)), false),
+            ],
+            is_closed: false,
+        };
+        layer.add_line(line);
+        x += dash + gap;
+    }
 }
 
 /// Vẽ đường gạch đứt nằm ngang từ x1 đến x2 để phân tách nhẹ các phần trong ô.
