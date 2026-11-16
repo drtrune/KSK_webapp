@@ -424,15 +424,14 @@ fn render_exam_boxed(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig) 
         .collect::<Vec<_>>()
         .join(" - ");
     write_lines(cur, clx, crx, "Ghi rõ:", &ghi_ro, 2);
-    draw_text(
-        &cur.layer,
-        &cur.fonts.bold,
+    for line in super::super::primitives::wrap_lines(
+        "Tư vấn và hẹn khám lần sau hoặc chuyển cơ sở khám bệnh, chữa bệnh để khám chuyên khoa, điều trị bệnh:",
+        crx - clx,
         FONT_BODY,
-        clx,
-        cur.y,
-        "Tư vấn và hẹn khám lần sau hoặc chuyển cơ sở khám bệnh, chữa bệnh để khám chuyên khoa, điều trị bệnh",
-    );
-    cur.y -= LINE_H;
+    ) {
+        draw_text(&cur.layer, &cur.fonts.bold, FONT_BODY, clx, cur.y, &line);
+        cur.y -= LINE_H;
+    }
     draw_inline_two(
         cur,
         clx,

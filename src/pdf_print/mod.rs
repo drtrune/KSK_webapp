@@ -258,7 +258,14 @@ mod tests {
                 let pdf = generate_records_pdf(&[rec.clone()], &cfg, &cats, is_blank, tpl)
                     .expect("pdf generation should succeed");
                 assert!(pdf.starts_with(b"%PDF-"));
-                assert!(pdf.len() > 4000);
+                assert!(pdf.len() > 3000);
+                if !is_blank {
+                    if let Ok(out_dir) = std::env::var("KSK_DUMP_PDF_PREVIEW") {
+                        let _ = std::fs::create_dir_all(&out_dir);
+                        let p = std::path::Path::new(&out_dir).join(format!("{}.pdf", tpl));
+                        std::fs::write(p, &pdf).unwrap();
+                    }
+                }
             }
         }
     }

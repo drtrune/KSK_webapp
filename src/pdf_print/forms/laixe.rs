@@ -232,7 +232,7 @@ fn render_history(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig) {
     let left_rows = map_side(left_defs);
     let right_rows = map_side(right_defs);
     draw_ts_table_double(cur, false, &left_rows, &right_rows);
-    cur.y -= 3.5;
+    cur.y -= 6.5;
 
     write_lines(cur, MARGIN_L, max_x, "Nếu “có”, đề nghị ghi cụ thể tên bệnh:", fv.ns("TSBT_TEN_BENH"), 1);
     write_lines(
@@ -354,16 +354,15 @@ fn render_paraclinical_and_conclusion(fv: &FormValues, cur: &mut PdfPageCursor, 
     let col2_w = CONTENT_W - col1_w;
     draw_exam_table_header(cur, col1_w, col2_w, "Nội dung khám", "Họ tên, chữ ký\nBS / Trưởng BP");
 
-    draw_exam_custom_row(cur, col1_w, col2_w, 18.0, fv.ns("BS_XN_MA_TUY"), |c, lx, rx| {
-        draw_text(
-            &c.layer,
-            &c.fonts.bold,
-            FONT_BODY,
-            lx,
-            c.y,
+    draw_exam_custom_row(cur, col1_w, col2_w, 22.0, fv.ns("BS_XN_MA_TUY"), |c, lx, rx| {
+        for line in super::super::primitives::wrap_lines(
             "1. Xét nghiệm ma túy (Amphetamin, Marijuana, Morphin, Codein, Heroin):",
-        );
-        c.y -= LINE_H;
+            rx - lx,
+            FONT_BODY,
+        ) {
+            draw_text(&c.layer, &c.fonts.bold, FONT_BODY, lx, c.y, &line);
+            c.y -= LINE_H;
+        }
         draw_inline_slot(c, lx, rx, c.y, "Kết quả:", fv.ns("XN_MA_TUY"), true);
     });
 

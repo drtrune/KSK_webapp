@@ -131,18 +131,21 @@ pub struct BoxedSection {
 impl BoxedSection {
     /// Bắt đầu khung viền tại vị trí con trỏ hiện tại và vẽ tiêu đề khung (nếu có).
     pub fn begin(cur: &mut PdfPageCursor, title: Option<&str>) -> Self {
-        cur.ensure_space(16.0);
+        cur.ensure_space(20.0);
+        if cur.y < super::primitives::TOP_Y - 1.0 {
+            cur.y -= 4.5;
+        }
         let top_y = cur.y + 3.5;
         let bx = MARGIN_L;
         let bw = CONTENT_W;
 
         if let Some(t) = title {
             draw_text(&cur.layer, &cur.fonts.bold, FONT_BODY, bx + 2.5, cur.y - 1.2, t);
-            cur.y -= 6.2;
+            cur.y -= 6.5;
             draw_line(&cur.layer, bx, cur.y + 2.2, bx + bw, cur.y + 2.2, 0.45);
-            cur.y -= 2.2;
+            cur.y -= 2.4;
         } else {
-            cur.y -= 1.0;
+            cur.y -= 1.2;
         }
 
         Self {
@@ -154,7 +157,7 @@ impl BoxedSection {
 
     /// Vẽ đường phân cách ngang bên trong khung trước khi sang nhóm con tiếp theo.
     pub fn divider(&mut self, cur: &mut PdfPageCursor, subtitle: Option<&str>) {
-        self.divider_with_min_space(cur, subtitle, 14.0);
+        self.divider_with_min_space(cur, subtitle, 16.0);
     }
 
     /// Vẽ đường phân cách ngang kèm ngưỡng chỗ trống tối thiểu để tránh tiêu đề đứng mồ côi cuối trang.
@@ -164,16 +167,21 @@ impl BoxedSection {
         subtitle: Option<&str>,
         min_space: f32,
     ) {
+        let prev_page = cur.page_no;
         self.ensure_space(cur, min_space);
-        draw_line(
-            &cur.layer,
-            self.x,
-            cur.y + 2.4,
-            self.x + self.w,
-            cur.y + 2.4,
-            0.45,
-        );
-        cur.y -= 1.8;
+        if cur.page_no == prev_page {
+            draw_line(
+                &cur.layer,
+                self.x,
+                cur.y + 2.4,
+                self.x + self.w,
+                cur.y + 2.4,
+                0.45,
+            );
+            cur.y -= 2.2;
+        } else {
+            cur.y -= 1.2;
+        }
         if let Some(sub) = subtitle {
             draw_text(
                 &cur.layer,
@@ -183,7 +191,7 @@ impl BoxedSection {
                 cur.y,
                 sub,
             );
-            cur.y -= LINE_H + 0.3;
+            cur.y -= LINE_H + 0.4;
         }
     }
 
@@ -224,44 +232,44 @@ pub fn draw_checklist_table(
     let w_name = CONTENT_W - w_stt - w_opt * opt_count;
 
     let draw_hdr = |c: &mut PdfPageCursor| {
-        let hh = 6.2;
+        let hh = 6.8;
         let mut cx = MARGIN_L;
         if with_stt {
             draw_rect_stroke(&c.layer, cx, c.y - hh, w_stt, hh, 0.55);
-            draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_stt / 2.0, c.y - 4.4, "STT");
+            draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_stt / 2.0, c.y - 4.7, "STT");
             cx += w_stt;
         }
         draw_rect_stroke(&c.layer, cx, c.y - hh, w_name, hh, 0.55);
-        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_name / 2.0, c.y - 4.4, col_title);
+        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_name / 2.0, c.y - 4.7, col_title);
         cx += w_name;
 
         draw_rect_stroke(&c.layer, cx, c.y - hh, w_opt, hh, 0.55);
-        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_opt / 2.0, c.y - 4.4, "Có");
+        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_opt / 2.0, c.y - 4.7, "Có");
         cx += w_opt;
 
         draw_rect_stroke(&c.layer, cx, c.y - hh, w_opt, hh, 0.55);
-        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_opt / 2.0, c.y - 4.4, "Không");
+        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_opt / 2.0, c.y - 4.7, "Không");
         if with_unknown {
             cx += w_opt;
             draw_rect_stroke(&c.layer, cx, c.y - hh, w_opt, hh, 0.55);
-            draw_text_centered(&c.layer, &c.fonts.bold, FONT_SMALL, cx + w_opt / 2.0, c.y - 4.4, "Không rõ");
+            draw_text_centered(&c.layer, &c.fonts.bold, FONT_SMALL, cx + w_opt / 2.0, c.y - 4.7, "Không rõ");
         }
         c.y -= hh;
     };
 
-    cur.ensure_space(14.0);
+    cur.ensure_space(16.0);
     draw_hdr(cur);
 
     for &(stt, label, state) in rows {
         let lines = wrap_lines(label, w_name - 4.0, FONT_BODY);
-        let rh = (lines.len().max(1) as f32) * 4.4 + 1.6;
+        let rh = (lines.len().max(1) as f32) * 5.0 + 2.2;
         if cur.y - rh < BOTTOM_Y {
             cur.next_page();
             draw_hdr(cur);
         }
 
         let mut cx = MARGIN_L;
-        let mid_y = cur.y - rh / 2.0 - 1.2;
+        let mid_y = cur.y - rh / 2.0 - 1.3;
         if with_stt {
             draw_rect_stroke(&cur.layer, cx, cur.y - rh, w_stt, rh, 0.45);
             draw_text_centered(&cur.layer, &cur.fonts.regular, FONT_BODY, cx + w_stt / 2.0, mid_y, stt);
@@ -274,7 +282,7 @@ pub fn draw_checklist_table(
                 &cur.fonts.regular,
                 FONT_BODY,
                 cx + 2.0,
-                cur.y - 4.2 - (li as f32) * 4.4,
+                cur.y - 4.8 - (li as f32) * 5.0,
                 line,
             );
         }
@@ -449,8 +457,8 @@ pub fn draw_exam_spec_row(
 ) {
     let res_lines = wrap_lines(result_val, col1_w - 6.0, FONT_BODY);
     let n_res = result_lines_min.max(res_lines.len());
-    let h_top = 5.5 + (n_res as f32) * LINE_H + 1.5;
-    let h_pl = 6.5;
+    let h_top = 5.8 + (n_res as f32) * LINE_H + 1.8;
+    let h_pl = 7.2;
     let total_h = h_top + h_pl;
 
     if cur.y - total_h < BOTTOM_Y {
@@ -529,9 +537,9 @@ pub fn draw_exam_custom_row<F>(
     }
     let y_top = cur.y;
     let saved_y = cur.y;
-    cur.y -= 4.6;
+    cur.y -= 5.0;
     draw_left(cur, MARGIN_L + 2.0, MARGIN_L + col1_w - 2.0);
-    let actual_h = (saved_y - cur.y + 1.5).max(needed_h);
+    let actual_h = (saved_y - cur.y + 2.2).max(needed_h);
     cur.y = y_top - actual_h;
 
     draw_rect_stroke(&cur.layer, MARGIN_L, cur.y, col1_w, actual_h, 0.45);

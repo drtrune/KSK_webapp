@@ -170,9 +170,9 @@ impl<'a> PdfPageCursor<'a> {
 
     /// Vẽ tiêu đề mục lớn (ví dụ I. KHÁM THỂ LỰC), tự chừa khoảng cách phía trên.
     pub fn draw_section_heading(&mut self, heading: &str) {
-        self.ensure_space(24.0);
+        self.ensure_space(26.0);
         if self.y < TOP_Y - 1.0 {
-            self.y -= 3.5;
+            self.y -= 6.0;
         }
         for line in wrap_lines(heading, CONTENT_W, FONT_SUBTITLE) {
             draw_text(
@@ -183,15 +183,15 @@ impl<'a> PdfPageCursor<'a> {
                 self.y,
                 &line,
             );
-            self.y -= 5.5;
+            self.y -= 6.0;
         }
     }
 
     /// Vẽ tiêu đề mục căn giữa (ví dụ TIỀN SỬ BỆNH CỦA ĐỐI TƯỢNG KHÁM SỨC KHỎE).
     pub fn draw_centered_heading(&mut self, heading: &str) {
-        self.ensure_space(22.0);
+        self.ensure_space(24.0);
         if self.y < TOP_Y - 1.0 {
-            self.y -= 3.0;
+            self.y -= 5.5;
         }
         for line in wrap_lines(heading, CONTENT_W, FONT_SUBTITLE) {
             draw_text_centered(
@@ -202,7 +202,7 @@ impl<'a> PdfPageCursor<'a> {
                 self.y,
                 &line,
             );
-            self.y -= 5.5;
+            self.y -= 6.0;
         }
     }
 
@@ -331,9 +331,11 @@ impl<'a> PdfPageCursor<'a> {
         right_sub: &str,
         right_name: &str,
     ) {
-        let need_h = if right_name.trim().is_empty() { 26.0 } else { 32.0 };
+        let need_h = if right_name.trim().is_empty() { 28.0 } else { 34.0 };
         self.ensure_space(need_h);
-        self.y -= 2.0;
+        if self.y < TOP_Y - 1.0 {
+            self.y -= 4.0;
+        }
 
         let dia_danh = if cfg.dia_danh.trim().is_empty() {
             "Gia Lai"

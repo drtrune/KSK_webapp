@@ -43,7 +43,6 @@ pub fn render(
     );
 
     render_admin_boxed(&fv, &mut cur, cfg);
-    cur.next_page();
     render_exam_boxed(&fv, &mut cur, cfg);
 }
 

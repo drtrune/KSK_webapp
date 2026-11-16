@@ -43,8 +43,6 @@ pub fn render(
 
     render_admin(&fv, &mut cur);
     render_history(&fv, &mut cur, cfg);
-
-    cur.next_page();
     render_physical_and_clinical(&fv, &mut cur);
     render_paraclinical_and_conclusion(&fv, &mut cur, cfg);
 }
@@ -190,10 +188,11 @@ fn render_history(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig) {
             ("7", &khac_label, vac_state("TC_KHAC_TINH_TRANG")),
         ],
     );
-    cur.y -= 3.0;
-
     // c) & d)
-    cur.ensure_space(28.0);
+    cur.ensure_space(32.0);
+    if cur.y < super::super::primitives::TOP_Y - 1.0 {
+        cur.y -= 6.5;
+    }
     draw_text(
         &cur.layer,
         &cur.fonts.bold,

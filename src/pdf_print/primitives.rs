@@ -14,7 +14,7 @@ pub const FONT_BODY: f32 = 11.5;
 pub const FONT_SMALL: f32 = 10.5;
 pub const FONT_SUBTITLE: f32 = 12.5;
 pub const FONT_TITLE: f32 = 13.5;
-pub const LINE_H: f32 = 5.0;
+pub const LINE_H: f32 = 5.6;
 
 /// Bộ font Times/Serif gồm thường, đậm, nghiêng dùng xuyên suốt tài liệu PDF.
 pub struct PdfFonts {

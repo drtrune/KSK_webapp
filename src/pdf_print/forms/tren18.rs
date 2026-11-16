@@ -456,8 +456,10 @@ fn render_paraclinical_section(fv: &FormValues, cur: &mut PdfPageCursor) {
     });
 
     // Mục 2: Khám sức khỏe định kỳ
-    cur.y -= 3.0;
-    cur.ensure_space(42.0);
+    cur.ensure_space(46.0);
+    if cur.y < super::super::primitives::TOP_Y - 1.0 {
+        cur.y -= 6.5;
+    }
     draw_text(
         &cur.layer,
         &cur.fonts.bold,
