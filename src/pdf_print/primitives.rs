@@ -349,3 +349,4 @@ pub fn draw_footer(layer: &PdfLayerReference, fonts: &PdfFonts, page_num: usize)
         &format!("- Trang {} -", page_num),
     );
 }
+

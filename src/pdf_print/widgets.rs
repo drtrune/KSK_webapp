@@ -572,3 +572,4 @@ pub fn draw_inline_two(
 pub fn max_content_x() -> f32 {
     PAGE_W - MARGIN_R
 }
+

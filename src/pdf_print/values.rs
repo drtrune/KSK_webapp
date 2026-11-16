@@ -224,3 +224,4 @@ pub fn get_cat_name(cat_map: &Map<String, Value>, cat_key: &str, code: &str) -> 
     }
     c_trim.to_string()
 }
+

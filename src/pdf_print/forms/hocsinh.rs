@@ -345,3 +345,4 @@ fn render_conclusion(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig) 
         "",
     );
 }
+

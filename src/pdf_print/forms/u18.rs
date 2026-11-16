@@ -368,3 +368,4 @@ fn render_paraclinical_and_conclusion(fv: &FormValues, cur: &mut PdfPageCursor, 
         "",
     );
 }
+

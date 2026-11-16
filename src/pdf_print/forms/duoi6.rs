@@ -384,3 +384,4 @@ fn render_exam_boxed(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig) 
     );
     let _ = max_content_x();
 }
+

@@ -420,3 +420,4 @@ fn render_paraclinical_and_conclusion(fv: &FormValues, cur: &mut PdfPageCursor, 
         fv.ns("BS_KET_LUAN"),
     );
 }
+
