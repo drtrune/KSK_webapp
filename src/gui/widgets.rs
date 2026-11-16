@@ -123,6 +123,73 @@ pub fn field_label(text: impl Into<SharedString>, required: bool) -> AnyElement 
         .into_any_element()
 }
 
+pub fn section_group_header(icon: &str, title: &str) -> AnyElement {
+    div()
+        .pt(px(6.0))
+        .pb(px(4.0))
+        .border_b_1()
+        .border_color(rgb(border_col()))
+        .flex()
+        .flex_row()
+        .items_center()
+        .gap(px(6.0))
+        .child(
+            div()
+                .px(px(6.0))
+                .py(px(2.0))
+                .rounded(px(6.0))
+                .bg(rgb(primary_light()))
+                .text_color(rgb(PRIMARY_COL))
+                .text_xs()
+                .font_weight(gpui::FontWeight::BOLD)
+                .child(icon.to_string()),
+        )
+        .child(
+            div()
+                .text_sm()
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(rgb(text_main()))
+                .child(title.to_string()),
+        )
+        .into_any_element()
+}
+
+pub fn bmi_status_badge(bmi_str: &str) -> Option<AnyElement> {
+    let val = bmi_str.trim().replace(',', ".").parse::<f64>().ok()?;
+    if val < 10.0 || val > 80.0 {
+        return None;
+    }
+    let (lbl, bg, fg) = if val < 18.5 {
+        ("BMI: Thiếu cân (<18.5)", WARN_BG, WARN_COL)
+    } else if val < 25.0 {
+        ("BMI: Bình thường (18.5–24.9)", SUCCESS_BG, SUCCESS_COL)
+    } else if val < 30.0 {
+        ("BMI: Thừa cân (25–29.9)", WARN_BG, WARN_COL)
+    } else {
+        ("BMI: Béo phì (≥30)", DANGER_BG, DANGER_COL)
+    };
+    Some(badge(lbl, bg, fg))
+}
+
+pub fn bp_status_badge(bp_str: &str) -> Option<AnyElement> {
+    let mut parts = bp_str.trim().split('/');
+    let sys = parts.next()?.trim().parse::<i64>().ok()?;
+    let dia = parts.next()?.trim().parse::<i64>().ok()?;
+    if sys < 50 || dia < 30 {
+        return None;
+    }
+    let (lbl, bg, fg) = if sys >= 140 || dia >= 90 {
+        ("HA: Tăng huyết áp (≥140/90)", DANGER_BG, DANGER_COL)
+    } else if sys >= 130 || dia >= 85 {
+        ("HA: Tiền tăng HA (130–139/85–89)", WARN_BG, WARN_COL)
+    } else if sys < 90 || dia < 60 {
+        ("HA: Huyết áp thấp (<90/60)", WARN_BG, WARN_COL)
+    } else {
+        ("HA: Bình thường", SUCCESS_BG, SUCCESS_COL)
+    };
+    Some(badge(lbl, bg, fg))
+}
+
 impl KskGpuiApp {
     pub fn render_form_input(
         &mut self,

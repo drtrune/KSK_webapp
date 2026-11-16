@@ -14,8 +14,9 @@ use crate::models::phan_loai_config;
 use super::{
     KskGpuiApp,
     widgets::{
-        bg_card, bg_subtle, border_col, DANGER_BG, DANGER_COL, PRIMARY_COL, primary_light,
-        SUCCESS_BG, SUCCESS_COL, text_main, text_muted, WARN_BG, WARN_COL, badge, card_box,
+        bg_card, bg_subtle, bmi_status_badge, border_col, bp_status_badge, card_box,
+        DANGER_BG, DANGER_COL, PRIMARY_COL, primary_light, section_group_header,
+        SUCCESS_BG, SUCCESS_COL, text_main, text_muted, WARN_BG, WARN_COL, badge,
     },
 };
 
@@ -94,20 +95,20 @@ impl KskGpuiApp {
 
         let tabs: Vec<(&str, &str)> = if active_tpl == "TREN_18" {
             vec![
-                ("reception", "1. Tiếp nhận"),
-                ("history", "2. Tiền sử"),
-                ("physical", "3. Thể lực"),
-                ("clinical", "4. Lâm sàng (22 CK)"),
-                ("paraclinical", "5. Cận lâm sàng"),
-                ("conclusion", "6. Kết luận"),
+                ("reception", "📋 1. Tiếp nhận"),
+                ("history", "🕒 2. Tiền sử"),
+                ("physical", "💓 3. Thể lực"),
+                ("clinical", "🩺 4. Lâm sàng (22 CK)"),
+                ("paraclinical", "🔬 5. Cận lâm sàng"),
+                ("conclusion", "✅ 6. Kết luận"),
             ]
         } else {
             vec![
-                ("reception", "1. Tiếp nhận"),
-                ("history", "2. Tiền sử & Tiêm chủng"),
-                ("physical", "3. Sinh tồn & Thể lực"),
-                ("clinical", "4. Khám lâm sàng"),
-                ("conclusion", "5. Kết luận & Tư vấn"),
+                ("reception", "📋 1. Tiếp nhận"),
+                ("history", "🕒 2. Tiền sử & Tiêm chủng"),
+                ("physical", "💓 3. Sinh tồn & Thể lực"),
+                ("clinical", "🩺 4. Khám lâm sàng"),
+                ("conclusion", "✅ 5. Kết luận & Tư vấn"),
             ]
         };
 
@@ -253,18 +254,55 @@ impl KskGpuiApp {
                                         badge(label, WARN_BG, WARN_COL)
                                     } else {
                                         badge("Khám lẻ", primary_light(), PRIMARY_COL)
+                                    })
+                                    .when(selected_tpls.len() <= 1, |el| {
+                                        el.child(badge(
+                                            format!("📄 {}", crate::templates::template_short_label(&active_tpl)),
+                                            bg_subtle(),
+                                            text_main(),
+                                        ))
                                     }),
                             )
                             .child(
                                 div()
                                     .flex()
                                     .flex_row()
+                                    .flex_wrap()
                                     .items_center()
                                     .gap(px(6.0))
+                                    .when(!self.is_creating_new && self.selected_record_id.is_some(), |el| {
+                                        el.child(
+                                            Button::new("btn-banner-print-rec")
+                                                .label("🖨 In Tiếp Nhận")
+                                                .small()
+                                                .secondary()
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.print_record_html(true, cx);
+                                                })),
+                                        )
+                                        .child(
+                                            Button::new("btn-banner-print-ksk")
+                                                .label("📄 In Giấy KSK")
+                                                .small()
+                                                .primary()
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.print_record_html(false, cx);
+                                                })),
+                                        )
+                                        .child(
+                                            Button::new("btn-banner-export-docx")
+                                                .label("📝 Xuất Word")
+                                                .small()
+                                                .secondary()
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.export_docx(false, cx);
+                                                })),
+                                        )
+                                    })
                                     .when(show_rec_nav, |el| {
                                         el.child(
                                             Button::new("btn-prev-record")
-                                                .label("◀ Trước")
+                                                .label("◀ BN trước")
                                                 .small()
                                                 .secondary()
                                                 .on_click(cx.listener(|this, _, window, cx| {
@@ -273,7 +311,7 @@ impl KskGpuiApp {
                                         )
                                         .child(
                                             Button::new("btn-next-record")
-                                                .label("Sau ▶")
+                                                .label("BN sau ▶")
                                                 .small()
                                                 .secondary()
                                                 .on_click(cx.listener(|this, _, window, cx| {
@@ -282,99 +320,105 @@ impl KskGpuiApp {
                                         )
                                     })
                                     .child(match self.current_record_status {
-                                        2 => badge("Đã ký khóa", DANGER_BG, DANGER_COL),
-                                        1 => badge("Hoàn tất", SUCCESS_BG, SUCCESS_COL),
-                                        _ => badge("Đang khám", WARN_BG, WARN_COL),
+                                        2 => badge("🔒 Đã ký khóa", DANGER_BG, DANGER_COL),
+                                        1 => badge("✓ Hoàn tất", SUCCESS_BG, SUCCESS_COL),
+                                        _ => badge("⏳ Đang khám", WARN_BG, WARN_COL),
                                     }),
                             ),
                     )
+                    .when(selected_tpls.len() > 1, |banner| {
+                        banner.child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .flex_wrap()
+                                .items_center()
+                                .gap(px(6.0))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(rgb(text_muted()))
+                                        .child("Mẫu đang nhập:"),
+                                )
+                                .children(selected_tpls.iter().map(|tpl_code| {
+                                    let code_owned = tpl_code.clone();
+                                    let is_cur = *tpl_code == active_tpl;
+                                    let lbl = crate::templates::template_short_label(tpl_code);
+                                    div()
+                                        .id(SharedString::from(format!("switch-tpl-{}", code_owned)))
+                                        .px(px(10.0))
+                                        .py(px(3.0))
+                                        .rounded(px(12.0))
+                                        .cursor_pointer()
+                                        .text_xs()
+                                        .font_weight(if is_cur {
+                                            gpui::FontWeight::BOLD
+                                        } else {
+                                            gpui::FontWeight::MEDIUM
+                                        })
+                                        .bg(rgb(if is_cur { PRIMARY_COL } else { bg_subtle() }))
+                                        .text_color(rgb(if is_cur { 0xffffff } else { text_main() }))
+                                        .border_1()
+                                        .border_color(rgb(if is_cur { PRIMARY_COL } else { border_col() }))
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            this.guard_unsaved(
+                                                super::PendingNav::Template(code_owned.clone()),
+                                                window,
+                                                cx,
+                                            );
+                                        }))
+                                        .child(format!("📄 {}", lbl))
+                                }))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(text_muted()))
+                                        .child(format!(
+                                            "— {}",
+                                            crate::templates::template_full_label(&active_tpl)
+                                        )),
+                                ),
+                        )
+                    })
                     .child(
                         div()
+                            .pb(px(8.0))
                             .flex()
                             .flex_row()
                             .flex_wrap()
-                            .items_center()
                             .gap(px(6.0))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(rgb(text_muted()))
-                                    .child("Mẫu đang nhập:"),
-                            )
-                            .children(selected_tpls.iter().map(|tpl_code| {
-                                let code_owned = tpl_code.clone();
-                                let is_cur = *tpl_code == active_tpl;
-                                let lbl = crate::templates::template_short_label(tpl_code);
-                                div()
-                                    .id(SharedString::from(format!("switch-tpl-{}", code_owned)))
-                                    .px(px(10.0))
-                                    .py(px(3.0))
-                                    .rounded(px(12.0))
-                                    .cursor_pointer()
-                                    .text_xs()
-                                    .font_weight(if is_cur {
-                                        gpui::FontWeight::BOLD
-                                    } else {
-                                        gpui::FontWeight::MEDIUM
-                                    })
-                                    .bg(rgb(if is_cur { PRIMARY_COL } else { bg_subtle() }))
-                                    .text_color(rgb(if is_cur { 0xffffff } else { text_main() }))
-                                    .border_1()
-                                    .border_color(rgb(if is_cur { PRIMARY_COL } else { border_col() }))
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        this.guard_unsaved(
-                                            super::PendingNav::Template(code_owned.clone()),
-                                            window,
-                                            cx,
-                                        );
-                                    }))
-                                    .child(lbl)
-                            }))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(text_muted()))
-                                    .child(format!(
-                                        "— {}",
-                                        crate::templates::template_full_label(&active_tpl)
-                                    )),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_row()
-                            .gap(px(4.0))
                             .children(tab_items.into_iter().map(|(key, lbl, prog)| {
                                 let is_act = active == key;
                                 let k = key.clone();
-                                let prefix = match prog {
-                                    super::SectionProgress::Done => "✓ ",
-                                    super::SectionProgress::Partial => "● ",
-                                    super::SectionProgress::Empty => "",
+                                let (status_tag, bg_c, border_c, fg_c) = if is_act {
+                                    ("● Đang mở", primary_light(), PRIMARY_COL, PRIMARY_COL)
+                                } else {
+                                    match prog {
+                                        super::SectionProgress::Done => {
+                                            ("✓ Đã khám", SUCCESS_BG, SUCCESS_COL, SUCCESS_COL)
+                                        }
+                                        super::SectionProgress::Partial => {
+                                            ("◐ Đang dở", WARN_BG, WARN_COL, WARN_COL)
+                                        }
+                                        super::SectionProgress::Empty => {
+                                            ("○ Chưa khám", bg_subtle(), border_col(), text_muted())
+                                        }
+                                    }
                                 };
-                                let tab_text = format!("{}{}", prefix, lbl);
                                 div()
                                     .id(SharedString::from(format!("exam-tab-{}", key)))
                                     .px(px(12.0))
-                                    .py(px(8.0))
+                                    .py(px(6.0))
+                                    .rounded(px(8.0))
                                     .cursor_pointer()
-                                    .border_b_2()
-                                    .border_color(rgb(if is_act { PRIMARY_COL } else { bg_card() }))
-                                    .text_sm()
-                                    .font_weight(if is_act {
-                                        gpui::FontWeight::SEMIBOLD
-                                    } else {
-                                        gpui::FontWeight::NORMAL
-                                    })
-                                    .text_color(rgb(if is_act {
-                                        PRIMARY_COL
-                                    } else if prog == super::SectionProgress::Done {
-                                        SUCCESS_COL
-                                    } else {
-                                        text_muted()
-                                    }))
+                                    .bg(rgb(bg_c))
+                                    .border_1()
+                                    .border_color(rgb(border_c))
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .gap(px(8.0))
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.guard_unsaved(
                                             super::PendingNav::Tab(k.clone()),
@@ -382,7 +426,28 @@ impl KskGpuiApp {
                                             cx,
                                         );
                                     }))
-                                    .child(tab_text)
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .font_weight(if is_act {
+                                                gpui::FontWeight::BOLD
+                                            } else {
+                                                gpui::FontWeight::SEMIBOLD
+                                            })
+                                            .text_color(rgb(fg_c))
+                                            .child(lbl),
+                                    )
+                                    .child(
+                                        div()
+                                            .px(px(6.0))
+                                            .py(px(1.0))
+                                            .rounded(px(999.0))
+                                            .bg(rgb(bg_card()))
+                                            .text_xs()
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .text_color(rgb(fg_c))
+                                            .child(status_tag),
+                                    )
                             })),
                     ),
             )
@@ -439,7 +504,7 @@ impl KskGpuiApp {
                             .gap(px(6.0))
                             .child(
                                 Button::new("btn-sticky-prev-tab")
-                                    .label("◀ Tab trước")
+                                    .label("◀ Bước trước")
                                     .small()
                                     .secondary()
                                     .on_click(cx.listener(|this, _, window, cx| {
@@ -448,7 +513,7 @@ impl KskGpuiApp {
                             )
                             .child(
                                 Button::new("btn-sticky-next-tab")
-                                    .label("Tab sau ▶")
+                                    .label("Bước sau ▶")
                                     .small()
                                     .secondary()
                                     .on_click(cx.listener(|this, _, window, cx| {
@@ -458,7 +523,7 @@ impl KskGpuiApp {
                             .when_some(sticky_can_enter_edit, |el, sec_id| {
                                 el.child(
                                     Button::new("btn-sticky-edit")
-                                        .label("Sửa")
+                                        .label("✎ Sửa mục này")
                                         .small()
                                         .primary()
                                         .on_click(cx.listener(move |this, _, window, cx| {
@@ -467,11 +532,23 @@ impl KskGpuiApp {
                                 )
                             })
                             .when_some(sticky_editing, |el, sec_id| {
+                                let sec_fill = sec_id.clone();
                                 let sec_save = sec_id.clone();
-                                let sec_next = sec_id;
-                                el.child(
+                                let sec_next = sec_id.clone();
+                                el.when(sec_id != "reception", |sub| {
+                                    sub.child(
+                                        Button::new("btn-sticky-quick-normal")
+                                            .label("⚡ Điền bình thường")
+                                            .small()
+                                            .secondary()
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.quick_fill_tren18_defaults(&sec_fill, window, cx);
+                                            })),
+                                    )
+                                })
+                                .child(
                                     Button::new("btn-sticky-cancel")
-                                        .label("Hủy")
+                                        .label("✕ Hủy")
                                         .small()
                                         .ghost()
                                         .on_click(cx.listener(|this, _, window, cx| {
@@ -485,7 +562,7 @@ impl KskGpuiApp {
                                 )
                                 .child(
                                     Button::new("btn-sticky-save")
-                                        .label("Lưu (Ctrl+S)")
+                                        .label("💾 Lưu (Ctrl+S)")
                                         .small()
                                         .secondary()
                                         .on_click(cx.listener(move |this, _, window, cx| {
@@ -494,7 +571,7 @@ impl KskGpuiApp {
                                 )
                                 .child(
                                     Button::new("btn-sticky-save-next")
-                                        .label("Lưu & tiếp →")
+                                        .label("💾 Lưu & Tiếp ➔")
                                         .small()
                                         .primary()
                                         .on_click(cx.listener(move |this, _, window, cx| {
@@ -560,13 +637,6 @@ impl KskGpuiApp {
         let show_guardian = has_any_tpl(&["TU_6_DUOI_18", "DUOI_6", "MAU_GIAO"]);
         let show_guardian_rel = has_any_tpl(&["DUOI_6", "MAU_GIAO"]);
         let show_sinh_non = has_any_tpl(&["DUOI_6", "MAU_GIAO"]);
-        let rec_sub = self.active_reception_subtab;
-        let rec_sub_pills: &[(Option<usize>, &str)] = &[
-            (None, "Tất cả"),
-            (Some(0), "1. Hành chính & Định danh"),
-            (Some(1), "2. Địa chỉ & Nghề nghiệp"),
-            (Some(2), "3. Khám & Giám hộ"),
-        ];
 
         div()
             .flex()
@@ -672,173 +742,144 @@ impl KskGpuiApp {
                         is_locked,
                         cx,
                     ))
+                    .child(section_group_header("👤", "1. Định danh cá nhân"))
                     .child(
                         div()
                             .flex()
                             .flex_row()
                             .flex_wrap()
-                            .gap(px(6.0))
-                            .pb(px(6.0))
-                            .children(rec_sub_pills.iter().map(|(target, lbl)| {
-                                let is_act = rec_sub == *target;
-                                let tgt = *target;
-                                let id_sfx = match tgt {
-                                    None => "all".to_string(),
-                                    Some(i) => i.to_string(),
-                                };
-                                Button::new(SharedString::from(format!("rec-sub-{}", id_sfx)))
-                                    .label(*lbl)
-                                    .small()
-                                    .when(is_act, |b| b.primary())
-                                    .when(!is_act, |b| b.secondary())
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.active_reception_subtab = tgt;
-                                        this.pending_focus_first_input = true;
-                                        cx.notify();
-                                    }))
-                            })),
+                            .gap(px(12.0))
+                            .child(self.render_form_input("HO_TEN", "Họ và tên", "NGUYỄN VĂN A", true, editable, window, cx))
+                            .child(self.render_form_input("MA_Y_TE", "Mã bệnh nhân (HIS)", "BN...", true, editable, window, cx))
+                            .child(self.render_form_input("MA_TIEP_NHAN", "Số tiếp nhận", "TN...", false, editable, window, cx))
+                            .child(self.render_date_picker_form("rec-ngay-sinh", "NGAY_SINH", "Ngày sinh (dd/mm/yyyy)", "01/01/1990", true, editable, false, window, cx)),
                     )
-                    .when(rec_sub.is_none() || rec_sub == Some(0), |el| {
-                        el.child(
-                            div()
-                                .flex()
-                                .flex_row()
-                                .flex_wrap()
-                                .gap(px(12.0))
-                                .child(self.render_form_input("HO_TEN", "Họ và tên", "NGUYỄN VĂN A", true, editable, window, cx))
-                                .child(self.render_form_input("MA_Y_TE", "Mã bệnh nhân (HIS)", "BN...", true, editable, window, cx))
-                                .child(self.render_form_input("MA_TIEP_NHAN", "Số tiếp nhận", "TN...", false, editable, window, cx))
-                                .child(self.render_date_picker_form("rec-ngay-sinh", "NGAY_SINH", "Ngày sinh (dd/mm/yyyy)", "01/01/1990", true, editable, false, window, cx)),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .flex_row()
-                                .flex_wrap()
-                                .gap(px(12.0))
-                                .child(self.render_select_dropdown(
-                                    "rec-gioi-tinh",
-                                    "Giới tính",
-                                    &gioi_tinh,
-                                    gender_opts,
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_select_dropdown(
+                                "rec-gioi-tinh",
+                                "Giới tính",
+                                &gioi_tinh,
+                                gender_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("GIOI_TINH".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_form_input("SO_CCCD", "Số CCCD / Định danh cá nhân", "052...", false, editable, window, cx))
+                            .when(show_cccd_issue, |el| {
+                                el.child(self.render_date_picker_form("rec-ngaycap-cccd", "NGAYCAP_CCCD", "Ngày cấp CCCD (dd/mm/yyyy)", "01/05/2021", false, editable, false, window, cx))
+                                    .child(self.render_form_input("NOICAP_CCCD", "Nơi cấp CCCD", "Cục CSQLHC...", false, editable, window, cx))
+                            }),
+                    )
+                    .child(section_group_header("📍", "2. Địa chỉ & Nghề nghiệp"))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .when(show_phone_self, |el| {
+                                el.child(self.render_form_input("DIEN_THOAI", "Số điện thoại", "09...", false, editable, window, cx))
+                            })
+                            .child(self.render_select_dropdown(
+                                "rec-tinh",
+                                "Tỉnh / Thành phố cư trú",
+                                &ma_tinh,
+                                tinh_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("MATINH_CU_TRU".into(), val.clone());
+                                    let def_xa = this.get_default_catalog_code("XA_PHUONG", Some(&val));
+                                    this.form_values.insert("MAXA_CU_TRU".into(), def_xa);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_select_dropdown(
+                                "rec-xa",
+                                "Phường / Xã cư trú",
+                                &ma_xa,
+                                xa_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("MAXA_CU_TRU".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_form_input("DIA_CHI", "Địa chỉ chi tiết (Số nhà, thôn/tổ)", "Số nhà, đường...", false, editable, window, cx)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_select_dropdown(
+                                "rec-dantoc",
+                                "Dân tộc",
+                                &ma_dantoc,
+                                dantoc_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("MA_DAN_TOC".into(), val);
+                                },
+                                cx,
+                            ))
+                            .when(show_job_workplace, |el| {
+                                el.child(self.render_select_dropdown(
+                                    "rec-nghe",
+                                    "Nghề nghiệp",
+                                    &ma_nghe,
+                                    nghe_opts,
                                     editable,
                                     |this, val, _, _| {
-                                        this.form_values.insert("GIOI_TINH".into(), val);
+                                        this.form_values.insert("MA_NGHE_NGHIEP".into(), val);
                                     },
                                     cx,
                                 ))
-                                .child(self.render_form_input("SO_CCCD", "Số CCCD / Định danh cá nhân", "052...", false, editable, window, cx))
-                                .when(show_cccd_issue, |el| {
-                                    el.child(self.render_date_picker_form("rec-ngaycap-cccd", "NGAYCAP_CCCD", "Ngày cấp CCCD (dd/mm/yyyy)", "01/05/2021", false, editable, false, window, cx))
-                                        .child(self.render_form_input("NOICAP_CCCD", "Nơi cấp CCCD", "Cục CSQLHC...", false, editable, window, cx))
-                                }),
-                        )
-                    })
-                    .when(rec_sub.is_none() || rec_sub == Some(1), |el| {
-                        el.child(
-                            div()
-                                .flex()
-                                .flex_row()
-                                .flex_wrap()
-                                .gap(px(12.0))
-                                .when(show_phone_self, |el| {
-                                    el.child(self.render_form_input("DIEN_THOAI", "Số điện thoại", "09...", false, editable, window, cx))
-                                })
-                                .child(self.render_select_dropdown(
-                                    "rec-tinh",
-                                    "Tỉnh / Thành phố cư trú",
-                                    &ma_tinh,
-                                    tinh_opts,
-                                    editable,
-                                    |this, val, _, _| {
-                                        this.form_values.insert("MATINH_CU_TRU".into(), val.clone());
-                                        let def_xa = this.get_default_catalog_code("XA_PHUONG", Some(&val));
-                                        this.form_values.insert("MAXA_CU_TRU".into(), def_xa);
-                                    },
-                                    cx,
-                                ))
-                                .child(self.render_select_dropdown(
-                                    "rec-xa",
-                                    "Phường / Xã cư trú",
-                                    &ma_xa,
-                                    xa_opts,
-                                    editable,
-                                    |this, val, _, _| {
-                                        this.form_values.insert("MAXA_CU_TRU".into(), val);
-                                    },
-                                    cx,
-                                ))
-                                .child(self.render_form_input("DIA_CHI", "Địa chỉ chi tiết (Số nhà, thôn/tổ)", "Số nhà, đường...", false, editable, window, cx)),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .flex_row()
-                                .flex_wrap()
-                                .gap(px(12.0))
-                                .child(self.render_select_dropdown(
-                                    "rec-dantoc",
-                                    "Dân tộc",
-                                    &ma_dantoc,
-                                    dantoc_opts,
-                                    editable,
-                                    |this, val, _, _| {
-                                        this.form_values.insert("MA_DAN_TOC".into(), val);
-                                    },
-                                    cx,
-                                ))
-                                .when(show_job_workplace, |el| {
-                                    el.child(self.render_select_dropdown(
-                                        "rec-nghe",
-                                        "Nghề nghiệp",
-                                        &ma_nghe,
-                                        nghe_opts,
-                                        editable,
-                                        |this, val, _, _| {
-                                            this.form_values.insert("MA_NGHE_NGHIEP".into(), val);
-                                        },
-                                        cx,
-                                    ))
-                                    .child(self.render_form_input("NOI_LAM_VIEC_HOC_TAP", "Nơi làm việc / Học tập", "Công ty / Đơn vị...", false, editable, window, cx))
-                                }),
-                        )
-                    })
-                    .when(rec_sub.is_none() || rec_sub == Some(2), |el| {
-                        el.child(
-                            div()
-                                .flex()
-                                .flex_row()
-                                .flex_wrap()
-                                .gap(px(12.0))
-                                .child(self.render_select_dropdown(
-                                    "rec-loai-kcb",
-                                    "Loại hình khám (QĐ 3176)",
-                                    &kcb,
-                                    kcb_opts,
-                                    editable,
-                                    |this, val, _, _| {
-                                        this.form_values.insert("MA_LOAI_KCB".into(), val);
-                                    },
-                                    cx,
-                                ))
-                                .child(self.render_date_picker_form("rec-ngay-vao", "NGAY_VAO", "Ngày vào khám (dd/mm/yyyy)", "dd/mm/yyyy", false, editable, false, window, cx))
-                                .child(self.render_select_dropdown(
-                                    "rec-nhom-mau",
-                                    "Nhóm máu",
-                                    &nhom_mau,
-                                    nhommau_opts,
-                                    editable,
-                                    |this, val, _, _| {
-                                        this.form_values.insert("NHOM_MAU".into(), val);
-                                    },
-                                    cx,
-                                ))
-                                .when(show_ly_do, |el| {
-                                    el.child(self.render_form_input("LY_DO_VV", "Lý do khám", "Khám sức khỏe", false, editable, window, cx))
-                                }),
-                        )
-                    })
-                    .when((rec_sub.is_none() || rec_sub == Some(2)) && has_u18 && (show_laixe_rank || show_csgd_doctor || show_guardian || show_sinh_non), |el| {
+                                .child(self.render_form_input("NOI_LAM_VIEC_HOC_TAP", "Nơi làm việc / Học tập", "Công ty / Đơn vị...", false, editable, window, cx))
+                            }),
+                    )
+                    .child(section_group_header("🏥", "3. Thông tin khám & Giám hộ"))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(self.render_select_dropdown(
+                                "rec-loai-kcb",
+                                "Loại hình khám (QĐ 3176)",
+                                &kcb,
+                                kcb_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("MA_LOAI_KCB".into(), val);
+                                },
+                                cx,
+                            ))
+                            .child(self.render_date_picker_form("rec-ngay-vao", "NGAY_VAO", "Ngày vào khám (dd/mm/yyyy)", "dd/mm/yyyy", false, editable, false, window, cx))
+                            .child(self.render_select_dropdown(
+                                "rec-nhom-mau",
+                                "Nhóm máu",
+                                &nhom_mau,
+                                nhommau_opts,
+                                editable,
+                                |this, val, _, _| {
+                                    this.form_values.insert("NHOM_MAU".into(), val);
+                                },
+                                cx,
+                            ))
+                            .when(show_ly_do, |el| {
+                                el.child(self.render_form_input("LY_DO_VV", "Lý do khám", "Khám sức khỏe", false, editable, window, cx))
+                            }),
+                    )
+                    .when(has_u18 && (show_laixe_rank || show_csgd_doctor || show_guardian || show_sinh_non), |el| {
                         let sinh_non = self.get_form_val("SINH_NON");
                         let qh_tre = self.get_form_val("MOI_QUAN_HE_VOI_TRE");
                         let sn_opts = vec![
@@ -1052,13 +1093,92 @@ impl KskGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Some(rest) = section.strip_prefix("tpl_") {
+            if let Some((tpl_code, tab_key)) = rest.rsplit_once('_') {
+                let mut changed = false;
+                for g in crate::templates::get_template_groups(tpl_code, tab_key) {
+                    for f in g.fields {
+                        if !f.default_normal.is_empty() {
+                            let k = crate::templates::namespaced_key(tpl_code, f.key);
+                            if self.get_form_val(&k).trim().is_empty() {
+                                let def_s = f.default_normal.to_string();
+                                self.form_values.insert(k.clone(), def_s.clone());
+                                if let Some(inp) = self.form_inputs.get(&k).cloned() {
+                                    inp.update(cx, |s, cx| s.set_value(def_s.clone(), window, cx));
+                                }
+                                if let Some(ta) = self.form_textareas.get(&k).cloned() {
+                                    ta.update(cx, |s, cx| s.set_value(def_s, window, cx));
+                                }
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+                if changed && self.editing_section.is_some() {
+                    self.is_dirty = true;
+                }
+                cx.notify();
+                return;
+            }
+        }
+
         let pairs: &[(&str, &str)] = match section {
             "history" => &[
                 ("TSGD_MAC_BENH", "0"),
                 ("TSBT_BENH_KHAC", "0"),
                 ("TSBT_DANG_DIEU_TRI_BENH", "0"),
             ],
-            "physical" => &[("THE_LUC_PL", "1")],
+            "physical" => &[("KHAM_THE_LUC_PL", "1"), ("THE_LUC_PL", "1")],
+            "clin_noi" => &[
+                ("NOI_KHOA_TUAN_HOAN", "Bình thường"),
+                ("NOI_KHOA_TUAN_HOAN_PL", "1"),
+                ("NOI_KHOA_HO_HAP", "Bình thường"),
+                ("NOI_KHOA_HO_HAP_PL", "1"),
+                ("NOI_KHOA_TIEU_HOA", "Bình thường"),
+                ("NOI_KHOA_TIEU_HOA_PL", "1"),
+                ("NOI_KHOA_THAN_TN_SD", "Bình thường"),
+                ("NOI_KHOA_THAN_TIETNIEU_PL", "1"),
+                ("NOI_KHOA_NOI_TIET", "Bình thường"),
+                ("NOI_KHOA_NOI_TIET_PL", "1"),
+                ("NOI_KHOA_CO_XUONG_KHOP", "Bình thường"),
+                ("NOI_KHOA_CO_XUONG_KHOP_PL", "1"),
+                ("NOI_KHOA_THAN_KINH", "Bình thường"),
+                ("NOI_KHOA_THAN_KINH_PL", "1"),
+                ("NOI_KHOA_TAM_THAN", "Bình thường"),
+                ("NOI_KHOA_TAM_THAN_PL", "1"),
+            ],
+            "clin_ngoai" => &[
+                ("KET_QUA_KHAM_NGOAI_KHOA", "Bình thường"),
+                ("KHAM_NGOAI_KHOA_PL", "1"),
+            ],
+            "clin_dalieu" => &[
+                ("KET_QUA_KHAM_DA_LIEU", "Bình thường"),
+                ("KHAM_DA_LIEU_PL", "1"),
+            ],
+            "clin_san" => &[
+                ("KET_QUA_KHAM_SAN_PHU_KHOA", "Bình thường"),
+                ("KHAM_SAN_PHU_KHOA_PL", "1"),
+            ],
+            "clin_mat" => &[
+                ("KHONG_KINH_MAT_PHAI", "10/10"),
+                ("KHONG_KINH_MAT_TRAI", "10/10"),
+                ("BENH_KHAC_MAT", "Bình thường"),
+                ("KHAM_MAT_PL", "1"),
+            ],
+            "clin_tmh" => &[
+                ("TAI_PHAI_NOI_THUONG", "5m"),
+                ("TAI_PHAI_NOI_THAM", "0.5m"),
+                ("TAI_TRAI_NOI_THUONG", "5m"),
+                ("TAI_TRAI_NOI_THAM", "0.5m"),
+                ("BENH_KHAC_TAI_MUI_HONG", "Bình thường"),
+                ("KHAM_TAI_MUI_HONG_PL", "1"),
+            ],
+            "clin_rhm" => &[
+                ("HAM_TREN", "Bình thường"),
+                ("HAM_DUOI", "Bình thường"),
+                ("BENH_KHAC_RANG_HAM_MAT", "Bình thường"),
+                ("KHAM_RANG_HAM_MAT_PL", "1"),
+            ],
             "paraclinical" => &[
                 ("CLS_HUYET_HOC", "Bình thường"),
                 ("CLS_NUOC_TIEU", "Bình thường"),
@@ -1371,19 +1491,6 @@ impl KskGpuiApp {
                         is_locked,
                         cx,
                     ))
-                    .when(editable, |el| {
-                        el.child(
-                            div().flex().flex_row().justify_end().child(
-                                Button::new("btn-quick-fill-physical")
-                                    .label("Điền nhanh mặc định bình thường")
-                                    .small()
-                                    .secondary()
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.quick_fill_tren18_defaults("physical", window, cx);
-                                    })),
-                            ),
-                        )
-                    })
                     .child(
                         div()
                             .flex()
@@ -1404,6 +1511,8 @@ impl KskGpuiApp {
                             .child(self.render_form_input("HUYET_AP", "Huyết áp (mmHg)", "120/80", false, editable, window, cx))
                             .child(self.render_form_input("BS_THE_LUC", "Người khám thể lực", "", false, editable, window, cx)),
                     )
+                    .when_some(bmi_status_badge(&self.get_form_val("CHI_SO_BMI")), |el, b| el.child(b))
+                    .when_some(bp_status_badge(&self.get_form_val("HUYET_AP")), |el, b| el.child(b))
                     .child(self.render_pl_radio_group(
                         "phys",
                         "KHAM_THE_LUC_PL",
@@ -1422,14 +1531,14 @@ impl KskGpuiApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let subtabs = [
-            ("noi", "1. Nội khoa"),
-            ("ngoai", "2. Ngoại khoa"),
-            ("dalieu", "3. Da liễu"),
-            ("san", "4. Sản phụ khoa"),
-            ("mat", "5. Mắt"),
-            ("tmh", "6. Tai - Mũi - Họng"),
-            ("rhm", "7. Răng - Hàm - Mặt"),
-            ("tree", "Tra cứu 110+ bệnh"),
+            ("noi", "🫀 1. Nội khoa"),
+            ("ngoai", "🔪 2. Ngoại khoa"),
+            ("dalieu", "🖐 3. Da liễu"),
+            ("san", "🤱 4. Sản phụ khoa"),
+            ("mat", "👁 5. Mắt"),
+            ("tmh", "👂 6. Tai - Mũi - Họng"),
+            ("rhm", "🦷 7. Răng - Hàm - Mặt"),
+            ("tree", "📚 Tra cứu 110+ bệnh"),
         ];
 
         let active_sub = self.active_clinical_subtab.clone();
@@ -1438,7 +1547,7 @@ impl KskGpuiApp {
             .iter()
             .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
             .collect();
-        let subtab_items: Vec<(String, String)> = subtabs
+        let subtab_items: Vec<(String, String, &'static str, u32)> = subtabs
             .iter()
             .map(|(key, lbl)| {
                 let sec_key = match *key {
@@ -1451,36 +1560,55 @@ impl KskGpuiApp {
                     "rhm" => Some("clin_rhm"),
                     _ => None,
                 };
-                let prefix = match sec_key {
+                let (st_lbl, st_col) = match sec_key {
                     Some(sk) => match super::section_progress_from_map(&clin_map, sk) {
-                        super::SectionProgress::Done => "✓ ",
-                        super::SectionProgress::Partial => "● ",
-                        super::SectionProgress::Empty => "",
+                        super::SectionProgress::Done => ("✓", SUCCESS_COL),
+                        super::SectionProgress::Partial => ("◐", WARN_COL),
+                        super::SectionProgress::Empty => ("○", text_muted()),
                     },
-                    None => "",
+                    None => ("", text_muted()),
                 };
-                ((*key).to_string(), format!("{}{}", prefix, lbl))
+                ((*key).to_string(), (*lbl).to_string(), st_lbl, st_col)
             })
             .collect();
 
-        let subtab_bar = div()
+        let subtab_rail = div()
+            .w(px(215.0))
+            .flex_shrink_0()
             .bg(rgb(bg_card()))
             .border_1()
             .border_color(rgb(border_col()))
             .rounded(px(8.0))
             .p(px(8.0))
             .flex()
-            .flex_row()
-            .flex_wrap()
-            .gap(px(6.0))
-            .children(subtab_items.into_iter().map(|(key, lbl)| {
+            .flex_col()
+            .gap(px(4.0))
+            .child(
+                div()
+                    .px(px(6.0))
+                    .pb(px(4.0))
+                    .text_xs()
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(rgb(text_muted()))
+                    .child("CHUYÊN KHOA LÂM SÀNG"),
+            )
+            .children(subtab_items.into_iter().map(|(key, lbl, st_lbl, st_col)| {
                 let is_act = active_sub == key;
                 let k = key.clone();
-                Button::new(SharedString::from(format!("clin-sub-{}", key)))
-                    .label(lbl)
-                    .small()
-                    .when(is_act, |b| b.primary())
-                    .when(!is_act, |b| b.secondary())
+                div()
+                    .id(SharedString::from(format!("clin-sub-{}", key)))
+                    .px(px(10.0))
+                    .py(px(7.0))
+                    .rounded(px(6.0))
+                    .cursor_pointer()
+                    .bg(rgb(if is_act { primary_light() } else { bg_card() }))
+                    .border_1()
+                    .border_color(rgb(if is_act { PRIMARY_COL } else { bg_card() }))
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(6.0))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.guard_unsaved(
                             super::PendingNav::ClinicalSubtab(k.clone()),
@@ -1488,6 +1616,26 @@ impl KskGpuiApp {
                             cx,
                         );
                     }))
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(if is_act {
+                                gpui::FontWeight::BOLD
+                            } else {
+                                gpui::FontWeight::MEDIUM
+                            })
+                            .text_color(rgb(if is_act { PRIMARY_COL } else { text_main() }))
+                            .child(lbl),
+                    )
+                    .when(!st_lbl.is_empty(), |el| {
+                        el.child(
+                            div()
+                                .text_xs()
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(rgb(if is_act { PRIMARY_COL } else { st_col }))
+                                .child(st_lbl),
+                        )
+                    })
             }));
 
         let body = match active_sub.as_str() {
@@ -1699,10 +1847,11 @@ impl KskGpuiApp {
 
         div()
             .flex()
-            .flex_col()
+            .flex_row()
+            .items_start()
             .gap(px(14.0))
-            .child(subtab_bar)
-            .child(body)
+            .child(subtab_rail)
+            .child(div().flex_1().min_w_0().child(body))
             .into_any_element()
     }
 
