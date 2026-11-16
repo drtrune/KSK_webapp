@@ -1513,6 +1513,41 @@ impl KskGpuiApp {
         }
     }
 
+    pub fn section_has_data(&self, section: &str) -> bool {
+        let has_val = |k: &str| {
+            self.form_values
+                .get(k)
+                .map(|v| !v.trim().is_empty())
+                .unwrap_or(false)
+        };
+        if let Some(rest) = section.strip_prefix("tpl_") {
+            if let Some((tpl_code, tab_key)) = rest.rsplit_once('_') {
+                for g in crate::templates::get_template_groups(tpl_code, tab_key) {
+                    for f in g.fields {
+                        let nk = crate::templates::namespaced_key(tpl_code, f.key);
+                        if has_val(&nk) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        let model_sec = match section {
+            "clin_noi" => "clinical_noi",
+            "clin_ngoai" => "clinical_ngoai",
+            "clin_dalieu" => "clinical_dalieu",
+            "clin_san" => "clinical_san",
+            "clin_mat" => "clinical_mat",
+            "clin_tmh" => "clinical_tmh",
+            "clin_rhm" => "clinical_rhm",
+            other => other,
+        };
+        crate::models::get_section_fields(model_sec)
+            .iter()
+            .any(|f| has_val(f))
+    }
+
     pub fn auto_enter_edit_for_current_view(
         &mut self,
         window: &mut Window,
@@ -1522,9 +1557,14 @@ impl KskGpuiApp {
             return;
         }
         if let Some((sec, true)) = self.current_section_key_and_can_edit() {
-            self.enter_edit_section(&sec, window, cx);
-            self.is_dirty = false;
-            self.pending_focus_first_input = true;
+            if self.is_creating_new || !self.section_has_data(&sec) {
+                self.enter_edit_section(&sec, window, cx);
+                self.is_dirty = false;
+                self.pending_focus_first_input = true;
+            } else {
+                self.editing_section = None;
+                self.pending_focus_first_input = false;
+            }
         } else {
             self.editing_section = None;
             self.pending_focus_first_input = false;

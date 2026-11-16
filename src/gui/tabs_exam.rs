@@ -183,11 +183,12 @@ impl KskGpuiApp {
             self.focus_first_form_input(window, cx);
         }
         let sticky_sec = self.current_section_key_and_can_edit();
-        let sticky_editing = match &sticky_sec {
+        let (sticky_editing, sticky_can_enter_edit) = match &sticky_sec {
             Some((sec, true)) if self.editing_section.as_deref() == Some(sec.as_str()) => {
-                Some(sec.clone())
+                (Some(sec.clone()), None)
             }
-            _ => None,
+            Some((sec, true)) => (None, Some(sec.clone())),
+            _ => (None, None),
         };
         let sticky_dirty = self.is_dirty;
 
@@ -413,6 +414,9 @@ impl KskGpuiApp {
                             .when(sticky_editing.is_some() && !sticky_dirty, |el| {
                                 el.child(badge("Đang nhập liệu", primary_light(), PRIMARY_COL))
                             })
+                            .when(sticky_can_enter_edit.is_some(), |el| {
+                                el.child(badge("Đã có dữ liệu (chế độ xem)", bg_subtle(), text_muted()))
+                            })
                             .child(
                                 div()
                                     .text_xs()
@@ -444,6 +448,17 @@ impl KskGpuiApp {
                                         this.cycle_exam_tab(1, window, cx);
                                     })),
                             )
+                            .when_some(sticky_can_enter_edit, |el, sec_id| {
+                                el.child(
+                                    Button::new("btn-sticky-edit")
+                                        .label("Sửa")
+                                        .small()
+                                        .primary()
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            this.enter_edit_section(&sec_id, window, cx);
+                                        })),
+                                )
+                            })
                             .when_some(sticky_editing, |el, sec_id| {
                                 let sec_save = sec_id.clone();
                                 let sec_next = sec_id;
@@ -2763,8 +2778,6 @@ impl KskGpuiApp {
 
         let tpl_owned = tpl_code.to_string();
         let tab_owned = tab_key.to_string();
-        let sec_for_edit = section_id.clone();
-        let sec_for_save = section_id.clone();
 
         let custom_sub = self
             .active_custom_subtab
@@ -2924,96 +2937,44 @@ impl KskGpuiApp {
                                 .flex_row()
                                 .items_center()
                                 .gap(px(8.0))
-                                .when(!is_locked && can_role, |el| {
-                                    if editable {
-                                        el.child(
-                                            Button::new("btn-tpl-fill-defaults")
-                                                .label("Điền nhanh mặc định bình thường")
-                                                .small()
-                                                .secondary()
-                                                .on_click(cx.listener(move |this, _, window, cx| {
-                                                    let grps = crate::templates::get_template_groups(
-                                                        &tpl_owned,
-                                                        &tab_owned,
-                                                    );
-                                                    for g in grps {
-                                                        for f in g.fields {
-                                                            if !f.default_normal.is_empty() {
-                                                                let k = crate::templates::namespaced_key(
-                                                                    &tpl_owned,
-                                                                    f.key,
-                                                                );
-                                                                if this.get_form_val(&k).trim().is_empty() {
-                                                                    let def_s = f.default_normal.to_string();
-                                                                    this.form_values.insert(k.clone(), def_s.clone());
-                                                                    if let Some(inp) = this.form_inputs.get(&k) {
-                                                                        inp.update(cx, |s, cx| {
-                                                                            s.set_value(def_s.clone(), window, cx);
-                                                                        });
-                                                                    }
-                                                                    if let Some(ta) = this.form_textareas.get(&k) {
-                                                                        ta.update(cx, |s, cx| {
-                                                                            s.set_value(def_s, window, cx);
-                                                                        });
-                                                                    }
+                                .when(!is_locked && can_role && editable, |el| {
+                                    el.child(
+                                        Button::new("btn-tpl-fill-defaults")
+                                            .label("Điền nhanh mặc định bình thường")
+                                            .small()
+                                            .secondary()
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                let grps = crate::templates::get_template_groups(
+                                                    &tpl_owned,
+                                                    &tab_owned,
+                                                );
+                                                for g in grps {
+                                                    for f in g.fields {
+                                                        if !f.default_normal.is_empty() {
+                                                            let k = crate::templates::namespaced_key(
+                                                                &tpl_owned,
+                                                                f.key,
+                                                            );
+                                                            if this.get_form_val(&k).trim().is_empty() {
+                                                                let def_s = f.default_normal.to_string();
+                                                                this.form_values.insert(k.clone(), def_s.clone());
+                                                                if let Some(inp) = this.form_inputs.get(&k) {
+                                                                    inp.update(cx, |s, cx| {
+                                                                        s.set_value(def_s.clone(), window, cx);
+                                                                    });
+                                                                }
+                                                                if let Some(ta) = this.form_textareas.get(&k) {
+                                                                    ta.update(cx, |s, cx| {
+                                                                        s.set_value(def_s, window, cx);
+                                                                    });
                                                                 }
                                                             }
                                                         }
                                                     }
-                                                    cx.notify();
-                                                })),
-                                        )
-                                        .child(
-                                            Button::new("btn-tpl-cancel")
-                                                .label("Hủy")
-                                                .small()
-                                                .ghost()
-                                                .on_click(cx.listener(|this, _, window, cx| {
-                                                    this.editing_section = None;
-                                                    this.is_dirty = false;
-                                                    if let Some(rid) = this.selected_record_id {
-                                                        this.load_record_into_form(rid, window, cx);
-                                                    }
-                                                    cx.notify();
-                                                })),
-                                        )
-                                        .child({
-                                            let sec_for_next = sec_for_save.clone();
-                                            div()
-                                                .flex()
-                                                .flex_row()
-                                                .items_center()
-                                                .gap(px(6.0))
-                                                .child(
-                                                    Button::new("btn-tpl-save")
-                                                        .label("Lưu (Ctrl+S)")
-                                                        .small()
-                                                        .secondary()
-                                                        .on_click(cx.listener(move |this, _, window, cx| {
-                                                            this.save_section(&sec_for_save, window, cx);
-                                                        })),
-                                                )
-                                                .child(
-                                                    Button::new("btn-tpl-save-next")
-                                                        .label("Lưu & tiếp → (Ctrl+Enter)")
-                                                        .small()
-                                                        .primary()
-                                                        .on_click(cx.listener(move |this, _, window, cx| {
-                                                            this.save_and_next_section(&sec_for_next, window, cx);
-                                                        })),
-                                                )
-                                        })
-                                    } else {
-                                        el.child(
-                                            Button::new("btn-tpl-edit")
-                                                .label("Chỉnh sửa mục này")
-                                                .small()
-                                                .primary()
-                                                .on_click(cx.listener(move |this, _, window, cx| {
-                                                    this.enter_edit_section(&sec_for_edit, window, cx);
-                                                })),
-                                        )
-                                    }
+                                                }
+                                                cx.notify();
+                                            })),
+                                    )
                                 }),
                         ),
                 ),

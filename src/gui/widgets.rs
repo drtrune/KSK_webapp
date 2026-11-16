@@ -561,16 +561,12 @@ impl KskGpuiApp {
 
     pub fn render_section_action_bar(
         &self,
-        section_key: &str,
+        _section_key: &str,
         title: &str,
         can_edit_role: bool,
         is_locked: bool,
-        cx: &mut Context<Self>,
+        _cx: &mut Context<Self>,
     ) -> AnyElement {
-        let is_editing = self.editing_section.as_deref() == Some(section_key);
-        let sec_owned = section_key.to_string();
-        let sec_save = section_key.to_string();
-
         div()
             .flex()
             .flex_row()
@@ -597,61 +593,6 @@ impl KskGpuiApp {
                     })
                     .when(!is_locked && !can_edit_role, |el| {
                         el.child(badge("Chỉ xem", bg_subtle(), text_muted()))
-                    }),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .items_center()
-                    .gap(px(8.0))
-                    .when(!is_locked && can_edit_role && !is_editing, |el| {
-                        let s = sec_owned.clone();
-                        el.child(
-                            Button::new(SharedString::from(format!("btn-edit-{}", sec_owned)))
-                                .label("Chỉnh sửa")
-                                .small()
-                                .secondary()
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.enter_edit_section(&s, window, cx);
-                                })),
-                        )
-                    })
-                    .when(!is_locked && can_edit_role && is_editing, |el| {
-                        let s_save = sec_save.clone();
-                        let s_next = sec_save.clone();
-                        el.child(
-                            Button::new(SharedString::from(format!("btn-cancel-{}", sec_owned)))
-                                .label("Hủy")
-                                .small()
-                                .secondary()
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.is_dirty = false;
-                                    this.editing_section = None;
-                                    if let Some(id) = this.selected_record_id {
-                                        this.load_record_into_form(id, window, cx);
-                                    }
-                                    cx.notify();
-                                })),
-                        )
-                        .child(
-                            Button::new(SharedString::from(format!("btn-save-{}", sec_save)))
-                                .label("Lưu (Ctrl+S)")
-                                .small()
-                                .secondary()
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.save_section(&s_save, window, cx);
-                                })),
-                        )
-                        .child(
-                            Button::new(SharedString::from(format!("btn-save-next-{}", sec_save)))
-                                .label("Lưu & tiếp → (Ctrl+Enter)")
-                                .small()
-                                .primary()
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.save_and_next_section(&s_next, window, cx);
-                                })),
-                        )
                     }),
             )
             .into_any_element()
