@@ -174,37 +174,6 @@ pub fn draw_dotted_line(layer: &PdfLayerReference, x1: f32, y: f32, x2: f32) {
     }
 }
 
-/// Vẽ đường gạch đứt nằm ngang từ x1 đến x2 để phân tách nhẹ các phần trong ô.
-pub fn draw_dashed_line(
-    layer: &PdfLayerReference,
-    x1: f32,
-    y: f32,
-    x2: f32,
-    dash_mm: f32,
-    gap_mm: f32,
-    thickness_pt: f32,
-) {
-    if x2 <= x1 + 1.0 || dash_mm <= 0.1 {
-        return;
-    }
-    layer.set_outline_color(gray_line());
-    layer.set_outline_thickness(thickness_pt);
-    let mut cx = x1;
-    let step = dash_mm + gap_mm.max(0.3);
-    while cx < x2 {
-        let end = (cx + dash_mm).min(x2);
-        let line = Line {
-            points: vec![
-                (Point::new(Mm(cx), Mm(y)), false),
-                (Point::new(Mm(end), Mm(y)), false),
-            ],
-            is_closed: false,
-        };
-        layer.add_line(line);
-        cx += step;
-    }
-}
-
 /// Vẽ khung viền hình chữ nhật (tọa độ đáy trái).
 pub fn draw_rect_stroke(
     layer: &PdfLayerReference,

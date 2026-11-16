@@ -260,6 +260,7 @@ fn render_exam_boxed(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig) 
     option_row(cur, lx, rx, "Tình trạng dinh dưỡng:", &dd_opts, fv.ns("TINH_TRANG_DINH_DUONG"), 3);
     bx.end(cur);
 
+    cur.next_page();
     let yn_to_u8 = |b: Option<bool>| -> Option<u8> { b.map(|v| if v { 0 } else { 1 }) };
     cur.draw_section_heading("ĐÁNH GIÁ PHÁT TRIỂN TINH THẦN - VẬN ĐỘNG");
     draw_checklist_table(

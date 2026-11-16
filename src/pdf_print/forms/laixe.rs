@@ -5,7 +5,7 @@ use crate::config::AppConfig;
 
 use super::super::cursor::{draw_label_val_wrapped, PdfPageCursor};
 use super::super::primitives::{
-    draw_checkbox, draw_dashed_line, draw_rect_stroke, draw_text, draw_text_centered, wrap_lines,
+    draw_checkbox, draw_rect_stroke, draw_text, draw_text_centered, wrap_lines,
     CONTENT_W, FONT_BODY, FONT_SMALL, LINE_H, MARGIN_L, MARGIN_R, PAGE_W,
 };
 use super::super::values::FormValues;
@@ -315,7 +315,6 @@ fn render_clinical(fv: &FormValues, cur: &mut PdfPageCursor) {
 
         draw_inline_slot(c, lx, rx, c.y, "Các bệnh về mắt (nếu có):", fv.ns("MAT_BENH"), false);
         c.y -= LINE_H;
-        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, rx, c.y, "Kết luận:", fv.ns("KL_MAT"), true);
     });
 
@@ -327,7 +326,6 @@ fn render_clinical(fv: &FormValues, cur: &mut PdfPageCursor) {
         draw_inline_two(c, lx, rx, "+ Tai phải - Nói thường (m):", fv.ns("TMH_TP_THUONG"), "Nói thầm (m):", fv.ns("TMH_TP_THAM"));
         draw_inline_slot(c, lx, rx, c.y, "- Các bệnh về tai mũi họng (nếu có):", fv.ns("TMH_BENH"), false);
         c.y -= LINE_H;
-        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, rx, c.y, "Kết luận:", fv.ns("KL_TMH"), true);
     });
 
@@ -338,7 +336,6 @@ fn render_clinical(fv: &FormValues, cur: &mut PdfPageCursor) {
         draw_inline_two(c, lx, rx, "+ Mạch (lần/phút):", fv.ns("MACH"), "+ Huyết áp (mmHg):", fv.ns("HUYET_AP"));
         draw_inline_slot(c, lx, rx, c.y, "Khám tim mạch:", fv.ns("KLS_TIM_MACH"), false);
         c.y -= LINE_H;
-        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, rx, c.y, "Kết luận:", fv.ns("KL_TIM_MACH"), true);
     });
 
