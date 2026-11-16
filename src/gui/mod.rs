@@ -2158,6 +2158,14 @@ impl KskGpuiApp {
         if tpls.is_empty() {
             tpls.push(self.active_record_template.clone());
         }
+        if tpls.len() == 1 {
+            if is_docx {
+                self.execute_export_docx(is_reception, tpls, cx);
+            } else {
+                self.execute_print_record_html(is_reception, tpls, cx);
+            }
+            return;
+        }
         self.print_modal_templates = tpls;
         self.print_modal_action = Some((is_docx, is_reception));
         self.open_dropdown = None;
