@@ -96,6 +96,26 @@ impl<'a> FormValues<'a> {
         get_cat_name(self.cat_map, cat_key, code)
     }
 
+    /// Ghép địa chỉ đầy đủ (số nhà + phường/xã + tỉnh/thành), tránh lặp nếu DIA_CHI đã chứa sẵn.
+    pub fn full_address(&self) -> String {
+        let base = self.admin("DIA_CHI");
+        let xa = self.cat("XA_PHUONG", self.admin("MAXA_CU_TRU"));
+        let tinh = self.cat("TINH_TP", self.admin("MATINH_CU_TRU"));
+        let base_low = base.to_lowercase();
+
+        let mut parts: Vec<String> = Vec::new();
+        if !base.is_empty() {
+            parts.push(base.to_string());
+        }
+        if !xa.trim().is_empty() && !base_low.contains(&xa.trim().to_lowercase()) {
+            parts.push(xa.trim().to_string());
+        }
+        if !tinh.trim().is_empty() && !base_low.contains(&tinh.trim().to_lowercase()) {
+            parts.push(tinh.trim().to_string());
+        }
+        parts.join(", ")
+    }
+
     /// Lấy 2 chữ số cuối của năm khám (ưu tiên NGAY_KHAM, NGAY_VAO; mặc định năm hiện tại).
     pub fn exam_year_2d(&self) -> String {
         for key in ["NGAY_KHAM", "NGAY_VAO"] {

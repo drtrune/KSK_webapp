@@ -178,6 +178,20 @@ mod tests {
         let filled_fv = FormValues::new(&form, &cats, false, "LAI_XE");
         assert_eq!(filled_fv.text(&["NOI_KHOA_TUAN_HOAN"]), "Bình thường");
         assert_eq!(filled_fv.ns_yes_no("TSGD_MAC_BENH"), Some(false));
+
+        let mut addr_form = Map::new();
+        addr_form.insert("DIA_CHI".into(), Value::String("Tổ 11, Phường Quy Nhơn Đông, Tỉnh Gia Lai".into()));
+        addr_form.insert("MAXA_CU_TRU".into(), Value::String("01".into()));
+        addr_form.insert("MATINH_CU_TRU".into(), Value::String("52".into()));
+        let mut addr_cats = Map::new();
+        let mut xa = Map::new();
+        xa.insert("01".into(), Value::String("Phường Quy Nhơn Đông".into()));
+        let mut tinh = Map::new();
+        tinh.insert("52".into(), Value::String("Tỉnh Gia Lai".into()));
+        addr_cats.insert("XA_PHUONG".into(), Value::Object(xa));
+        addr_cats.insert("TINH_TP".into(), Value::Object(tinh));
+        let addr_fv = FormValues::new(&addr_form, &addr_cats, true, "DUOI_6");
+        assert_eq!(addr_fv.full_address(), "Tổ 11, Phường Quy Nhơn Đông, Tỉnh Gia Lai");
     }
 
     #[test]

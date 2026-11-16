@@ -8,7 +8,8 @@ use super::super::cursor::PdfPageCursor;
 use super::super::primitives::{draw_checkbox, draw_text, FONT_BODY, LINE_H};
 use super::super::values::FormValues;
 use super::super::widgets::{
-    draw_checklist_table, draw_inline_slot, draw_inline_two, option_row, write_lines, BoxedSection,
+    draw_boxed_wrapped_slot, draw_checklist_table, draw_inline_slot, draw_inline_two, option_row,
+    write_lines, BoxedSection,
 };
 
 /// Vẽ toàn bộ phiếu Kiểm tra sức khỏe đầu năm học cho trẻ em mầm non.
@@ -114,26 +115,15 @@ fn render_admin_boxed(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig)
     let nguon = fv.cat("NGUON_CHI_TRA", fv.admin("NGUON_CHI_TRA"));
     draw_inline_two(cur, lx, rx, "9. Nguồn chi trả:", &nguon, "10. Nhóm máu:", fv.admin("NHOM_MAU"));
 
-    let tinh = fv.cat("TINH_TP", fv.admin("MATINH_CU_TRU"));
-    let xa = fv.cat("XA_PHUONG", fv.admin("MAXA_CU_TRU"));
-    let dia_chi = [fv.admin("DIA_CHI"), xa.as_str(), tinh.as_str()]
-        .into_iter()
-        .filter(|s| !s.trim().is_empty())
-        .collect::<Vec<_>>()
-        .join(", ");
-    draw_inline_slot(cur, lx, rx, cur.y, "11. Nơi ở hiện tại:", &dia_chi, false);
-    cur.y -= LINE_H;
-
-    draw_inline_slot(
+    draw_boxed_wrapped_slot(&mut bx, cur, lx, rx, "11. Nơi ở hiện tại:", &fv.full_address());
+    draw_boxed_wrapped_slot(
+        &mut bx,
         cur,
         lx,
         rx,
-        cur.y,
         "12. Tên cơ sở giáo dục đang theo học:",
         fv.admin("TEN_CSGD"),
-        false,
     );
-    cur.y -= LINE_H;
 
     draw_inline_slot(
         cur,
@@ -325,8 +315,7 @@ fn render_exam_boxed(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig) 
         }
     }
 
-    cls_box.divider(cur, Some("KẾT LUẬN VÀ TƯ VẤN"));
-    cls_box.ensure_space(cur, 36.0);
+    cls_box.divider_with_min_space(cur, Some("KẾT LUẬN VÀ TƯ VẤN"), 40.0);
     draw_text(&cur.layer, &cur.fonts.bold, FONT_BODY, clx, cur.y, "Kết luận về sức khỏe:");
     cur.y -= LINE_H;
     draw_checkbox(&cur.layer, clx, cur.y, fv.ns_yes_no("BINH_THUONG") == Some(true));

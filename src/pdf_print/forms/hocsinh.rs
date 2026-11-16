@@ -77,10 +77,7 @@ fn render_admin(fv: &FormValues, cur: &mut PdfPageCursor) {
     let nguon = fv.cat("NGUON_CHI_TRA", fv.admin("NGUON_CHI_TRA"));
     cur.draw_two_fields("8. Nguồn chi trả:", &nguon, "9. Nhóm máu:", fv.admin("NHOM_MAU"));
 
-    let tinh = fv.cat("TINH_TP", fv.admin("MATINH_CU_TRU"));
-    let xa = fv.cat("XA_PHUONG", fv.admin("MAXA_CU_TRU"));
-    cur.draw_two_fields("10. Nơi ở hiện tại - Tỉnh/thành:", &tinh, "Phường/xã:", &xa);
-    cur.draw_field("    Số nhà/thôn/xóm:", fv.admin("DIA_CHI"), false);
+    cur.draw_field("10. Nơi ở hiện tại:", &fv.full_address(), false);
     cur.draw_field("- Tên cơ sở giáo dục đang theo học:", fv.admin("TEN_CSGD"), false);
     let ly_do = if fv.admin("LY_DO_VV").is_empty() {
         "Kiểm tra sức khỏe đầu năm học"
@@ -123,30 +120,24 @@ fn render_history(fv: &FormValues, cur: &mut PdfPageCursor) {
         false,
     );
     cur.y -= LINE_H;
-    write_lines(cur, MARGIN_L, max_x, "", "", 1);
 
-    cur.ensure_space(26.0);
+    cur.ensure_space(20.0);
     draw_text(&cur.layer, &cur.fonts.bold, FONT_BODY, MARGIN_L, cur.y, "2. Tiền sử bản thân:");
-    cur.y -= LINE_H;
+    cur.y -= 4.5;
     draw_text(&cur.layer, &cur.fonts.bold, FONT_BODY, MARGIN_L, cur.y, "a) Sản khoa:");
-    cur.y -= LINE_H;
-    let sk_bt = fv.ns_matches("TSBT_SAN_KHOA", "Bình thường");
-    let sk_kbt = fv.ns_matches("TSBT_SAN_KHOA", "Không bình thường");
-    draw_checkbox(&cur.layer, MARGIN_L, cur.y, sk_bt);
-    draw_text(&cur.layer, &cur.fonts.regular, FONT_BODY, MARGIN_L + 4.5, cur.y, "Bình thường.");
-    cur.y -= LINE_H;
-    draw_checkbox(&cur.layer, MARGIN_L, cur.y, sk_kbt);
+    draw_checkbox(&cur.layer, MARGIN_L + 28.0, cur.y, fv.ns_matches("TSBT_SAN_KHOA", "Bình thường"));
+    draw_text(&cur.layer, &cur.fonts.regular, FONT_BODY, MARGIN_L + 32.5, cur.y, "Bình thường.");
+    draw_checkbox(&cur.layer, MARGIN_L + 60.0, cur.y, fv.ns_matches("TSBT_SAN_KHOA", "Không bình thường"));
     draw_inline_slot(
         cur,
-        MARGIN_L + 4.5,
+        MARGIN_L + 64.5,
         max_x,
         cur.y,
-        "Không bình thường (Đẻ thiếu tháng/thừa cân/can thiệp/ngạt; Mẹ bệnh khi mang thai):",
+        "Không BT (thiếu tháng/can thiệp/ngạt/mẹ bệnh):",
         "",
         false,
     );
     cur.y -= LINE_H;
-    write_lines(cur, MARGIN_L, max_x, "", "", 1);
 
     cur.ensure_space(16.0);
     draw_text(&cur.layer, &cur.fonts.bold, FONT_BODY, MARGIN_L, cur.y, "b) Tiêm chủng:");
@@ -213,12 +204,11 @@ fn render_history(fv: &FormValues, cur: &mut PdfPageCursor) {
         cur.y,
         "d) Hiện tại có đang điều trị bệnh gì không?",
     );
-    cur.y -= LINE_H;
     let dt_yn = fv.ns_yes_no("DANG_DIEU_TRI_BENH");
-    draw_checkbox(&cur.layer, MARGIN_L, cur.y, dt_yn == Some(false));
-    draw_text(&cur.layer, &cur.fonts.regular, FONT_BODY, MARGIN_L + 4.5, cur.y, "Không");
-    draw_checkbox(&cur.layer, MARGIN_L + 22.0, cur.y, dt_yn == Some(true));
-    draw_text(&cur.layer, &cur.fonts.regular, FONT_BODY, MARGIN_L + 26.5, cur.y, "Có");
+    draw_checkbox(&cur.layer, MARGIN_L + 82.0, cur.y, dt_yn == Some(false));
+    draw_text(&cur.layer, &cur.fonts.regular, FONT_BODY, MARGIN_L + 86.5, cur.y, "Không");
+    draw_checkbox(&cur.layer, MARGIN_L + 104.0, cur.y, dt_yn == Some(true));
+    draw_text(&cur.layer, &cur.fonts.regular, FONT_BODY, MARGIN_L + 108.5, cur.y, "Có");
     cur.y -= LINE_H;
     write_lines(
         cur,
@@ -226,7 +216,7 @@ fn render_history(fv: &FormValues, cur: &mut PdfPageCursor) {
         max_x,
         "Nếu “có”, ghi rõ tên bệnh và liệt kê các thuốc đang dùng:",
         fv.ns("GHI_RO_BENH_DANG_DT"),
-        2,
+        1,
     );
 }
 

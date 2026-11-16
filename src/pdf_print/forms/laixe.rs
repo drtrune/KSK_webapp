@@ -5,8 +5,8 @@ use crate::config::AppConfig;
 
 use super::super::cursor::{draw_label_val_wrapped, PdfPageCursor};
 use super::super::primitives::{
-    draw_checkbox, draw_rect_stroke, draw_text, draw_text_centered, wrap_lines, CONTENT_W,
-    FONT_BODY, FONT_SMALL, LINE_H, MARGIN_L, MARGIN_R, PAGE_W,
+    draw_checkbox, draw_dashed_line, draw_rect_stroke, draw_text, draw_text_centered, wrap_lines,
+    CONTENT_W, FONT_BODY, FONT_SMALL, LINE_H, MARGIN_L, MARGIN_R, PAGE_W,
 };
 use super::super::values::FormValues;
 use super::super::widgets::{
@@ -136,13 +136,6 @@ fn render_photo_and_admin(fv: &FormValues, cur: &mut PdfPageCursor) {
         false,
     );
 
-    let tinh = fv.cat("TINH_TP", fv.admin("MATINH_CU_TRU"));
-    let xa = fv.cat("XA_PHUONG", fv.admin("MAXA_CU_TRU"));
-    let dia_chi = [fv.admin("DIA_CHI"), xa.as_str(), tinh.as_str()]
-        .into_iter()
-        .filter(|s| !s.trim().is_empty())
-        .collect::<Vec<_>>()
-        .join(", ");
     ry = draw_label_val_wrapped(
         &cur.layer,
         cur.fonts,
@@ -150,7 +143,7 @@ fn render_photo_and_admin(fv: &FormValues, cur: &mut PdfPageCursor) {
         ry,
         max_x,
         "6. Chỗ ở hiện tại:",
-        &dia_chi,
+        &fv.full_address(),
         FONT_BODY,
         false,
     );
@@ -195,7 +188,7 @@ fn render_history(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig) {
         max_x,
         "Nếu “có”, đề nghị ghi cụ thể tên bệnh:",
         fv.ns("TSGD_TEN_BENH"),
-        2,
+        1,
     );
 
     cur.ensure_space(14.0);
@@ -241,14 +234,14 @@ fn render_history(fv: &FormValues, cur: &mut PdfPageCursor, cfg: &AppConfig) {
     draw_ts_table_double(cur, false, &left_rows, &right_rows);
     cur.y -= 3.5;
 
-    write_lines(cur, MARGIN_L, max_x, "Nếu “có”, đề nghị ghi cụ thể tên bệnh:", fv.ns("TSBT_TEN_BENH"), 2);
+    write_lines(cur, MARGIN_L, max_x, "Nếu “có”, đề nghị ghi cụ thể tên bệnh:", fv.ns("TSBT_TEN_BENH"), 1);
     write_lines(
         cur,
         MARGIN_L,
         max_x,
         "3. Câu hỏi khác: Đang điều trị bệnh gì? Liệt kê thuốc & liều lượng:",
         fv.ns("TSBT_DANG_DIEU_TRI"),
-        2,
+        1,
     );
 
     let date_parts = fv.exam_date_parts();
@@ -322,6 +315,7 @@ fn render_clinical(fv: &FormValues, cur: &mut PdfPageCursor) {
 
         draw_inline_slot(c, lx, rx, c.y, "Các bệnh về mắt (nếu có):", fv.ns("MAT_BENH"), false);
         c.y -= LINE_H;
+        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, rx, c.y, "Kết luận:", fv.ns("KL_MAT"), true);
     });
 
@@ -333,6 +327,7 @@ fn render_clinical(fv: &FormValues, cur: &mut PdfPageCursor) {
         draw_inline_two(c, lx, rx, "+ Tai phải - Nói thường (m):", fv.ns("TMH_TP_THUONG"), "Nói thầm (m):", fv.ns("TMH_TP_THAM"));
         draw_inline_slot(c, lx, rx, c.y, "- Các bệnh về tai mũi họng (nếu có):", fv.ns("TMH_BENH"), false);
         c.y -= LINE_H;
+        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, rx, c.y, "Kết luận:", fv.ns("KL_TMH"), true);
     });
 
@@ -343,6 +338,7 @@ fn render_clinical(fv: &FormValues, cur: &mut PdfPageCursor) {
         draw_inline_two(c, lx, rx, "+ Mạch (lần/phút):", fv.ns("MACH"), "+ Huyết áp (mmHg):", fv.ns("HUYET_AP"));
         draw_inline_slot(c, lx, rx, c.y, "Khám tim mạch:", fv.ns("KLS_TIM_MACH"), false);
         c.y -= LINE_H;
+        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, rx, c.y, "Kết luận:", fv.ns("KL_TIM_MACH"), true);
     });
 
@@ -356,7 +352,7 @@ fn render_paraclinical_and_conclusion(fv: &FormValues, cur: &mut PdfPageCursor, 
     cur.draw_section_heading("III. KHÁM CẬN LÂM SÀNG");
     let col1_w = CONTENT_W * 0.72;
     let col2_w = CONTENT_W - col1_w;
-    draw_exam_table_header(cur, col1_w, col2_w, "Nội dung khám", "Họ tên, chữ ký BS / Trưởng bộ phận");
+    draw_exam_table_header(cur, col1_w, col2_w, "Nội dung khám", "Họ tên, chữ ký\nBS / Trưởng BP");
 
     draw_exam_custom_row(cur, col1_w, col2_w, 18.0, fv.ns("BS_XN_MA_TUY"), |c, lx, rx| {
         draw_text(

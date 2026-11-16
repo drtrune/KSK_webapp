@@ -5,7 +5,8 @@ use crate::config::AppConfig;
 
 use super::super::cursor::PdfPageCursor;
 use super::super::primitives::{
-    draw_checkbox, draw_text, wrap_lines, CONTENT_W, FONT_BODY, LINE_H, MARGIN_L,
+    draw_checkbox, draw_dashed_line, draw_text, wrap_lines, CONTENT_W, FONT_BODY, LINE_H,
+    MARGIN_L,
 };
 use super::super::values::FormValues;
 use super::super::widgets::{
@@ -74,10 +75,7 @@ fn render_admin_section(fv: &FormValues, cur: &mut PdfPageCursor) {
     let nguon = fv.cat("NGUON_CHI_TRA", fv.admin("NGUON_CHI_TRA"));
     cur.draw_two_fields("8. Nguồn chi trả:", &nguon, "9. Nhóm máu:", fv.admin("NHOM_MAU"));
 
-    let tinh = fv.cat("TINH_TP", fv.admin("MATINH_CU_TRU"));
-    let xa = fv.cat("XA_PHUONG", fv.admin("MAXA_CU_TRU"));
-    cur.draw_two_fields("10. Nơi ở hiện tại - Tỉnh/thành:", &tinh, "Phường/xã:", &xa);
-    cur.draw_field("    Số nhà/thôn/xóm:", fv.admin("DIA_CHI"), false);
+    cur.draw_field("10. Nơi ở hiện tại:", &fv.full_address(), false);
 
     let nghe = fv.cat("NGHE_NGHIEP", fv.admin("MA_NGHE_NGHIEP"));
     cur.draw_field("11. Nghề nghiệp:", &nghe, false);
@@ -336,6 +334,7 @@ fn render_clinical_section(fv: &FormValues, cur: &mut PdfPageCursor) {
         );
         draw_inline_slot(c, lx, rx, c.y, "Các bệnh về mắt (nếu có):", fv.text(&["BENH_KHAC_MAT", "KHAM_MAT"]), false);
         c.y -= LINE_H;
+        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, rx, c.y, "Phân loại:", fv.text(&["KHAM_MAT_PL", "PL_MAT"]), true);
     });
 
@@ -363,6 +362,7 @@ fn render_clinical_section(fv: &FormValues, cur: &mut PdfPageCursor) {
         );
         draw_inline_slot(c, lx, rx, c.y, "Các bệnh về tai mũi họng (nếu có):", fv.text(&["BENH_KHAC_TAI_MUI_HONG", "KHAM_TMH"]), false);
         c.y -= LINE_H;
+        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, rx, c.y, "Phân loại:", fv.text(&["KHAM_TAI_MUI_HONG_PL", "PL_TMH"]), true);
     });
 
@@ -376,6 +376,7 @@ fn render_clinical_section(fv: &FormValues, cur: &mut PdfPageCursor) {
         c.y -= LINE_H;
         draw_inline_slot(c, lx, rx, c.y, "Các bệnh về răng hàm mặt (nếu có):", fv.text(&["BENH_KHAC_RANG_HAM_MAT", "KHAM_RHM"]), false);
         c.y -= LINE_H;
+        draw_dashed_line(&c.layer, lx - 1.0, c.y + 3.8, rx + 1.0, 1.6, 1.2, 0.35);
         draw_inline_slot(c, lx, rx, c.y, "Phân loại:", fv.text(&["KHAM_RANG_HAM_MAT_PL", "PL_RHM"]), true);
     });
 }

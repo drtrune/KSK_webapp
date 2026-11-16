@@ -1,8 +1,8 @@
 use super::cursor::PdfPageCursor;
 use super::primitives::{
-    approx_text_w_mm, draw_checkbox, draw_dotted_line, draw_line, draw_rect_stroke, draw_text,
-    draw_text_centered, wrap_lines, BOTTOM_Y, CONTENT_W, FONT_BODY, FONT_SMALL, LINE_H, MARGIN_L,
-    PAGE_W, MARGIN_R,
+    approx_text_w_mm, draw_checkbox, draw_dashed_line, draw_dotted_line, draw_line,
+    draw_rect_stroke, draw_text, draw_text_centered, wrap_lines, BOTTOM_Y, CONTENT_W, FONT_BODY,
+    FONT_SMALL, LINE_H, MARGIN_L, MARGIN_R, PAGE_W,
 };
 
 /// Vẽ nhãn và n dòng kẻ chấm để điền tay; nếu có giá trị thì tự động ngắt dòng in lên trên.
@@ -154,7 +154,17 @@ impl BoxedSection {
 
     /// Vẽ đường phân cách ngang bên trong khung trước khi sang nhóm con tiếp theo.
     pub fn divider(&mut self, cur: &mut PdfPageCursor, subtitle: Option<&str>) {
-        self.ensure_space(cur, 14.0);
+        self.divider_with_min_space(cur, subtitle, 14.0);
+    }
+
+    /// Vẽ đường phân cách ngang kèm ngưỡng chỗ trống tối thiểu để tránh tiêu đề đứng mồ côi cuối trang.
+    pub fn divider_with_min_space(
+        &mut self,
+        cur: &mut PdfPageCursor,
+        subtitle: Option<&str>,
+        min_space: f32,
+    ) {
+        self.ensure_space(cur, min_space);
         draw_line(
             &cur.layer,
             self.x,
@@ -173,7 +183,7 @@ impl BoxedSection {
                 cur.y,
                 sub,
             );
-            cur.y -= LINE_H + 0.5;
+            cur.y -= LINE_H + 0.3;
         }
     }
 
@@ -214,44 +224,44 @@ pub fn draw_checklist_table(
     let w_name = CONTENT_W - w_stt - w_opt * opt_count;
 
     let draw_hdr = |c: &mut PdfPageCursor| {
-        let hh = 7.2;
+        let hh = 6.2;
         let mut cx = MARGIN_L;
         if with_stt {
             draw_rect_stroke(&c.layer, cx, c.y - hh, w_stt, hh, 0.55);
-            draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_stt / 2.0, c.y - 5.0, "STT");
+            draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_stt / 2.0, c.y - 4.4, "STT");
             cx += w_stt;
         }
         draw_rect_stroke(&c.layer, cx, c.y - hh, w_name, hh, 0.55);
-        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_name / 2.0, c.y - 5.0, col_title);
+        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_name / 2.0, c.y - 4.4, col_title);
         cx += w_name;
 
         draw_rect_stroke(&c.layer, cx, c.y - hh, w_opt, hh, 0.55);
-        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_opt / 2.0, c.y - 5.0, "Có");
+        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_opt / 2.0, c.y - 4.4, "Có");
         cx += w_opt;
 
         draw_rect_stroke(&c.layer, cx, c.y - hh, w_opt, hh, 0.55);
-        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_opt / 2.0, c.y - 5.0, "Không");
+        draw_text_centered(&c.layer, &c.fonts.bold, FONT_BODY, cx + w_opt / 2.0, c.y - 4.4, "Không");
         if with_unknown {
             cx += w_opt;
             draw_rect_stroke(&c.layer, cx, c.y - hh, w_opt, hh, 0.55);
-            draw_text_centered(&c.layer, &c.fonts.bold, FONT_SMALL, cx + w_opt / 2.0, c.y - 5.0, "Không rõ");
+            draw_text_centered(&c.layer, &c.fonts.bold, FONT_SMALL, cx + w_opt / 2.0, c.y - 4.4, "Không rõ");
         }
         c.y -= hh;
     };
 
-    cur.ensure_space(16.0);
+    cur.ensure_space(14.0);
     draw_hdr(cur);
 
     for &(stt, label, state) in rows {
         let lines = wrap_lines(label, w_name - 4.0, FONT_BODY);
-        let rh = (lines.len().max(1) as f32) * LINE_H + 2.4;
+        let rh = (lines.len().max(1) as f32) * 4.4 + 1.6;
         if cur.y - rh < BOTTOM_Y {
             cur.next_page();
             draw_hdr(cur);
         }
 
         let mut cx = MARGIN_L;
-        let mid_y = cur.y - rh / 2.0 - 1.3;
+        let mid_y = cur.y - rh / 2.0 - 1.2;
         if with_stt {
             draw_rect_stroke(&cur.layer, cx, cur.y - rh, w_stt, rh, 0.45);
             draw_text_centered(&cur.layer, &cur.fonts.regular, FONT_BODY, cx + w_stt / 2.0, mid_y, stt);
@@ -264,7 +274,7 @@ pub fn draw_checklist_table(
                 &cur.fonts.regular,
                 FONT_BODY,
                 cx + 2.0,
-                cur.y - 4.8 - (li as f32) * LINE_H,
+                cur.y - 4.2 - (li as f32) * 4.4,
                 line,
             );
         }
@@ -316,13 +326,13 @@ pub fn draw_ts_table_double(
     };
 
     let draw_hdr = |c: &mut PdfPageCursor| {
-        let hh = 7.0;
+        let hh = 6.2;
         draw_half_hdr(c, MARGIN_L, "TT", hh);
         draw_half_hdr(c, MARGIN_L + half_w, "STT", hh);
         c.y -= hh;
     };
 
-    cur.ensure_space(16.0);
+    cur.ensure_space(14.0);
     draw_hdr(cur);
 
     let rows_count = left_items.len().max(right_items.len());
@@ -337,7 +347,7 @@ pub fn draw_ts_table_double(
             .map(|(_, lbl, _)| wrap_lines(lbl, w_name - 2.5, FONT_SMALL))
             .unwrap_or_default();
         let max_l = l_lines.len().max(r_lines.len()).max(1);
-        let rh = (max_l as f32) * 4.4 + 2.2;
+        let rh = (max_l as f32) * 3.9 + 1.8;
 
         if cur.y - rh < BOTTOM_Y {
             cur.next_page();
@@ -364,7 +374,7 @@ pub fn draw_ts_table_double(
                     &cur.fonts.regular,
                     FONT_SMALL,
                     cx + 1.5,
-                    cur.y - 4.4 - (li as f32) * 4.4,
+                    cur.y - 4.0 - (li as f32) * 3.9,
                     line,
                 );
             }
@@ -381,28 +391,35 @@ pub fn draw_ts_table_double(
     }
 }
 
-/// Vẽ phần đầu bảng 2 cột (Nội dung khám | Họ tên, chữ ký Bác sỹ).
+/// Vẽ phần đầu bảng 2 cột (Nội dung khám | Họ tên, chữ ký Bác sỹ), hỗ trợ ngắt dòng bằng '\n'.
 pub fn draw_exam_table_header(cur: &mut PdfPageCursor, col1_w: f32, col2_w: f32, h1: &str, h2: &str) {
-    let hh = 7.5;
+    let h1_lines: Vec<&str> = h1.split('\n').collect();
+    let h2_lines: Vec<&str> = h2.split('\n').collect();
+    let max_l = h1_lines.len().max(h2_lines.len()).max(1);
+    let hh = if max_l > 1 { 10.5 } else { 7.5 };
     cur.ensure_space(hh + 10.0);
     draw_rect_stroke(&cur.layer, MARGIN_L, cur.y - hh, col1_w, hh, 0.55);
     draw_rect_stroke(&cur.layer, MARGIN_L + col1_w, cur.y - hh, col2_w, hh, 0.55);
-    draw_text_centered(
-        &cur.layer,
-        &cur.fonts.bold,
-        FONT_BODY,
-        MARGIN_L + col1_w / 2.0,
-        cur.y - 5.2,
-        h1,
-    );
-    draw_text_centered(
-        &cur.layer,
-        &cur.fonts.bold,
-        FONT_BODY,
-        MARGIN_L + col1_w + col2_w / 2.0,
-        cur.y - 5.2,
-        h2,
-    );
+
+    let draw_hdr_lines = |lines: &[&str], cx: f32| {
+        let start_y = if lines.len() > 1 {
+            cur.y - 4.4
+        } else {
+            cur.y - 5.2
+        };
+        for (i, line) in lines.iter().enumerate() {
+            draw_text_centered(
+                &cur.layer,
+                &cur.fonts.bold,
+                FONT_BODY,
+                cx,
+                start_y - (i as f32) * 4.3,
+                line,
+            );
+        }
+    };
+    draw_hdr_lines(&h1_lines, MARGIN_L + col1_w / 2.0);
+    draw_hdr_lines(&h2_lines, MARGIN_L + col1_w + col2_w / 2.0);
     cur.y -= hh;
 }
 
@@ -442,9 +459,17 @@ pub fn draw_exam_spec_row(
     }
 
     let y_top = cur.y;
-    // Khung ô trái (trên: tiêu đề + kết quả; dưới: phân loại)
-    draw_rect_stroke(&cur.layer, MARGIN_L, y_top - h_top, col1_w, h_top, 0.45);
-    draw_rect_stroke(&cur.layer, MARGIN_L, y_top - total_h, col1_w, h_pl, 0.45);
+    // Khung ô trái bao trọn kết quả + phân loại, ngăn giữa bằng nét gạch đứt
+    draw_rect_stroke(&cur.layer, MARGIN_L, y_top - total_h, col1_w, total_h, 0.45);
+    draw_dashed_line(
+        &cur.layer,
+        MARGIN_L + 1.0,
+        y_top - h_top,
+        MARGIN_L + col1_w - 1.0,
+        1.6,
+        1.2,
+        0.35,
+    );
     // Khung ô phải (chữ ký bác sĩ)
     draw_rect_stroke(&cur.layer, MARGIN_L + col1_w, y_top - total_h, col2_w, total_h, 0.45);
 
@@ -566,6 +591,53 @@ pub fn draw_inline_two(
     draw_inline_slot(cur, x, mid - 2.5, cur.y, l_lbl, l_val, false);
     draw_inline_slot(cur, mid, max_x, cur.y, r_lbl, r_val, false);
     cur.y -= LINE_H;
+}
+
+/// Vẽ trường nhãn + giá trị tự xuống dòng nếu dài bên trong khung (không tràn viền phải).
+pub fn draw_boxed_wrapped_slot(
+    bx: &mut BoxedSection,
+    cur: &mut PdfPageCursor,
+    x: f32,
+    max_x: f32,
+    label: &str,
+    val: &str,
+) {
+    let lw = approx_text_w_mm(label, FONT_BODY);
+    let vx = x + lw + 1.5;
+    let first_avail = (max_x - vx - 1.5).max(20.0);
+    let val_trim = val.trim();
+    let lines = if val_trim.is_empty() {
+        Vec::new()
+    } else if vx < max_x - 22.0 {
+        let mut all = wrap_lines(val_trim, first_avail, FONT_BODY);
+        if all.len() > 1 {
+            let rest = all[1..].join(" ");
+            let mut cont = wrap_lines(&rest, max_x - x - 2.0, FONT_BODY);
+            all.truncate(1);
+            all.append(&mut cont);
+        }
+        all
+    } else {
+        wrap_lines(val_trim, max_x - x - 2.0, FONT_BODY)
+    };
+    let n_lines = lines.len().max(1);
+    bx.ensure_space(cur, (n_lines as f32) * LINE_H + 1.5);
+
+    draw_text(&cur.layer, &cur.fonts.regular, FONT_BODY, x, cur.y, label);
+    if lines.is_empty() {
+        draw_dotted_line(&cur.layer, vx, cur.y - 0.8, max_x);
+        cur.y -= LINE_H;
+        return;
+    }
+
+    draw_dotted_line(&cur.layer, vx, cur.y - 0.8, max_x);
+    draw_text(&cur.layer, &cur.fonts.regular, FONT_BODY, vx + 0.8, cur.y, &lines[0]);
+    cur.y -= LINE_H;
+    for line in &lines[1..] {
+        draw_dotted_line(&cur.layer, x, cur.y - 0.8, max_x);
+        draw_text(&cur.layer, &cur.fonts.regular, FONT_BODY, x + 0.8, cur.y, line);
+        cur.y -= LINE_H;
+    }
 }
 
 /// Vẽ đường kẻ đơn giản cho phần không dùng BoxedSection.
