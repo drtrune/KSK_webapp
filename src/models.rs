@@ -400,13 +400,13 @@ pub fn get_section_fields(sec: &str) -> &'static [&'static str] {
         "reception" => FIELDS_RECEPTION,
         "history" => FIELDS_TIENSU,
         "physical" => FIELDS_BS_THELUC,
-        "clinical_noi" => FIELDS_BS_NOI,
-        "clinical_ngoai" => FIELDS_BS_NGOAI,
-        "clinical_dalieu" => FIELDS_BS_DALIEU,
-        "clinical_san" => FIELDS_BS_SAN,
-        "clinical_mat" => FIELDS_BS_MAT,
-        "clinical_tmh" => FIELDS_BS_TMH,
-        "clinical_rhm" => FIELDS_BS_RHM,
+        "clinical_noi" | "clin_noi" => FIELDS_BS_NOI,
+        "clinical_ngoai" | "clin_ngoai" => FIELDS_BS_NGOAI,
+        "clinical_dalieu" | "clin_dalieu" => FIELDS_BS_DALIEU,
+        "clinical_san" | "clin_san" => FIELDS_BS_SAN,
+        "clinical_mat" | "clin_mat" => FIELDS_BS_MAT,
+        "clinical_tmh" | "clin_tmh" => FIELDS_BS_TMH,
+        "clinical_rhm" | "clin_rhm" => FIELDS_BS_RHM,
         "clinical_all" => FIELDS_CLINICAL_ALL,
         "paraclinical" => FIELDS_BS_CLS,
         "conclusion" => FIELDS_BS_KETLUAN,
@@ -508,7 +508,7 @@ pub fn merge_payload_by_roles(
 
     // Chỉ cập nhật các trường thuộc quyền hạn của người dùng (Multi-role), KHÔNG tự tạo dữ liệu giả ở backend
     for (k, v) in incoming {
-        if k == "SELECTED_CLASSIFICATIONS_JSON" {
+        if k == "SELECTED_CLASSIFICATIONS_JSON" || k == "_EXAMINED_SECTIONS" {
             if let Value::String(s) = v {
                 base.insert(k.clone(), Value::String(s.clone()));
             }
@@ -518,7 +518,8 @@ pub fn merge_payload_by_roles(
             let is_custom_tpl_field = k.starts_with("D6_")
                 || k.starts_with("U18_")
                 || k.starts_with("MG_")
-                || k.starts_with("HS_");
+                || k.starts_with("HS_")
+                || k.starts_with("LX_");
             if !is_custom_tpl_field && !allowed_fields.contains(&k.as_str()) {
                 continue;
             }

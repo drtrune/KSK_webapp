@@ -183,6 +183,10 @@ impl KskGpuiApp {
             self.focus_first_form_input(window, cx);
         }
         let sticky_sec = self.current_section_key_and_can_edit();
+        let sticky_examined = sticky_sec
+            .as_ref()
+            .map(|(s, _)| self.is_section_examined(s))
+            .unwrap_or(false);
         let (sticky_editing, sticky_can_enter_edit) = match &sticky_sec {
             Some((sec, true)) if self.editing_section.as_deref() == Some(sec.as_str()) => {
                 (Some(sec.clone()), None)
@@ -411,11 +415,14 @@ impl KskGpuiApp {
                             .when(sticky_editing.is_some() && sticky_dirty, |el| {
                                 el.child(badge("● Có thay đổi chưa lưu", WARN_BG, WARN_COL))
                             })
-                            .when(sticky_editing.is_some() && !sticky_dirty, |el| {
-                                el.child(badge("Đang nhập liệu", primary_light(), PRIMARY_COL))
+                            .when(sticky_editing.is_some() && !sticky_dirty && sticky_examined, |el| {
+                                el.child(badge("Đang sửa (Đã khám)", primary_light(), PRIMARY_COL))
+                            })
+                            .when(sticky_editing.is_some() && !sticky_dirty && !sticky_examined, |el| {
+                                el.child(badge("Chưa khám · Đang nhập liệu", primary_light(), PRIMARY_COL))
                             })
                             .when(sticky_can_enter_edit.is_some(), |el| {
-                                el.child(badge("Đã có dữ liệu (chế độ xem)", bg_subtle(), text_muted()))
+                                el.child(badge("Đã khám · Chế độ xem", SUCCESS_BG, SUCCESS_COL))
                             })
                             .child(
                                 div()

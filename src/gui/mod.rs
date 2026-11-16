@@ -1142,23 +1142,10 @@ impl KskGpuiApp {
     pub fn enter_edit_section(
         &mut self,
         section: &str,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.editing_section = Some(section.to_string());
-        if let (Some(doc_field), Some(user)) =
-            (Self::section_doctor_field(section), self.current_user.as_ref())
-        {
-            let cur = self.get_form_val(doc_field);
-            if cur.trim().is_empty() && !user.full_name.trim().is_empty() {
-                let name = user.full_name.clone();
-                self.form_values
-                    .insert(doc_field.to_string(), name.clone());
-                if let Some(inp) = self.form_inputs.get(doc_field) {
-                    inp.update(cx, |s, cx| s.set_value(name, window, cx));
-                }
-            }
-        }
         cx.notify();
     }
 
@@ -1548,6 +1535,40 @@ impl KskGpuiApp {
             .any(|f| has_val(f))
     }
 
+    pub fn is_section_examined(&self, section: &str) -> bool {
+        if self.is_creating_new {
+            return false;
+        }
+        if let Some(raw) = self.form_values.get("_EXAMINED_SECTIONS") {
+            return raw.split(',').any(|s| s.trim() == section);
+        }
+        if self.selected_record_id.is_some() {
+            if section == "reception" {
+                return !self.get_form_val("HO_TEN").trim().is_empty();
+            }
+            return self.section_has_data(section);
+        }
+        false
+    }
+
+    pub fn mark_section_examined(&mut self, section: &str) {
+        let mut list: Vec<String> = self
+            .form_values
+            .get("_EXAMINED_SECTIONS")
+            .map(|raw| {
+                raw.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !list.iter().any(|s| s == section) {
+            list.push(section.to_string());
+        }
+        self.form_values
+            .insert("_EXAMINED_SECTIONS".to_string(), list.join(","));
+    }
+
     pub fn auto_enter_edit_for_current_view(
         &mut self,
         window: &mut Window,
@@ -1557,7 +1578,7 @@ impl KskGpuiApp {
             return;
         }
         if let Some((sec, true)) = self.current_section_key_and_can_edit() {
-            if self.is_creating_new || !self.section_has_data(&sec) {
+            if !self.is_section_examined(&sec) {
                 self.enter_edit_section(&sec, window, cx);
                 self.is_dirty = false;
                 self.pending_focus_first_input = true;
@@ -1859,6 +1880,7 @@ impl KskGpuiApp {
                     .insert(doc_field.to_string(), user.full_name.clone());
             }
         }
+        self.mark_section_examined(section);
         let roles_str = user.role.clone();
         let mut incoming = Map::new();
         for (k, v) in &self.form_values {
