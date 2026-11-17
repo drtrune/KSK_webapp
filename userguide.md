@@ -112,18 +112,13 @@ Vào phân hệ **Xuất dữ liệu** trên thanh điều hướng:
 1. Chọn sub-tab **Xuất file CSV**.
 2. Bấm **Xuất CSV** để tải về file CSV gồm **123 trường** chuẩn theo QĐ 3176/QĐ-BYT & QĐ 1804/QĐ-BYT (chi tiết tại [`CSV_export_docs.md`](CSV_export_docs.md)).
 
-### 6.3. Chế độ 2: Cấu hình & Xuất qua API
-1. Chọn sub-tab **Cấu hình & Xuất qua API**.
-2. Nhập thông số kết nối API đích:
-   - **API Endpoint URL**: địa chỉ API nhận dữ liệu JSON.
-   - **Phương thức HTTP**: `POST` hoặc `PUT`.
-   - **Chế độ gửi dữ liệu**:
-     - `batch`: gửi 1 request chứa danh sách hồ sơ đã giải mã.
-     - `single`: gửi lần lượt từng hồ sơ.
-   - **Xác thực**: `Không` / `Bearer Token` / `API Key` (tùy chỉnh tên header và token/key).
-   - **Custom Headers**: thêm các header bổ sung (nếu hệ thống đích yêu cầu).
-3. Bấm **Lưu cấu hình** (cấu hình được lưu vào SQLite để tái sử dụng).
-4. Bấm **Đẩy tất cả theo bộ lọc** hoặc **Đẩy hồ sơ đã chọn** và theo dõi kết quả trả về ngay tại khung thông báo bên dưới.
+### 6.3. Chế độ 2: Cấu hình API (Cho App khác Fetch)
+1. Chọn sub-tab **Cấu hình API (App ngoài Fetch)**.
+2. Bật tùy chọn **Cho phép ứng dụng ngoài Fetch dữ liệu**.
+3. Tạo hoặc nhập **API Key**, chọn tên Header xác thực (mặc định `X-API-Key`; cũng hỗ trợ `Authorization: Bearer <key>` hoặc query `?api_key=<key>`).
+4. Cấu hình bộ lọc trạng thái cho phép, giới hạn bản ghi mặc định (`default_limit`) và tùy chọn trả kèm `payload` khám chi tiết.
+5. Bấm **Lưu cấu hình API**.
+6. Copy **Endpoint URL** (`GET /api/export/records`) hoặc lệnh `curl` mẫu để cấp cho phần mềm ngoài (hỗ trợ các tham số `from_date`, `to_date`, `ma_tiep_nhan`, `status`, `q`, `format=json|csv`, `limit`, `offset`). Có thể bấm **Test Fetch API ngay** để kiểm tra kết quả trực tiếp.
 
 ---
 

@@ -91,16 +91,15 @@ function kskApp() {
     exportDatePickers: {},
     exportSubTab: 'csv',
     exportApiConfig: {
-      api_url: '',
-      http_method: 'POST',
-      auth_type: 'bearer',
-      auth_header: 'Authorization',
-      auth_token: '',
-      custom_headers: '',
-      payload_mode: 'batch'
+      enabled: false,
+      api_key: '',
+      auth_header: 'X-API-Key',
+      allowed_status: null,
+      default_limit: 500,
+      include_payload: true
     },
     exportApiSaving: false,
-    exportApiPushing: false,
+    exportApiTesting: false,
     exportApiResult: null,
 
     // Tra cứu
@@ -1880,6 +1879,37 @@ function kskApp() {
       this.openExportTab();
     },
 
+    getExportApiEndpointUrl() {
+      return `${window.location.origin}/api/export/records`;
+    },
+
+    getExportApiCurlExample() {
+      const hdr = (this.exportApiConfig.auth_header || 'X-API-Key').trim();
+      const key = (this.exportApiConfig.api_key || '').trim();
+      const authPart = key ? `-H "${hdr}: ${key}" ` : '';
+      return `curl -s ${authPart}"${this.getExportApiEndpointUrl()}?limit=100&format=json"`;
+    },
+
+    generateExportApiKey() {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let res = 'ksk_';
+      for (let i = 0; i < 32; i++) {
+        res += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      this.exportApiConfig.api_key = res;
+      this.toast('Đã tạo API Key mới — nhớ bấm "Lưu cấu hình API" để áp dụng!');
+    },
+
+    async copyToClipboard(text, msg = 'Đã copy!') {
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        this.toast(msg);
+      } catch (_) {
+        this.toast('Trình duyệt không cho phép copy tự động, hãy copy thủ công.', 'error');
+      }
+    },
+
     async loadExportApiConfig() {
       try {
         const res = await fetch('/api/export/api-config', {
@@ -1895,16 +1925,24 @@ function kskApp() {
     async saveExportApiConfig() {
       this.exportApiSaving = true;
       try {
+        const payload = {
+          ...this.exportApiConfig,
+          allowed_status: this.exportApiConfig.allowed_status === '' || this.exportApiConfig.allowed_status === null
+            ? null
+            : Number(this.exportApiConfig.allowed_status),
+          default_limit: Number(this.exportApiConfig.default_limit) || 500
+        };
         const res = await fetch('/api/export/api-config', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${this.token}`
           },
-          body: JSON.stringify(this.exportApiConfig)
+          body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (res.ok) {
+          if (data.config) this.exportApiConfig = { ...this.exportApiConfig, ...data.config };
           this.toast(data.message || 'Đã lưu cấu hình API xuất dữ liệu!');
         } else {
           this.toast(data.error || 'Lỗi lưu cấu hình API', 'error');
@@ -1916,36 +1954,36 @@ function kskApp() {
       }
     },
 
-    async triggerExportApiPush(selectedOnly = false) {
-      if (selectedOnly && this.exportSelectedIds.length === 0) {
-        this.toast('Vui lòng tích chọn ít nhất 1 hồ sơ để đẩy API!', 'error');
-        return;
-      }
-      if (!this.exportApiConfig.api_url || !this.exportApiConfig.api_url.trim()) {
-        this.toast('Vui lòng nhập URL API đích và lưu cấu hình trước!', 'error');
-        return;
-      }
-      this.exportApiPushing = true;
+    async triggerExportApiTest() {
+      this.exportApiTesting = true;
       this.exportApiResult = null;
       try {
-        const params = this.buildExportQueryParams(selectedOnly);
-        const res = await fetch(`/api/export/api-push?${params.toString()}`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${this.token}` }
-        });
+        const params = this.buildExportQueryParams(false);
+        params.set('limit', '3');
+        const headers = { 'Authorization': `Bearer ${this.token}` };
+        const hdrName = (this.exportApiConfig.auth_header || 'X-API-Key').trim();
+        if (this.exportApiConfig.api_key) {
+          headers[hdrName] = this.exportApiConfig.api_key.trim();
+        }
+        const res = await fetch(`/api/export/records?${params.toString()}`, { headers });
         const data = await res.json();
         if (res.ok) {
-          this.exportApiResult = data;
-          this.toast(data.message || 'Đã đẩy dữ liệu qua API!', data.ok ? 'success' : 'error');
+          const sample = JSON.stringify(data, null, 2);
+          this.exportApiResult = {
+            ok: true,
+            message: `Fetch thành công! Tổng ${data.total} hồ sơ phù hợp (hiển thị thử ${data.count} hồ sơ đầu).`,
+            detail: sample.length > 2000 ? sample.slice(0, 2000) + '\n... (đã rút gọn)' : sample
+          };
+          this.toast('Test Fetch API thành công!');
         } else {
-          this.exportApiResult = { ok: false, message: data.error || 'Lỗi đẩy API' };
-          this.toast(data.error || 'Lỗi đẩy API', 'error');
+          this.exportApiResult = { ok: false, message: data.error || 'Lỗi Fetch API' };
+          this.toast(data.error || 'Lỗi Fetch API', 'error');
         }
       } catch (e) {
         this.exportApiResult = { ok: false, message: 'Không kết nối được tới máy chủ' };
-        this.toast('Không kết nối được tới máy chủ khi đẩy API', 'error');
+        this.toast('Không kết nối được tới máy chủ khi test API', 'error');
       } finally {
-        this.exportApiPushing = false;
+        this.exportApiTesting = false;
       }
     },
 

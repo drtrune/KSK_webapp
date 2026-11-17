@@ -33,11 +33,11 @@
 - Import danh sách hàng loạt từ `.csv`, `.xlsx`, `.xls` với preview, chuẩn hóa ngày/giới tính/mã danh mục và phát hiện trùng mã tiếp nhận.
 - Theo dõi tiến độ khám của từng hợp đồng, lọc và in hàng loạt.
 
-### 4. In ấn & Xuất dữ liệu (CSV 123 trường & API Push JSON)
+### 4. In ấn & Xuất dữ liệu (CSV 123 trường & REST API Fetch)
 - Tạo PDF A4 nhiều trang bằng Rust (`printpdf`) kèm mã vạch Code 128; xuất DOCX theo template trong `asset/`.
 - Phân hệ **Xuất dữ liệu** hỗ trợ 2 chế độ:
   1. **Xuất file CSV**: 123 trường chuẩn theo QĐ 3176/QĐ-BYT & QĐ 1804/QĐ-BYT (xem [`CSV_export_docs.md`](CSV_export_docs.md)).
-  2. **Cấu hình & Xuất qua API**: Cấu hình endpoint đích (`POST`/`PUT`, xác thực `None` / `Bearer` / `API Key`, custom headers, chế độ `batch` hoặc `single`), lưu cấu hình vào SQLite và đẩy dữ liệu hồ sơ đã giải mã trực tiếp dưới dạng JSON.
+  2. **Cấu hình API (App ngoài Fetch)**: Mở endpoint `GET /api/export/records` (bật/tắt, bảo vệ bằng API Key qua header/Bearer/query, lọc trạng thái, phân trang `limit`/`offset`, hỗ trợ `format=json` hoặc `format=csv`) để các hệ thống/app khác fetch dữ liệu hồ sơ đã giải mã.
 
 ### 5. Quản trị, Danh mục & Bảo mật
 - Mã hóa dữ liệu nhạy cảm bằng **AES-256-GCM**, **Master Key** & **Recovery Key** (PBKDF2-HMAC-SHA256).

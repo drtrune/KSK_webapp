@@ -279,13 +279,13 @@ async fn main() {
         .route("/api/contracts/:id/pdf", get(export_contract_pdf_handler))
         .route("/api/contracts/:id/import-preview", post(import_contract_preview_handler))
         .route("/api/contracts/:id/import-commit", post(import_contract_commit_handler))
-        // Trích xuất & Đẩy dữ liệu (CSV / API)
+        // Trích xuất & API Fetch dữ liệu (CSV / JSON)
         .route("/api/export/csv", get(export_csv_handler))
         .route(
             "/api/export/api-config",
             get(get_export_api_config_handler).post(save_export_api_config_handler),
         )
-        .route("/api/export/api-push", post(push_export_api_handler))
+        .route("/api/export/records", get(fetch_export_records_handler))
         // Quản lý Danh mục
         .route("/api/catalogs", get(list_catalogs_handler))
         .route("/api/catalogs/versions", get(get_catalog_versions_handler))
