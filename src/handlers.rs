@@ -174,10 +174,12 @@ pub async fn me_handler(State(state): State<SharedState>, headers: HeaderMap) ->
     };
     let cfg = state.config.read().await;
     let roles = user.roles();
+    let mk_unlocked = state.master_key.read().await.is_some();
 
     Json(json!({
         "user": user,
         "roles": roles,
+        "mk_unlocked": mk_unlocked,
         "facility": {
             "ma_cskcb": cfg.ma_cskcb,
             "ma_gtin_cskcb": cfg.ma_gtin_cskcb,
@@ -258,13 +260,21 @@ pub async fn create_user_handler(
 
     let role_csv = valid_selected.join(",");
     let p_hash = hash_password(req.password.trim());
+    let wrapped_mk = {
+        let mk_guard = state.master_key.read().await;
+        mk_guard
+            .as_ref()
+            .and_then(|mk| crate::crypto::wrap_master_key(mk, req.password.trim()).ok())
+            .unwrap_or_default()
+    };
     let res = sqlx::query(
-        "INSERT INTO users (username, password_hash, full_name, role, is_locked) VALUES (?, ?, ?, ?, 0)",
+        "INSERT INTO users (username, password_hash, full_name, role, is_locked, wrapped_mk) VALUES (?, ?, ?, ?, 0, ?)",
     )
     .bind(&username)
     .bind(&p_hash)
     .bind(full_name)
     .bind(&role_csv)
+    .bind(&wrapped_mk)
     .execute(&*db)
     .await;
 
@@ -311,11 +321,26 @@ pub async fn update_user_handler(
     if let Some(pw) = &req.password {
         if !pw.trim().is_empty() {
             let p_hash = hash_password(pw.trim());
-            let _ = sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
-                .bind(p_hash)
-                .bind(user_id)
-                .execute(&*db)
-                .await;
+            let wrapped_mk = {
+                let mk_guard = state.master_key.read().await;
+                mk_guard
+                    .as_ref()
+                    .and_then(|mk| crate::crypto::wrap_master_key(mk, pw.trim()).ok())
+            };
+            if let Some(wmk) = wrapped_mk {
+                let _ = sqlx::query("UPDATE users SET password_hash = ?, wrapped_mk = ? WHERE id = ?")
+                    .bind(p_hash)
+                    .bind(wmk)
+                    .bind(user_id)
+                    .execute(&*db)
+                    .await;
+            } else {
+                let _ = sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
+                    .bind(p_hash)
+                    .bind(user_id)
+                    .execute(&*db)
+                    .await;
+            }
         }
     }
 
@@ -418,12 +443,27 @@ pub async fn change_my_password_handler(
     }
 
     let new_p_hash = hash_password(new_pw);
-    if let Err(e) = sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
-        .bind(&new_p_hash)
-        .bind(user.id)
-        .execute(&*db)
-        .await
-    {
+    let wrapped_mk = {
+        let mk_guard = state.master_key.read().await;
+        mk_guard
+            .as_ref()
+            .and_then(|mk| crate::crypto::wrap_master_key(mk, new_pw).ok())
+    };
+    let upd_res = if let Some(wmk) = wrapped_mk {
+        sqlx::query("UPDATE users SET password_hash = ?, wrapped_mk = ? WHERE id = ?")
+            .bind(&new_p_hash)
+            .bind(&wmk)
+            .bind(user.id)
+            .execute(&*db)
+            .await
+    } else {
+        sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
+            .bind(&new_p_hash)
+            .bind(user.id)
+            .execute(&*db)
+            .await
+    };
+    if let Err(e) = upd_res {
         return api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Không thể cập nhật mật khẩu: {}", e),

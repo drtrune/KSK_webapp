@@ -429,9 +429,16 @@ function kskApp() {
       await this.loadTemplatesMetadata();
 
       if (this.token) {
-        await this.loadMe();
-        await this.loadCatalogs();
-        await this.loadRecordsList();
+        if (this.setupStatus.initialized && !this.setupStatus.unlocked) {
+          this.logout();
+          this.toast('Máy chủ vừa khởi động lại. Vui lòng đăng nhập lại để mở khóa dữ liệu mã hóa!', 'error');
+        } else {
+          await this.loadMe();
+          if (this.token) {
+            await this.loadCatalogs();
+            await this.loadRecordsList();
+          }
+        }
       }
 
       this.$watch('activeTab', (val) => {
@@ -953,6 +960,11 @@ function kskApp() {
         });
         if (res.ok) {
           const data = await res.json();
+          if (this.setupStatus.initialized && data.mk_unlocked === false) {
+            this.logout();
+            this.toast('Phiên làm việc cũ chưa mở khóa Master Key. Vui lòng đăng nhập lại!', 'error');
+            return;
+          }
           this.currentUser = data.user;
           if (this.currentUser) {
             this.profileForm.full_name = this.currentUser.full_name || '';
