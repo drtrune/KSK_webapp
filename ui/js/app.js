@@ -65,6 +65,7 @@ function kskApp() {
     activeTab: 'reception',
     loginForm: { username: '', password: '' },
     loginLoading: false,
+    loginError: '',
 
     // Danh sách hồ sơ KSK (Sidebar bên trái màn hình 16:9)
     recordsList: [],
@@ -1081,8 +1082,10 @@ function kskApp() {
 
     // Đăng nhập
     async handleLogin() {
+      this.loginError = '';
       if (!this.loginForm.username || !this.loginForm.password) {
-        this.toast('Vui lòng nhập tên đăng nhập và mật khẩu', 'error');
+        this.loginError = 'Vui lòng nhập tên đăng nhập và mật khẩu.';
+        this.toast(this.loginError, 'error');
         return;
       }
       this.loginLoading = true;
@@ -1092,8 +1095,9 @@ function kskApp() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.loginForm)
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
+          this.loginError = '';
           this.token = data.token;
           localStorage.setItem('ksk_token', this.token);
           this.currentUser = data.user;
@@ -1108,10 +1112,12 @@ function kskApp() {
             await this.fetchAdminCatalogItems();
           }
         } else {
-          this.toast(data.error || 'Đăng nhập không thành công', 'error');
+          this.loginError = data.error || 'Tên đăng nhập hoặc mật khẩu không đúng.';
+          this.toast(this.loginError, 'error');
         }
       } catch (err) {
-        this.toast('Không thể kết nối đến máy chủ', 'error');
+        this.loginError = 'Không thể kết nối đến máy chủ.';
+        this.toast(this.loginError, 'error');
       } finally {
         this.loginLoading = false;
       }

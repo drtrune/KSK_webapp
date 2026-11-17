@@ -90,14 +90,19 @@
 
       <!-- Form Đăng nhập -->
       <form x-show="setupStatus.initialized && !showRecoverForm" @submit.prevent="handleLogin()" class="space-y-4">
+        <div x-show="loginError" x-cloak role="alert"
+          class="p-2.5 rounded-lg bg-[#FDEDEC] border border-[#E74C3C]/40 text-[#C0392B] text-xs font-medium flex items-start gap-2">
+          <span class="shrink-0 font-bold">⚠</span>
+          <span x-text="loginError"></span>
+        </div>
         <div>
           <label class="label-title">Tên đăng nhập:</label>
-          <input type="text" x-model="loginForm.username" placeholder="letan / bstheluc / admin..." class="input-box"
+          <input type="text" x-model="loginForm.username" @input="loginError = ''" placeholder="letan / bstheluc / admin..." class="input-box"
             autofocus />
         </div>
         <div>
           <label class="label-title">Mật khẩu:</label>
-          <input type="password" x-model="loginForm.password" placeholder="••••••" class="input-box" />
+          <input type="password" x-model="loginForm.password" @input="loginError = ''" placeholder="••••••" class="input-box" />
         </div>
         <button type="submit" :disabled="loginLoading"
           class="w-full py-2.5 bg-[#3498DB] hover:bg-[#2980B9] disabled:opacity-50 text-white rounded-lg font-medium text-xs transition-colors shadow-sm">
