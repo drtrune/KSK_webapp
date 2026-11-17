@@ -17,7 +17,7 @@ use quick_xml::{
     events::{BytesText, Event},
     Reader, Writer,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sqlx::SqlitePool;
 use std::{
@@ -3381,6 +3381,245 @@ pub async fn get_catalog_versions_handler(
     }
 
     Json(Value::Object(map)).into_response()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportApiConfig {
+    pub api_url: String,
+    pub http_method: String,
+    pub auth_type: String,   // "none" | "bearer" | "apikey"
+    pub auth_header: String, // VD: "Authorization" hoặc "X-API-Key"
+    pub auth_token: String,
+    pub custom_headers: String,
+    pub payload_mode: String, // "batch" | "single"
+}
+
+impl Default for ExportApiConfig {
+    fn default() -> Self {
+        Self {
+            api_url: String::new(),
+            http_method: "POST".to_string(),
+            auth_type: "bearer".to_string(),
+            auth_header: "Authorization".to_string(),
+            auth_token: String::new(),
+            custom_headers: String::new(),
+            payload_mode: "batch".to_string(),
+        }
+    }
+}
+
+async fn load_export_api_config_db(pool: &SqlitePool) -> ExportApiConfig {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT value FROM app_settings WHERE key = 'export_api_config_json'")
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
+    row.and_then(|(raw,)| serde_json::from_str::<ExportApiConfig>(&raw).ok())
+        .unwrap_or_default()
+}
+
+pub async fn get_export_api_config_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+) -> Response {
+    let db = state.db.read().await;
+    if let Err(resp) = authenticate(&*db, &headers, None).await {
+        return resp;
+    }
+    let cfg = load_export_api_config_db(&*db).await;
+    Json(cfg).into_response()
+}
+
+pub async fn save_export_api_config_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(req): Json<ExportApiConfig>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_role("admin") && !user.has_role("business") {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            "Chỉ Quản trị viên hoặc Tài khoản nghiệp vụ mới được lưu cấu hình API xuất dữ liệu.",
+        );
+    }
+    let json_str = match serde_json::to_string(&req) {
+        Ok(s) => s,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e.to_string()),
+    };
+    if let Err(e) = sqlx::query(
+        "INSERT INTO app_settings (key, value) VALUES ('export_api_config_json', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(&json_str)
+    .execute(&*db)
+    .await
+    {
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("Lỗi lưu cấu hình API: {}", e));
+    }
+    tracing::info!("User '{}' cập nhật cấu hình API xuất dữ liệu -> {}", user.username, req.api_url);
+    Json(json!({ "ok": true, "message": "Đã lưu cấu hình API xuất dữ liệu!" })).into_response()
+}
+
+pub async fn push_export_api_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(query): Query<CsvExportFilterQuery>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, query.token.as_deref()).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let api_cfg = load_export_api_config_db(&*db).await;
+    let url = api_cfg.api_url.trim().to_string();
+    if url.is_empty() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "Chưa cấu hình URL API nhận dữ liệu. Vui lòng nhập URL và bấm Lưu cấu hình trước.",
+        );
+    }
+
+    let mk = *state.master_key.read().await;
+    let rows = query_filtered_records(
+        &*db,
+        query.from_date.as_deref(),
+        query.to_date.as_deref(),
+        query.status,
+        query.q.as_deref(),
+        query.workplace.as_deref(),
+        query.classification.as_deref(),
+        query.selected_ids.as_deref(),
+        None,
+        None,
+        None,
+        true,
+        mk.as_ref(),
+    )
+    .await;
+
+    if rows.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, "Không có hồ sơ nào phù hợp để đẩy qua API.");
+    }
+
+    let dtos: Vec<KskRecordDto> = rows.into_iter().map(KskRecordDto::from).collect();
+    let total = dtos.len();
+    let method = if api_cfg.http_method.eq_ignore_ascii_case("PUT") {
+        reqwest::Method::PUT
+    } else {
+        reqwest::Method::POST
+    };
+
+    let apply_headers = |mut req_b: reqwest::RequestBuilder| -> reqwest::RequestBuilder {
+        let tok = api_cfg.auth_token.trim();
+        if !tok.is_empty() {
+            if api_cfg.auth_type == "bearer" {
+                req_b = req_b.bearer_auth(tok);
+            } else if api_cfg.auth_type == "apikey" {
+                let hdr = if api_cfg.auth_header.trim().is_empty() {
+                    "X-API-Key"
+                } else {
+                    api_cfg.auth_header.trim()
+                };
+                req_b = req_b.header(hdr, tok);
+            }
+        }
+        if !api_cfg.custom_headers.trim().is_empty() {
+            if let Ok(map) = serde_json::from_str::<Map<String, Value>>(api_cfg.custom_headers.trim()) {
+                for (k, v) in map {
+                    if let Some(s) = v.as_str() {
+                        req_b = req_b.header(&k, s);
+                    }
+                }
+            }
+        }
+        req_b
+    };
+
+    if api_cfg.payload_mode == "single" {
+        let mut sent = 0usize;
+        let mut failed = 0usize;
+        let mut last_status = 0u16;
+        let mut last_err = String::new();
+        for dto in &dtos {
+            let req_b = apply_headers(state.http_client.request(method.clone(), &url)).json(dto);
+            match req_b.send().await {
+                Ok(resp) => {
+                    last_status = resp.status().as_u16();
+                    if resp.status().is_success() {
+                        sent += 1;
+                    } else {
+                        failed += 1;
+                        last_err = resp.text().await.unwrap_or_default();
+                    }
+                }
+                Err(e) => {
+                    failed += 1;
+                    last_err = e.to_string();
+                }
+            }
+        }
+        tracing::info!(
+            "Xuất API (single) by='{}' url='{}': {}/{} thành công",
+            user.username,
+            url,
+            sent,
+            total
+        );
+        return Json(json!({
+            "ok": failed == 0,
+            "total": total,
+            "sent_count": sent,
+            "failed_count": failed,
+            "status_code": last_status,
+            "message": format!("Đã đẩy {}/{} hồ sơ qua API (lỗi: {}).", sent, total, failed),
+            "detail": last_err.chars().take(300).collect::<String>()
+        }))
+        .into_response();
+    }
+
+    let body = json!({
+        "total": total,
+        "records": dtos,
+    });
+    let req_b = apply_headers(state.http_client.request(method, &url)).json(&body);
+    match req_b.send().await {
+        Ok(resp) => {
+            let status_code = resp.status().as_u16();
+            let ok = resp.status().is_success();
+            let detail = resp.text().await.unwrap_or_default();
+            tracing::info!(
+                "Xuất API (batch) by='{}' url='{}' count={} -> HTTP {}",
+                user.username,
+                url,
+                total,
+                status_code
+            );
+            Json(json!({
+                "ok": ok,
+                "total": total,
+                "sent_count": if ok { total } else { 0 },
+                "failed_count": if ok { 0 } else { total },
+                "status_code": status_code,
+                "message": if ok {
+                    format!("Đã đẩy thành công {} hồ sơ qua API (HTTP {}).", total, status_code)
+                } else {
+                    format!("API đích trả về lỗi HTTP {}.", status_code)
+                },
+                "detail": detail.chars().take(400).collect::<String>()
+            }))
+            .into_response()
+        }
+        Err(e) => {
+            tracing::warn!("Lỗi kết nối API xuất dữ liệu '{}': {}", url, e);
+            api_error(
+                StatusCode::BAD_GATEWAY,
+                format!("Không kết nối được tới API '{}': {}", url, e),
+            )
+        }
+    }
 }
 
 pub async fn list_catalogs_handler(

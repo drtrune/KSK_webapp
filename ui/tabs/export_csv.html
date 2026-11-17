@@ -1,21 +1,33 @@
-<!-- TAB: XUẤT DỮ LIỆU CSV CHUẨN QĐ 3176/QĐ-BYT & QĐ 1804/QĐ-BYT (123 CHỈ TIÊU) -->
+<!-- TAB: XUẤT DỮ LIỆU (CSV CHUẨN QĐ 3176 / QĐ 1804 & ĐẨY API) -->
 <div x-show="activeTab === 'export'" x-cloak class="space-y-4 no-print">
 
-  <!-- 1. Tiêu đề & Thông tin chuẩn QĐ 3176 -->
+  <!-- 1. Tiêu đề & Chọn chế độ Xuất dữ liệu -->
   <div class="bg-gradient-to-r from-emerald-50 via-white to-sky-50 border border-emerald-200/80 rounded-xl p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-    <div class="space-y-1">
-      <div class="flex items-center gap-2">
+    <div class="space-y-1.5">
+      <div class="flex flex-wrap items-center gap-2">
         <span class="px-2 py-0.5 bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider rounded">QĐ 3176 & QĐ 1804</span>
-        <span class="px-2 py-0.5 bg-sky-100 text-sky-800 text-[10px] font-bold rounded border border-sky-200">123 chỉ tiêu chuẩn</span>
-        <span class="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-medium rounded border border-slate-200">UTF-8 BOM (Excel Ready)</span>
+        <span class="px-2 py-0.5 bg-sky-100 text-sky-800 text-[10px] font-bold rounded border border-sky-200">CSV 123 chỉ tiêu</span>
+        <span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 text-[10px] font-bold rounded border border-indigo-200">API JSON Push</span>
       </div>
-      <h2 class="text-base font-bold text-slate-800 uppercase tracking-wide">Phân hệ Trích xuất & Báo cáo Dữ liệu CSV Khám Sức Khỏe</h2>
+      <h2 class="text-base font-bold text-slate-800 uppercase tracking-wide">Phân hệ Xuất Dữ liệu Khám Sức Khỏe</h2>
       <p class="text-xs text-slate-600">
-        Lọc đa tiêu chí theo ngày khám, cơ quan/đơn vị, trạng thái và phân loại sức khỏe. Xem trước dữ liệu và xuất file CSV đầy đủ 123 cột theo đúng cấu trúc Bộ Y tế.
+        Lọc đa tiêu chí theo ngày khám, đơn vị, trạng thái và phân loại. Xuất file CSV chuẩn Bộ Y tế hoặc cấu hình API để đẩy dữ liệu sang hệ thống ngoài.
       </p>
+      <div class="flex flex-wrap items-center gap-2 pt-1">
+        <button type="button" @click="exportSubTab = 'csv'"
+          :class="exportSubTab === 'csv' ? 'bg-slate-900 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'"
+          class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+          📄 Xuất file CSV
+        </button>
+        <button type="button" @click="exportSubTab = 'api'; loadExportApiConfig()"
+          :class="exportSubTab === 'api' ? 'bg-indigo-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'"
+          class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+          🌐 Cấu hình &amp; Xuất qua API
+        </button>
+      </div>
     </div>
 
-    <div class="flex flex-wrap items-center gap-2 shrink-0">
+    <div x-show="exportSubTab === 'csv'" class="flex flex-wrap items-center gap-2 shrink-0">
       <button type="button" @click="triggerExportCsv(false)" :disabled="exportList.length === 0"
         class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-semibold text-xs flex items-center gap-2 shadow-sm transition-colors cursor-pointer">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -31,6 +43,82 @@
         </svg>
         <span x-text="'📥 Xuất đã chọn (' + exportSelectedIds.length + ' hồ sơ)'"></span>
       </button>
+    </div>
+
+    <div x-show="exportSubTab === 'api'" class="flex flex-wrap items-center gap-2 shrink-0" x-cloak>
+      <button type="button" @click="triggerExportApiPush(false)" :disabled="exportList.length === 0 || exportApiPushing"
+        class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-semibold text-xs flex items-center gap-2 shadow-sm transition-colors cursor-pointer">
+        <span x-text="exportApiPushing ? 'Đang đẩy API...' : '🚀 Đẩy API (Tất cả theo bộ lọc)'"></span>
+      </button>
+
+      <button type="button" @click="triggerExportApiPush(true)" :disabled="exportSelectedIds.length === 0 || exportApiPushing"
+        class="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white rounded-lg font-semibold text-xs flex items-center gap-2 shadow-sm transition-colors cursor-pointer">
+        <span x-text="'📤 Đẩy đã chọn (' + exportSelectedIds.length + ' hồ sơ)'"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 1b. Khung Cấu hình API Xuất dữ liệu (Khi chọn tab API) -->
+  <div x-show="exportSubTab === 'api'" x-cloak class="bg-white rounded-xl p-5 border border-indigo-200 shadow-sm space-y-4">
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800">Cấu hình Endpoint API Xuất dữ liệu</h3>
+      </div>
+      <button type="button" @click="saveExportApiConfig()" :disabled="exportApiSaving"
+        class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold">
+        <span x-text="exportApiSaving ? 'Đang lưu...' : '💾 Lưu cấu hình API'"></span>
+      </button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+      <div class="md:col-span-2">
+        <label class="label-title">URL API đích (Endpoint nhận JSON) *:</label>
+        <input type="text" x-model="exportApiConfig.api_url" placeholder="https://his.benhvien.vn/api/ksk/import" class="input-box font-mono" />
+      </div>
+      <div>
+        <label class="label-title">Phương thức HTTP:</label>
+        <select x-model="exportApiConfig.http_method" class="input-box bg-white">
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+        </select>
+      </div>
+      <div>
+        <label class="label-title">Chế độ gửi Payload:</label>
+        <select x-model="exportApiConfig.payload_mode" class="input-box bg-white">
+          <option value="batch">Gửi gộp 1 mảng (Batch JSON)</option>
+          <option value="single">Gửi từng hồ sơ (Single JSON)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+      <div>
+        <label class="label-title">Loại xác thực:</label>
+        <select x-model="exportApiConfig.auth_type" class="input-box bg-white">
+          <option value="bearer">Bearer Token</option>
+          <option value="apikey">API Key Header</option>
+          <option value="none">Không xác thực</option>
+        </select>
+      </div>
+      <div x-show="exportApiConfig.auth_type === 'apikey'">
+        <label class="label-title">Tên Header API Key:</label>
+        <input type="text" x-model="exportApiConfig.auth_header" placeholder="X-API-Key" class="input-box font-mono" />
+      </div>
+      <div :class="exportApiConfig.auth_type === 'apikey' ? 'md:col-span-1' : 'md:col-span-2'" x-show="exportApiConfig.auth_type !== 'none'">
+        <label class="label-title">Token / API Key:</label>
+        <input type="password" x-model="exportApiConfig.auth_token" placeholder="Nhập token hoặc API key..." class="input-box font-mono" />
+      </div>
+      <div>
+        <label class="label-title">Headers bổ sung (JSON, tùy chọn):</label>
+        <input type="text" x-model="exportApiConfig.custom_headers" placeholder='{"X-Source":"KSK"}' class="input-box font-mono" />
+      </div>
+    </div>
+
+    <div x-show="exportApiResult" class="p-3 rounded-lg border text-xs space-y-1"
+      :class="exportApiResult?.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900'">
+      <div class="font-semibold" x-text="exportApiResult?.message || ''"></div>
+      <div x-show="exportApiResult?.detail" class="font-mono text-[11px] opacity-80 break-all" x-text="exportApiResult?.detail"></div>
     </div>
   </div>
 

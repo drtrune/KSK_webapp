@@ -204,15 +204,15 @@
             <span class="hidden sm:inline">Mới</span>
           </button>
 
-          <!-- Xuất CSV -->
+          <!-- Xuất dữ liệu -->
           <button type="button" @click="openExportTab()"
             class="hidden sm:flex px-3 py-1.5 bg-[#FFFFFF] hover:bg-[#F4F6F8] text-[#27AE60] border border-[#2ECC71]/40 rounded-lg text-xs font-medium items-center gap-1.5 transition-colors shadow-xs"
-            title="Mở Phân hệ Xuất dữ liệu CSV (123 cột QĐ 3176)">
+            title="Mở Phân hệ Xuất dữ liệu (CSV / API)">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <span class="hidden md:inline">Xuất CSV</span>
+            <span class="hidden md:inline">Xuất dữ liệu</span>
           </button>
 
           <div class="hidden sm:block h-6 w-px bg-[#E2E8F0] mx-0.5"></div>
@@ -313,7 +313,7 @@
 
         <button type="button" @click="openExportTab()" :class="activeTab === 'export' ? 'active' : ''"
           class="yt-chip text-[#1E8449]">
-          <span>📤 Xuất CSV</span>
+          <span>📤 Xuất dữ liệu</span>
         </button>
 
         <button x-show="isAdmin" type="button" @click="activeTab = 'admin'; loadServerBackups(); loadPhanLoaiTree()"
@@ -477,15 +477,15 @@
             <span class="text-[10px]">Tạo mới</span>
           </button>
 
-          <!-- Nút Xuất CSV ở mini sidebar -->
+          <!-- Nút Xuất dữ liệu ở mini sidebar -->
           <button type="button" @click="openExportTab()"
             class="flex flex-col items-center gap-1 text-[#7F8C8D] hover:text-[#3498DB] p-2 rounded-lg hover:bg-[#F4F6F8] transition-colors"
-            title="Xuất dữ liệu CSV (123 cột)">
+            title="Xuất dữ liệu (CSV / API)">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <span class="text-[10px]">Xuất CSV</span>
+            <span class="text-[10px]">Xuất DL</span>
           </button>
         </div>
       </aside>
