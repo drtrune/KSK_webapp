@@ -1,13 +1,13 @@
 <!-- TAB 4: KHÁM LÂM SÀNG CÁC CHUYÊN KHOA -->
 <div x-show="activeTab === 'clinical' && activeRecordTemplate === 'TREN_18'" class="space-y-4 no-print relative">
 
-  <div class="flex flex-col md:flex-row gap-4 items-start">
+  <div class="flex flex-col lg:flex-row gap-4 items-start">
     <!-- ============================================================== -->
-    <!-- 1. THANH ĐIỀU HƯỚNG CHUYÊN KHOA DỌC BÊN TRÁI (LEFT RAIL)        -->
+    <!-- 1. THANH ĐIỀU HƯỚNG CHUYÊN KHOA DỌC BÊN TRÁI (LEFT RAIL TRÊN >= LG) -->
     <!-- ============================================================== -->
-    <aside class="w-full md:w-56 shrink-0 bg-white border border-slate-200 shadow-xs rounded-xl p-2.5 space-y-2 md:sticky md:top-16">
+    <aside class="w-full lg:w-56 shrink-0 bg-white border border-slate-200 shadow-xs rounded-xl p-2.5 space-y-2 lg:sticky lg:top-16">
       <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-2 pt-1">Chuyên khoa lâm sàng</div>
-      <div class="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
+      <div class="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0">
         <button type="button" @click="clinicalSubTab = 'noi'"
           :class="clinicalSubTab === 'noi' ? 'bg-[#3498DB] text-white font-semibold shadow-xs' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
           class="px-3 py-2 rounded-lg text-xs transition-colors shrink-0 flex items-center justify-between gap-2 text-left">

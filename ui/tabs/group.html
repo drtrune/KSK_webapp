@@ -72,7 +72,7 @@
         <div class="text-xs font-bold text-slate-900" x-text="'Danh sách nhân viên — ' + (selectedContractForView?.contract_code || '') + ' (' + groupContractRecords.length + ' hồ sơ)'"></div>
         <button type="button" @click="selectedContractForView = null" class="text-xs text-slate-500 hover:text-slate-800">Đóng danh sách</button>
       </div>
-      <div class="overflow-x-auto border border-slate-200 rounded-lg max-h-80 overflow-y-auto">
+      <div tabindex="0" role="region" aria-label="Danh sách nhân viên hợp đồng" class="overflow-x-auto border border-slate-200 rounded-lg max-h-80 overflow-y-auto">
         <table class="w-full text-left border-collapse text-xs">
           <thead>
             <tr class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">

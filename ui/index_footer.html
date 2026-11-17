@@ -77,46 +77,79 @@
       </main>
     </div>
 
-    <!-- THANH FOOTER CỐ ĐỊNH 1 HÀNG NÚT (STICKY ACTION BAR) -->
+    <!-- THANH FOOTER CỐ ĐỊNH TRÊN TABLET & DESKTOP (STICKY ACTION BAR) -->
     <footer x-show="['reception','history','physical','clinical','paraclinical','conclusion'].includes(activeTab)"
-            class="hidden md:flex h-12 bg-white border-t border-[#E2E8F0] fixed bottom-0 left-0 right-0 z-40 px-4 items-center justify-between shadow-sm no-print">
-      <div class="flex items-center gap-2 text-xs">
+            class="hidden md:flex min-h-12 py-1.5 bg-white border-t border-[#E2E8F0] fixed bottom-0 left-0 right-0 z-40 px-3 lg:px-4 flex-wrap items-center justify-between gap-2 shadow-sm no-print">
+      <div class="hidden lg:flex items-center gap-2 text-xs">
         <span x-show="isDirty && isCurrentTabEditable()" class="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">● Có thay đổi chưa lưu</span>
         <span x-show="!isDirty && isCurrentTabEditable() && isSectionExamined(currentSectionKey())" class="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 font-semibold">Đang sửa (Đã khám)</span>
         <span x-show="!isDirty && isCurrentTabEditable() && !isSectionExamined(currentSectionKey())" class="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 font-semibold">Chưa khám · Đang nhập liệu</span>
         <span x-show="!isCurrentTabEditable() && isSectionExamined(currentSectionKey())" class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">Đã khám · Chế độ xem</span>
       </div>
 
-      <div class="flex items-center gap-2">
-        <button type="button" @click="cycleExamTab(-1)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">◀ Bước trước</button>
-        <button type="button" @click="cycleExamTab(1)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">Bước sau ▶</button>
+      <div class="flex flex-wrap items-center gap-1.5 lg:gap-2 ml-auto">
+        <button type="button" @click="cycleExamTab(-1)" class="px-2.5 lg:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">◀ Bước trước</button>
+        <button type="button" @click="cycleExamTab(1)" class="px-2.5 lg:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">Bước sau ▶</button>
 
         <button x-show="!isLocked && !isCurrentTabEditable()" type="button" @click="enterCurrentTabEdit()"
                 class="px-3.5 py-1.5 bg-[#0F766E] hover:bg-[#115E59] text-white rounded-lg text-xs font-semibold">✎ Sửa mục này</button>
 
         <template x-if="!isLocked && isCurrentTabEditable()">
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-1.5 lg:gap-2">
             <button x-show="activeTab !== 'reception'" type="button" @click="quickFillNormalDefaults()"
-                    class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-medium"
+                    class="px-2.5 lg:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-medium"
                     title="Điền mặc định bình thường cho mục đang mở">⚡ Mặc định BT mục này</button>
             <button type="button" @click="quickFillAllNormalDefaults()"
-                    class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold"
+                    class="px-2.5 lg:px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold"
                     title="Điền mặc định bình thường cho toàn bộ các mục của mẫu phiếu đang chọn">⚡ Mặc định BT toàn phiếu</button>
             <button type="button" @click="cancelCurrentTabEdit()"
-                    class="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-medium">✕ Hủy</button>
+                    class="px-2.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-medium">✕ Hủy</button>
             <button type="button" @click="saveCurrentSection(false)"
-                    class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold">💾 Lưu</button>
+                    class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold">💾 Lưu</button>
             <button type="button" @click="saveCurrentSection(true)"
-                    class="px-3.5 py-1.5 bg-[#0F766E] hover:bg-[#115E59] text-white rounded-lg text-xs font-semibold">💾 Lưu &amp; Tiếp ➔</button>
+                    class="px-3 lg:px-3.5 py-1.5 bg-[#0F766E] hover:bg-[#115E59] text-white rounded-lg text-xs font-semibold">💾 Lưu &amp; Tiếp ➔</button>
           </div>
         </template>
       </div>
     </footer>
 
+    <!-- THANH THAO TÁC NHANH TRÊN MOBILE (< MD) NẰM NGAY TRÊN BOTTOM BAR -->
+    <div x-show="['reception','history','physical','clinical','paraclinical','conclusion'].includes(activeTab)"
+         class="md:hidden fixed bottom-14 left-0 right-0 z-40 bg-white/95 backdrop-blur-xs border-t border-[#E2E8F0] px-2 py-1.5 flex items-center justify-between gap-1.5 shadow-sm no-print">
+      <div class="flex items-center gap-1 shrink-0">
+        <button type="button" @click="cycleExamTab(-1)" aria-label="Bước trước"
+                class="px-2.5 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">◀</button>
+        <button type="button" @click="cycleExamTab(1)" aria-label="Bước sau"
+                class="px-2.5 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">▶</button>
+      </div>
+
+      <div class="flex items-center gap-1.5 overflow-x-auto ml-auto">
+        <button x-show="!isLocked && !isCurrentTabEditable()" type="button" @click="enterCurrentTabEdit()"
+                class="px-3.5 py-1.5 bg-[#0F766E] text-white rounded-lg text-xs font-semibold whitespace-nowrap">✎ Sửa mục này</button>
+
+        <template x-if="!isLocked && isCurrentTabEditable()">
+          <div class="flex items-center gap-1">
+            <button x-show="activeTab !== 'reception'" type="button" @click="quickFillNormalDefaults()"
+                    class="px-2.5 py-1.5 bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-medium whitespace-nowrap"
+                    title="Điền mặc định bình thường mục này">⚡ BT</button>
+            <button type="button" @click="quickFillAllNormalDefaults()"
+                    class="px-2.5 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold whitespace-nowrap"
+                    title="Điền mặc định bình thường toàn phiếu">⚡ BT Full</button>
+            <button type="button" @click="cancelCurrentTabEdit()" aria-label="Hủy sửa"
+                    class="px-2 py-1.5 text-slate-600 bg-slate-50 rounded-lg text-xs font-medium">✕</button>
+            <button type="button" @click="saveCurrentSection(false)"
+                    class="px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-semibold whitespace-nowrap">💾 Lưu</button>
+            <button type="button" @click="saveCurrentSection(true)"
+                    class="px-3 py-1.5 bg-[#0F766E] text-white rounded-lg text-xs font-semibold whitespace-nowrap">Tiếp ➔</button>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- ===================================================================== -->
-    <!-- THANH ĐIỀU HƯỚNG ĐÁY MOBILE (BOTTOM BAR 56PX - DESIGN.MD 3.4 & 18:9) -->
+    <!-- THANH ĐIỀU HƯỚNG ĐÁY MOBILE (BOTTOM BAR + SAFE AREA)                  -->
     <!-- ===================================================================== -->
-    <nav class="md:hidden h-14 bg-white border-t border-[#E2E8F0] fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around px-2 shadow-lg no-print">
+    <nav class="md:hidden min-h-14 pb-[env(safe-area-inset-bottom,0px)] bg-white border-t border-[#E2E8F0] fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around px-1 shadow-lg no-print">
       <button type="button" @click="activeTab = 'reception'" class="flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg transition-colors" :class="activeTab === 'reception' ? 'text-[#3498DB]' : 'text-[#7F8C8D]'">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         <span class="text-[10px] font-medium">Tiếp nhận</span>

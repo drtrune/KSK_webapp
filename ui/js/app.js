@@ -415,6 +415,9 @@ function kskApp() {
     icdSelectKeys: [],
 
     async initApp() {
+      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+        this.sidebarOpen = false;
+      }
       this.loadUserPreferences();
       this.initDefaultClassifications();
       this.recalcCardioScores();
@@ -1316,6 +1319,9 @@ function kskApp() {
     selectRecord(rec) {
       this.loadRecordIntoForm(rec);
       this.searchMaTn = rec.ma_tiep_nhan;
+      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+        this.sidebarOpen = false;
+      }
       // Chạy thẳng tới vị trí chuyên khoa được phân công để nhập liệu ngay
       this.navigateToUserDefaultTab();
       this.toast(`Đã chọn bệnh nhân ${rec.ho_ten} (${rec.ma_tiep_nhan})`);
