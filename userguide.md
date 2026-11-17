@@ -1,192 +1,154 @@
-# Hướng dẫn sử dụng KSK Desktop
-## 1. Giới thiệu
-KSK Desktop là phần mềm desktop quản lý quy trình khám sức khỏe:
-- Tiếp nhận khám lẻ và khám đoàn.
-- Khám theo từng chuyên khoa.
-- In phiếu tiếp nhận, giấy khám sức khỏe và xuất DOCX/PDF.
-- Xuất dữ liệu CSV 123 trường theo chuẩn KSK.
-- Quản lý công ty, hợp đồng, danh mục và người dùng.
-Giao diện chính gồm bốn khu vực:
-| Khu vực | Chức năng |
+# Hướng dẫn sử dụng KSK Webapp
+
+## 1. Giới thiệu & Giao diện tổng quan
+
+**KSK Webapp** là hệ thống web nội bộ quản lý quy trình khám sức khỏe, hoạt động trực tiếp trên trình duyệt của **Máy tính (PC)**, **Máy tính bảng (Tablet)** và **Điện thoại (Mobile)**.
+
+Các phân hệ chính trên thanh điều hướng:
+
+| Phân hệ | Chức năng chính |
 |---|---|
-| **Hồ sơ khám** | Tạo, tìm kiếm và nhập kết quả khám |
-| **Khám đoàn** | Quản lý công ty, hợp đồng và danh sách khám đoàn |
-| **Xuất dữ liệu** | Xuất CSV/DOCX/PDF, lọc hồ sơ |
-| **Quản trị** | Người dùng, danh mục, database, backup và cập nhật |
-Các nút hoặc tab không thuộc quyền của tài khoản sẽ bị ẩn hoặc khóa.
-## 2. Chuẩn bị trước khi sử dụng
-### 2.1. Kiểm tra thư mục ứng dụng
-Đảm bảo các file sau nằm đúng vị trí:
-```text
-ksk_webapp.exe
-config.toml
-database.toml
-asset/
-```
-Database và thư mục backup phải có quyền đọc/ghi. Nếu dùng nhiều máy, nên đặt database trên thư mục LAN/SMB dùng chung và thư mục backup ở vị trí được sao lưu riêng.
-### 2.2. Khởi tạo lần đầu
-Ở lần chạy đầu tiên:
-1. Chọn hoặc tạo file database.
-2. Đặt mật khẩu Admin.
-3. Ghi lại **Recovery Key** được hiển thị.
-4. Xác nhận đã lưu Recovery Key.
-5. Đăng nhập vào hệ thống.
-Recovery Key dùng để khôi phục tài khoản Admin khi quên mật khẩu. Không lưu Recovery Key trong cùng thư mục với database và không gửi qua kênh không an toàn.
-### 2.3. Tài khoản mặc định
-Database mới có thể được tạo cùng các tài khoản mẫu trong mã nguồn. Nếu hệ thống của bạn hiển thị tài khoản mặc định, hãy đăng nhập lần đầu và đổi mật khẩu ngay trong khu vực **Quản trị**. Không sử dụng mật khẩu mặc định trong môi trường thật.
-## 3. Đăng nhập và khôi phục Admin
-### Đăng nhập
-1. Nhập tên đăng nhập.
-2. Nhập mật khẩu.
-3. Chọn **Đăng nhập**.
-Tài khoản bị khóa chỉ có thể được mở lại bởi Admin.
-### Quên mật khẩu Admin
+| **Hồ sơ khám** | Tạo, tìm kiếm, tiếp nhận và nhập kết quả khám theo từng chuyên khoa |
+| **Khám đoàn** | Quản lý công ty, hợp đồng khám đoàn, import danh sách Excel/CSV và theo dõi tiến độ |
+| **In ấn** | Xem trước và in phiếu tiếp nhận, giấy khám sức khỏe (PDF A4, barcode Code 128, DOCX) |
+| **Xuất dữ liệu** | Lọc hồ sơ, xuất file **CSV 123 trường** (QĐ 3176/1804) hoặc **Cấu hình & Xuất qua API JSON** |
+| **Quản trị** | Quản lý người dùng, danh mục, phân loại bệnh đa cấp, sao lưu/khôi phục database |
+
+> **Phân quyền hiển thị & chỉnh sửa:** Các tab hoặc nút bấm ngoài phạm vi role của tài khoản sẽ bị vô hiệu hóa (disable nút **Sửa**, khóa các ô nhập liệu và tắt tự động kiểm tra/sửa dữ liệu). Đồng thời backend cũng kiểm tra quyền theo từng section và từng trường dữ liệu.
+
+---
+
+## 2. Đăng nhập & Khôi phục tài khoản
+
+### 2.1. Đăng nhập
+1. Mở trình duyệt và truy cập địa chỉ máy chủ (mặc định `http://127.0.0.1:18080` hoặc IP LAN do IT cung cấp).
+2. Nhập **Tên đăng nhập** và **Mật khẩu**, sau đó bấm **Đăng nhập**.
+3. Nếu nhập sai thông tin hoặc tài khoản đang bị khóa, hệ thống sẽ hiển thị thông báo lỗi cụ thể ngay trên màn hình đăng nhập.
+
+### 2.2. Quên mật khẩu Admin (Recovery Key)
 1. Tại màn hình đăng nhập, chọn **Quên mật khẩu Admin? Khôi phục bằng Recovery Key**.
-2. Nhập Recovery Key.
-3. Nhập mật khẩu Admin mới.
-4. Xác nhận khôi phục.
-5. Đăng nhập lại bằng mật khẩu mới.
-Nếu Recovery Key bị mất, không thể khôi phục Master Key bằng cách thông thường. Hãy dừng thao tác trên database và liên hệ người quản trị hệ thống.
-## 4. Quy trình khám lẻ
-### 4.1. Tạo hồ sơ mới
-1. Đăng nhập bằng tài khoản `reception` hoặc `admin`.
-2. Chọn **Hồ sơ khám**.
-3. Chọn chế độ **Khám lẻ**.
-4. Chọn **Tạo hồ sơ mới**.
-5. Nhập các thông tin tiếp nhận:
-   - Mã tiếp nhận.
-   - Mã y tế.
-   - Họ và tên.
-   - Giới tính, ngày sinh.
-   - CCCD/định danh.
-   - Địa chỉ, điện thoại.
-   - Ngày khám và lý do khám.
-6. Chọn mẫu khám phù hợp.
-7. Lưu hồ sơ.
-Mã tiếp nhận phải là duy nhất trong database.
-### 4.2. Tìm hồ sơ
-Tìm theo mã tiếp nhận, mã y tế hoặc họ tên trong danh sách bên trái. Có thể chuyển giữa **Khám lẻ** và **Khám đoàn** để tránh chọn nhầm loại hồ sơ.
-Nếu nhận dữ liệu từ HIS Bridge, hồ sơ mới hoặc hồ sơ tương ứng sẽ được tìm/mở tự động sau khi ứng dụng nhận mã tiếp nhận.
-### 4.3. Nhập kết quả khám
-Hồ sơ được nhập theo các phần:
-1. **Tiếp nhận:** thông tin hành chính.
-2. **Tiền sử:** tiền sử gia đình, bản thân và sản khoa khi phù hợp.
-3. **Thể lực:** chiều cao, cân nặng, mạch, huyết áp và phân loại.
-4. **Lâm sàng:** nội, ngoại, da liễu, sản, mắt, tai mũi họng, răng hàm mặt.
-5. **Cận lâm sàng:** xét nghiệm, chẩn đoán hình ảnh và mô tả kết quả.
-6. **Kết luận:** phân loại sức khỏe, bệnh phát hiện và khuyến nghị.
-Chỉ role được cấp cho section mới có thể chỉnh sửa section đó. Sau khi nhập dữ liệu, chọn **Lưu** trước khi chuyển tab hoặc chuyển hồ sơ.
-### 4.4. Ký và khóa hồ sơ
-1. Kiểm tra các phần khám đã hoàn tất.
-2. Mở tab **Kết luận**.
-3. Nhập phân loại sức khỏe và nội dung kết luận.
-4. Chọn **Ký / Khóa hồ sơ**.
-5. Xác nhận thao tác.
-Hồ sơ đã khóa không nên chỉnh sửa. Chỉ `admin` hoặc người có quyền kết luận theo thiết kế hệ thống mới được thực hiện thao tác ký/khóa.
-## 5. Quy trình khám đoàn
-### 5.1. Tạo công ty
-1. Mở **Khám đoàn**.
-2. Chọn **Công ty & Hợp đồng**.
-3. Chọn **Thêm công ty**.
-4. Nhập mã, tên, mã số thuế, địa chỉ và thông tin liên hệ.
-5. Lưu công ty.
-### 5.2. Tạo hợp đồng
-1. Chọn công ty.
-2. Chọn **Thêm hợp đồng**.
-3. Nhập mã hợp đồng, tên đợt khám và ngày khám.
-4. Nhập số lượng dự kiến.
-5. Chọn mẫu phiếu mặc định.
-6. Đính kèm file scan nếu cần.
-7. Lưu hợp đồng.
-### 5.3. Import danh sách
-1. Mở hợp đồng cần nhập.
-2. Chọn **Import danh sách**.
-3. Chọn file `.csv`, `.xlsx` hoặc `.xls`.
-4. Kiểm tra bảng preview.
-5. Sửa các dòng báo lỗi trong file nguồn.
-6. Chọn **Import** khi số dòng hợp lệ đúng yêu cầu.
-Các cột cơ bản được hỗ trợ:
-```text
-MA_TIEP_NHAN, MA_Y_TE, HO_TEN, NGAY_SINH, GIOI_TINH,
-SO_CCCD, NGAYCAP_CCCD, NOICAP_CCCD, DIEN_THOAI,
-MATINH_CU_TRU, MAXA_CU_TRU, DIA_CHI, MA_DAN_TOC,
-MA_NGHE_NGHIEP, NOI_LAM_VIEC_HOC_TAP, MA_LOAI_KCB,
-NGAY_VAO, NHOM_MAU, LY_DO_VV
-```
-Hệ thống có thể nhận một số tên cột tương đương bằng tiếng Việt hoặc tiếng Anh. Nên dùng file mẫu `mau_import_kham_doan.csv` để tránh sai tên cột và định dạng.
-Ngày nên dùng `DD/MM/YYYY`; giới tính dùng `1` = Nam, `2` = Nữ. Sau import, hồ sơ được gắn với hợp đồng và có nhãn **Khám đoàn**.
-### 5.4. Theo dõi tiến độ
-Trong hợp đồng, xem số hồ sơ đã tạo, trạng thái khám và các hồ sơ còn thiếu phần khám. Chọn một hồ sơ để mở quy trình khám giống hồ sơ khám lẻ.
-## 6. In và xuất dữ liệu
-### In phiếu
-1. Chọn một hoặc nhiều hồ sơ.
-2. Kiểm tra đúng loại khám và đúng template.
+2. Nhập **Recovery Key** đã lưu khi khởi tạo database lần đầu.
+3. Nhập mật khẩu Admin mới, xác nhận và đăng nhập lại.
+
+---
+
+## 3. Quy trình Khám lẻ
+
+### 3.1. Tạo hoặc nhận hồ sơ mới
+1. Đăng nhập bằng tài khoản `reception` (hoặc `admin`).
+2. Vào **Hồ sơ khám** → chế độ **Khám lẻ** → bấm **Tạo hồ sơ mới**.
+3. Nhập đầy đủ thông tin hành chính:
+   - Mã tiếp nhận (duy nhất trong database), Mã y tế, Họ tên, Giới tính, Ngày sinh.
+   - CCCD/Định danh, Địa chỉ, Điện thoại, Ngày khám, Lý do khám.
+4. Chọn **Mẫu phiếu khám** phù hợp:
+   - `TREN_18`: Từ đủ 18 tuổi
+   - `LAI_XE`: Khám sức khỏe lái xe
+   - `TU_6_DUOI_18`: Trẻ từ 6 đến dưới 18 tuổi
+   - `DUOI_6`: Trẻ dưới 6 tuổi
+   - `MAU_GIAO`: Mẫu giáo
+   - `HS_PHO_THONG`: Học sinh phổ thông
+5. Bấm **Lưu**.
+
+> Nếu dùng **HIS Bridge**, khi quét/đẩy mã tiếp nhận từ HIS, hệ thống sẽ tự động tìm và mở hồ sơ tương ứng.
+
+### 3.2. Nhập kết quả khám theo chuyên khoa
+Hồ sơ được chia thành 6 tab quy trình:
+1. **Tiếp nhận** (`reception`): Thông tin hành chính.
+2. **Tiền sử** (`tiensu`): Tiền sử gia đình, bản thân, sản khoa (nếu có).
+3. **Thể lực** (`bs_theluc`): Chiều cao, cân nặng, BMI, mạch, huyết áp, phân loại thể lực.
+4. **Lâm sàng**: Nội khoa (`bs_noi`), Ngoại khoa (`bs_ngoai`), Da liễu (`bs_dalieu`), Sản phụ khoa (`bs_san`), Mắt (`bs_mat`), Tai - Mũi - Họng (`bs_tmh`), Răng - Hàm - Mặt (`bs_rhm`).
+5. **Cận lâm sàng** (`bs_cls`): Xét nghiệm, chẩn đoán hình ảnh, mô tả kết quả.
+6. **Kết luận** (`bs_ketluan`): Phân loại sức khỏe (Loại 1–5), bệnh phát hiện, khuyến nghị.
+
+**Lưu ý quan trọng:**
+- **Bác sĩ Nhi khoa (`bs_nhi`):** Có quyền xem, bấm **Sửa** và lưu kết quả tại các tab **Tiền sử, Thể lực, Lâm sàng, Kết luận** đối với 4 mẫu nhi khoa (`DUOI_6`, `TU_6_DUOI_18`, `MAU_GIAO`, `HS_PHO_THONG`).
+- Với hồ sơ đã lưu trước đó, bấm nút **Sửa** tại tab đang xem để mở khóa nhập liệu (nút **Sửa** chỉ bật khi tài khoản có quyền tại tab đó và hồ sơ chưa bị khóa).
+- Khi dùng nút điền **Mặc định bình thường**, thao tác chỉ áp dụng cho **tab đang mở**, tránh ghi đè nhầm sang chuyên khoa khác.
+- Nhớ bấm **Lưu** trước khi chuyển tab hoặc chuyển sang bệnh nhân khác.
+
+### 3.3. Ký và Khóa hồ sơ
+1. Kiểm tra các chuyên khoa đã nhập đủ dữ liệu.
+2. Vào tab **Kết luận**, chọn phân loại sức khỏe và nội dung kết luận.
+3. Bấm **Ký / Khóa hồ sơ** (`bs_ketluan` hoặc `admin`).
+4. Khi hồ sơ đã khóa (`status = 2`), mọi tài khoản không thể chỉnh sửa cho đến khi **Admin** thực hiện **Mở khóa**.
+
+---
+
+## 4. Quy trình Khám đoàn
+
+### 4.1. Quản lý Công ty & Hợp đồng
+1. Vào phân hệ **Khám đoàn** (tài khoản `business`, `reception` hoặc `admin`).
+2. Thêm **Công ty** (mã, tên, MST, địa chỉ, liên hệ).
+3. Trong công ty, bấm **Thêm hợp đồng**: nhập mã hợp đồng, tên đợt khám, ngày khám, số lượng dự kiến, mẫu phiếu mặc định và đính kèm file scan (nếu có).
+
+### 4.2. Import danh sách đoàn từ Excel/CSV
+1. Mở hợp đồng cần nhập → chọn **Import danh sách**.
+2. Chọn file `.csv`, `.xlsx` hoặc `.xls` (khuyên dùng mẫu `mau_import_kham_doan.csv`).
+3. Kiểm tra bảng **Preview**: hệ thống tự chuẩn hóa ngày sinh (`DD/MM/YYYY`), giới tính (`1` = Nam, `2` = Nữ), mã danh mục và cảnh báo dòng lỗi / trùng mã tiếp nhận.
+4. Sửa các dòng lỗi trên file nguồn nếu có, sau đó bấm **Import**.
+
+### 4.3. Theo dõi tiến độ & Khám
+Trong màn hình hợp đồng, theo dõi tổng số hồ sơ, trạng thái từng hồ sơ và nhấn vào một bệnh nhân để mở sang giao diện khám chuyên khoa.
+
+---
+
+## 5. In ấn (PDF / DOCX)
+
+1. Vào tab **In ấn** (hoặc nút in ngay trên hồ sơ).
+2. Chọn một hoặc nhiều hồ sơ (lọc theo khám lẻ, khám đoàn, hợp đồng, trạng thái).
 3. Chọn **In phiếu tiếp nhận** hoặc **In giấy KSK**.
-4. Kiểm tra bản xem trước.
-5. Chọn máy in và khổ giấy A4.
-PDF được dựng theo template đã chọn và có thể chứa mã vạch Code 128.
-### Xuất PDF/DOCX
-Chọn chức năng xuất tương ứng, chọn thư mục lưu và kiểm tra file sau khi tạo. Với DOCX, không đổi tên hoặc di chuyển các template trong `asset/` khi ứng dụng đang sử dụng chúng.
-### Xuất CSV
-1. Mở **Xuất dữ liệu**.
-2. Chọn loại khám: khám lẻ, khám đoàn hoặc tất cả.
-3. Nếu là khám đoàn, chọn hợp đồng.
-4. Lọc trạng thái hoặc chọn hồ sơ cần xuất.
-5. Chọn **Xuất CSV**.
-File CSV sử dụng 123 cột theo đặc tả trong [`CSV_export_docs.md`](CSV_export_docs.md). Hãy kiểm tra mã cơ sở KCB, ngày khám và phân loại sức khỏe trước khi gửi dữ liệu ra hệ thống khác.
-## 7. Quản trị hệ thống
+4. Kiểm tra bản xem trước PDF A4 (có mã vạch Code 128) hoặc xuất **DOCX** theo mẫu trong `asset/`, sau đó in qua trình duyệt.
+
+---
+
+## 6. Xuất dữ liệu (CSV 123 trường & Xuất qua API)
+
+Vào phân hệ **Xuất dữ liệu** trên thanh điều hướng:
+
+### 6.1. Lọc & Xem trước dữ liệu
+- Lọc theo loại khám (**Tất cả / Khám lẻ / Khám đoàn**), hợp đồng, khoảng ngày, trạng thái hoặc chọn từng hồ sơ trong bảng xem trước.
+
+### 6.2. Chế độ 1: Xuất file CSV
+1. Chọn sub-tab **Xuất file CSV**.
+2. Bấm **Xuất CSV** để tải về file CSV gồm **123 trường** chuẩn theo QĐ 3176/QĐ-BYT & QĐ 1804/QĐ-BYT (chi tiết tại [`CSV_export_docs.md`](CSV_export_docs.md)).
+
+### 6.3. Chế độ 2: Cấu hình & Xuất qua API
+1. Chọn sub-tab **Cấu hình & Xuất qua API**.
+2. Nhập thông số kết nối API đích:
+   - **API Endpoint URL**: địa chỉ API nhận dữ liệu JSON.
+   - **Phương thức HTTP**: `POST` hoặc `PUT`.
+   - **Chế độ gửi dữ liệu**:
+     - `batch`: gửi 1 request chứa danh sách hồ sơ đã giải mã.
+     - `single`: gửi lần lượt từng hồ sơ.
+   - **Xác thực**: `Không` / `Bearer Token` / `API Key` (tùy chỉnh tên header và token/key).
+   - **Custom Headers**: thêm các header bổ sung (nếu hệ thống đích yêu cầu).
+3. Bấm **Lưu cấu hình** (cấu hình được lưu vào SQLite để tái sử dụng).
+4. Bấm **Đẩy tất cả theo bộ lọc** hoặc **Đẩy hồ sơ đã chọn** và theo dõi kết quả trả về ngay tại khung thông báo bên dưới.
+
+---
+
+## 7. Quản trị hệ thống (Dành cho Admin)
+
 ### 7.1. Quản lý người dùng
-Trong **Quản trị**:
-1. Chọn **Người dùng**.
-2. Tạo tài khoản mới.
-3. Nhập tên đăng nhập và họ tên.
-4. Chọn một hoặc nhiều role.
-5. Lưu tài khoản.
-Chỉ cấp role cần thiết cho công việc. Khóa tài khoản khi nhân sự không còn sử dụng hệ thống.
-### 7.2. Quản lý danh mục
-Danh mục được dùng trong các ô chọn của hồ sơ, gồm địa giới, dân tộc, nghề nghiệp, bệnh lý và các mã chuyên môn. Có thể import hoặc cập nhật danh mục từ khu vực **Danh mục**.
-Sau khi cập nhật, kiểm tra lại mã và tên hiển thị trước khi import dữ liệu hàng loạt.
-### 7.3. Backup
-Trong **Quản trị**, bật sao lưu tự động và cấu hình:
-- Thư mục backup.
-- Khoảng thời gian sao lưu.
-- Số bản backup cần giữ.
-Có thể chọn **Backup ngay** để tạo bản sao thủ công. Định kỳ nên thử mở một bản backup trên máy kiểm tra để xác nhận file có thể sử dụng.
-### 7.4. Tạo hoặc chuyển database
-Chỉ Admin nên thực hiện thao tác này:
-1. Sao lưu database hiện tại.
-2. Chọn **Tạo database mới** hoặc **Chuyển database**.
-3. Kiểm tra đường dẫn đích.
-4. Lưu Recovery Key mới nếu tạo database mới.
-5. Xác nhận chuyển kết nối.
-Recovery Key của database mới không dùng được cho database khác.
-## 8. Tích hợp HIS Bridge
-Local HIS IPC mặc định lắng nghe tại:
-```text
-http://127.0.0.1:18080
-```
-Endpoint:
-```text
-POST /api/his/push
-POST /api/his/mock
-```
-HIS Bridge cần gửi đúng payload và API key theo `config.toml`. Khi tích hợp thật, tắt mock và dùng URL/API key của môi trường triển khai. Không mở Local IPC ra địa chỉ mạng công cộng.
-## 9. Xử lý lỗi thường gặp
-| Hiện tượng | Cách xử lý |
+- Vào **Quản trị → Quản lý người dùng** để tạo mới, sửa họ tên, cấp **nhiều role cùng lúc** cho một tài khoản, đặt lại mật khẩu hoặc khóa/mở khóa tài khoản.
+
+### 7.2. Danh mục & Phân loại bệnh đa cấp
+- **Danh mục:** Quản lý địa giới, dân tộc, nghề nghiệp, bệnh lý và các mã chuyên môn.
+- **Phân loại bệnh đa cấp:** Nằm riêng tại mục **Phân loại bệnh đa cấp** trong khu vực Quản trị; hỗ trợ **Thêm mới** và **Chỉnh sửa** trực tiếp các nhóm bệnh/mức phân loại theo nhu cầu của cơ sở.
+
+### 7.3. Sao lưu & Chuyển Database
+- Bật **Sao lưu tự động** (chọn thư mục backup, chu kỳ phút và số bản giữ lại) hoặc bấm **Backup ngay** để tạo bản sao SQLite thủ công.
+- Có thể **Tạo database mới** hoặc **Chuyển database** (nhớ lưu Recovery Key mới nếu tạo DB mới).
+
+---
+
+## 8. Xử lý lỗi thường gặp
+
+| Hiện tượng | Nguyên nhân & Cách xử lý |
 |---|---|
-| Không mở được database | Kiểm tra đường dẫn, quyền đọc/ghi và việc database có đang bị khóa |
-| Hồ sơ hiển thị `[Đã mã hóa]` | Đăng nhập bằng tài khoản có Master Key hoặc khôi phục bằng Recovery Key |
-| Không sửa được một trường | Kiểm tra role và section được cấp quyền |
-| Import báo lỗi dòng | Kiểm tra mã tiếp nhận trùng, ngày, giới tính, mã danh mục và tên cột |
-| HIS không đẩy được hồ sơ | Kiểm tra ứng dụng đang chạy, port IPC, URL, method và API key |
-| Không tạo được PDF/DOCX | Kiểm tra quyền ghi thư mục đích và các file trong `asset/` |
-| Ứng dụng báo lỗi bất ngờ | Gửi nội dung lỗi và file `ksk_app.log` cho quản trị viên; không gửi kèm database thật nếu không được phép |
-## 10. Quy tắc an toàn dữ liệu
-- Không chia sẻ tài khoản hoặc Recovery Key.
-- Không đặt database thật trong thư mục public.
-- Sao lưu trước khi chuyển database, import số lượng lớn hoặc cập nhật phần mềm.
-- Kiểm tra đúng loại khám và đúng hợp đồng trước khi in/xuất.
-- Không sửa trực tiếp file SQLite bằng công cụ bên ngoài khi ứng dụng đang chạy.
-- Khi nghi ngờ lộ mật khẩu, API key hoặc Recovery Key, đổi thông tin ngay và báo Admin.
-Output
-11.5 KB
+| Nút **Sửa** bị mờ / không nhập được | Tài khoản chưa có role phụ trách tab đó, hoặc hồ sơ đã bị **Ký/Khóa** (liên hệ Admin mở khóa). |
+| Đăng nhập báo sai / bị khóa | Kiểm tra lại tên đăng nhập, mật khẩu hoặc nhờ Admin mở khóa tài khoản. |
+| Hồ sơ hiển thị `[Đã mã hóa]` | Phiên làm việc chưa mở khóa Master Key; đăng nhập lại hoặc khôi phục bằng Recovery Key. |
+| Import khám đoàn báo lỗi dòng | Kiểm tra trùng `MA_TIEP_NHAN`, định dạng ngày `DD/MM/YYYY`, giới tính `1`/`2`, mã danh mục. |
+| Giao diện chưa cập nhật sau khi nâng cấp | Nhấn `Ctrl + F5` trên trình duyệt để xóa cache cũ. |
+| Lỗi hệ thống / API không phản hồi | Kiểm tra file log `ksk_app.log` tại thư mục chạy server và gửi cho bộ phận IT. |
