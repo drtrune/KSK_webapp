@@ -305,6 +305,7 @@ async fn main() {
         )
         .route("/api/admin/catalogs/reload-asset", post(reload_asset_catalogs_handler))
         .route("/api/phan-loai/tree", get(get_phan_loai_tree_handler))
+        .route("/api/admin/phan-loai/item", post(upsert_phan_loai_item_handler))
         .route("/api/admin/phan-loai/reload-xlsx", post(reload_phan_loai_xlsx_handler))
         .layer(axum::middleware::from_fn(http_logging_middleware))
         .layer(cors)

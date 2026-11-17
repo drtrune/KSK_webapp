@@ -150,6 +150,8 @@ function kskApp() {
     phanLoaiSearch: '',
     phanLoaiExpanded: {},
     phanLoaiReloading: false,
+    showPhanLoaiModal: false,
+    phanLoaiModal: { kind: 'specialty', mode: 'create', form: {} },
 
     isSectionEditing(secKey) {
       if (!this.isSaved) return true; // Hồ sơ mới chưa lưu: luôn ở chế độ nhập/sửa
@@ -1075,6 +1077,7 @@ function kskApp() {
           };
           // Tự động điều hướng trực tiếp đến tab/chuyên khoa được phân quyền của user
           this.navigateToUserDefaultTab();
+          this.loadPhanLoaiTree();
           if (this.isAdmin) {
             await this.loadAdminUsers();
             await this.loadAdminSettings();
@@ -3634,6 +3637,9 @@ function kskApp() {
           if (data && Array.isArray(data.tree) && data.tree.length > 0) {
             this.phanLoaiTree = data.tree;
             this.phanLoaiStats = data.stats || {};
+            if (data.config) {
+              window.PHAN_LOAI_CONFIG = data.config;
+            }
             return;
           }
         }
@@ -3641,6 +3647,57 @@ function kskApp() {
       const local = this.buildPhanLoaiTreeFromLocal();
       this.phanLoaiTree = local.tree;
       this.phanLoaiStats = local.stats;
+    },
+
+    openPhanLoaiModal(kind, mode, item, parentId) {
+      let form = {};
+      if (kind === 'specialty') {
+        form = mode === 'edit' && item
+          ? { id: item.id, name: item.name, parentId: item.parentId || '', note: item.note || '' }
+          : { id: '', name: '', parentId: parentId || '', note: '' };
+      } else if (kind === 'disease') {
+        form = mode === 'edit' && item
+          ? { id: item.id, name: item.name, specialtyId: item.specialtyId || parentId || '' }
+          : { id: '', name: '', specialtyId: parentId || '' };
+      } else if (kind === 'classification') {
+        form = mode === 'edit' && item
+          ? {
+              id: item.id,
+              diseaseId: item.diseaseId || parentId || '',
+              name: item.name,
+              score: item.score != null ? String(item.score) : '',
+              refRule: item.refRule || '',
+              refDiseaseId: item.refDiseaseId || '',
+              adjust: item.adjust != null ? String(item.adjust) : ''
+            }
+          : { id: '', diseaseId: parentId || '', name: '', score: '1', refRule: '', refDiseaseId: '', adjust: '' };
+      }
+      this.phanLoaiModal = { kind, mode, form };
+      this.showPhanLoaiModal = true;
+    },
+
+    async savePhanLoaiModal() {
+      const { kind, mode, form } = this.phanLoaiModal;
+      try {
+        const res = await fetch('/api/admin/phan-loai/item', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.token}`
+          },
+          body: JSON.stringify({ kind, mode, data: form })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this.showPhanLoaiModal = false;
+          this.toast(data.message || 'Đã lưu danh mục phân loại!');
+          await this.loadPhanLoaiTree();
+        } else {
+          this.toast(data.error || 'Lỗi lưu danh mục phân loại', 'error');
+        }
+      } catch (e) {
+        this.toast('Lỗi kết nối khi lưu danh mục phân loại', 'error');
+      }
     },
 
     expandAllPhanLoai(open) {

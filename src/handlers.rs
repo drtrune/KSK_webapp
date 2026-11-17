@@ -4726,6 +4726,40 @@ pub async fn delete_db_backup_handler(
 // 11. DANH MỤC PHÂN LOẠI BỆNH ĐA CẤP (TỪ asset/phan_loai.xlsx)
 // ============================================================================
 
+pub async fn load_phan_loai_config_db(pool: &SqlitePool) -> PhanLoaiConfig {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT value FROM app_settings WHERE key = 'phan_loai_config_json'")
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
+    if let Some((raw,)) = row {
+        if let Ok(cfg) = serde_json::from_str::<PhanLoaiConfig>(&raw) {
+            return cfg;
+        }
+    }
+    load_phan_loai_config_live()
+}
+
+pub async fn save_phan_loai_config_db(
+    pool: &SqlitePool,
+    cfg: &PhanLoaiConfig,
+) -> Result<(), String> {
+    let json_str = serde_json::to_string(cfg).map_err(|e| e.to_string())?;
+    sqlx::query(
+        "INSERT INTO app_settings (key, value) VALUES ('phan_loai_config_json', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(&json_str)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Lỗi lưu danh mục phân loại vào CSDL: {}", e))?;
+    if std::path::Path::new("asset").is_dir() {
+        if let Ok(pretty) = serde_json::to_string_pretty(cfg) {
+            let _ = fs::write("asset/phan_loai_config.json", pretty);
+        }
+    }
+    Ok(())
+}
+
 pub async fn get_phan_loai_tree_handler(
     State(state): State<SharedState>,
     headers: HeaderMap,
@@ -4735,7 +4769,7 @@ pub async fn get_phan_loai_tree_handler(
         return resp;
     }
 
-    let cfg = load_phan_loai_config_live();
+    let cfg = load_phan_loai_config_db(&*db).await;
     let diseases_by_spec = |spec_id: &str| -> Vec<Value> {
         cfg.diseases
             .iter()
@@ -4788,6 +4822,7 @@ pub async fn get_phan_loai_tree_handler(
 
     Json(json!({
         "tree": tree,
+        "config": cfg,
         "stats": {
             "specialties": cfg.specialties.len(),
             "diseases": cfg.diseases.len(),
@@ -4795,6 +4830,152 @@ pub async fn get_phan_loai_tree_handler(
         }
     }))
     .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpsertPhanLoaiReq {
+    pub kind: String, // "specialty" | "disease" | "classification"
+    pub mode: String, // "create" | "edit"
+    pub data: Value,
+}
+
+pub async fn upsert_phan_loai_item_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(req): Json<UpsertPhanLoaiReq>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_role("admin") {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            "Chỉ Quản trị viên (admin) mới được thêm hoặc sửa danh mục phân loại bệnh.",
+        );
+    }
+
+    let mut cfg = load_phan_loai_config_db(&*db).await;
+    let str_field = |k: &str| -> String {
+        req.data
+            .get(k)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string()
+    };
+    let opt_str_field = |k: &str| -> Option<String> {
+        let s = str_field(k);
+        if s.is_empty() { None } else { Some(s) }
+    };
+
+    match req.kind.as_str() {
+        "specialty" => {
+            let id = str_field("id");
+            let name = str_field("name");
+            if id.is_empty() || name.is_empty() {
+                return api_error(StatusCode::BAD_REQUEST, "Mã và Tên chuyên khoa không được để trống");
+            }
+            let parent_id = opt_str_field("parentId");
+            let note = opt_str_field("note");
+            if req.mode == "edit" {
+                let Some(sp) = cfg.specialties.iter_mut().find(|s| s.id == id) else {
+                    return api_error(StatusCode::NOT_FOUND, "Không tìm thấy chuyên khoa cần sửa");
+                };
+                sp.name = name;
+                sp.parent_id = parent_id;
+                sp.note = note;
+            } else {
+                if cfg.specialties.iter().any(|s| s.id == id) {
+                    return api_error(StatusCode::CONFLICT, format!("Mã chuyên khoa '{}' đã tồn tại", id));
+                }
+                cfg.specialties.push(SpecialtyDef {
+                    id,
+                    name,
+                    parent_id,
+                    note,
+                });
+            }
+        }
+        "disease" => {
+            let id = str_field("id");
+            let name = str_field("name");
+            let specialty_id = str_field("specialtyId");
+            if id.is_empty() || name.is_empty() || specialty_id.is_empty() {
+                return api_error(StatusCode::BAD_REQUEST, "Mã, Tên bệnh tật và Chuyên khoa không được để trống");
+            }
+            if req.mode == "edit" {
+                let Some(d) = cfg.diseases.iter_mut().find(|x| x.id == id) else {
+                    return api_error(StatusCode::NOT_FOUND, "Không tìm thấy bệnh tật cần sửa");
+                };
+                d.name = name;
+                d.specialty_id = specialty_id;
+            } else {
+                if cfg.diseases.iter().any(|x| x.id == id) {
+                    return api_error(StatusCode::CONFLICT, format!("Mã bệnh tật '{}' đã tồn tại", id));
+                }
+                cfg.diseases.push(DiseaseDef {
+                    id,
+                    name,
+                    specialty_id,
+                });
+            }
+        }
+        "classification" => {
+            let id = str_field("id");
+            let disease_id = str_field("diseaseId");
+            let name = str_field("name");
+            if id.is_empty() || disease_id.is_empty() || name.is_empty() {
+                return api_error(StatusCode::BAD_REQUEST, "Mã, Bệnh tật và Tên tiêu chuẩn không được để trống");
+            }
+            let score = req.data.get("score").and_then(|v| {
+                v.as_i64().or_else(|| v.as_str().and_then(|s| s.trim().parse::<i64>().ok()))
+            });
+            let ref_rule = opt_str_field("refRule");
+            let ref_disease_id = opt_str_field("refDiseaseId");
+            let adjust = opt_str_field("adjust").map(|s| {
+                if let Ok(n) = s.parse::<i64>() {
+                    Value::Number(n.into())
+                } else {
+                    Value::String(s)
+                }
+            });
+            if req.mode == "edit" {
+                let Some(c) = cfg.classifications.iter_mut().find(|x| x.id == id) else {
+                    return api_error(StatusCode::NOT_FOUND, "Không tìm thấy tiêu chuẩn phân loại cần sửa");
+                };
+                c.name = name;
+                c.disease_id = disease_id;
+                c.score = score;
+                c.ref_rule = ref_rule;
+                c.ref_disease_id = ref_disease_id;
+                c.adjust = adjust;
+            } else {
+                if cfg.classifications.iter().any(|x| x.id == id) {
+                    return api_error(StatusCode::CONFLICT, format!("Mã tiêu chuẩn '{}' đã tồn tại", id));
+                }
+                cfg.classifications.push(ClassificationDef {
+                    id,
+                    disease_id,
+                    name,
+                    score,
+                    ref_rule,
+                    ref_disease_id,
+                    adjust,
+                });
+            }
+        }
+        _ => {
+            return api_error(StatusCode::BAD_REQUEST, "Loại mục phân loại không hợp lệ");
+        }
+    }
+
+    if let Err(e) = save_phan_loai_config_db(&*db, &cfg).await {
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
+    }
+    tracing::info!("Admin '{}' cập nhật danh mục phân loại: kind={} mode={}", user.username, req.kind, req.mode);
+    Json(json!({ "ok": true, "message": "Đã lưu thay đổi danh mục phân loại bệnh!" })).into_response()
 }
 
 fn cell_to_clean_str(cell: Option<&calamine::Data>) -> String {

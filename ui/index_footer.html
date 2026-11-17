@@ -681,6 +681,86 @@
     </div>
   </div>
 
+  <!-- MODAL THÊM / SỬA DANH MỤC PHÂN LOẠI BỆNH ĐA CẤP -->
+  <div x-show="showPhanLoaiModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 no-print">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-3 text-xs max-h-[90dvh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 class="font-bold text-slate-900 text-sm" x-text="(phanLoaiModal.mode === 'edit' ? 'Sửa ' : 'Thêm ') + (phanLoaiModal.kind === 'specialty' ? 'Chuyên khoa / Phân khoa' : (phanLoaiModal.kind === 'disease' ? 'Bệnh tật' : 'Tiêu chuẩn phân loại'))"></h3>
+        <button type="button" @click="showPhanLoaiModal = false" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="label-title">Mã định danh (ID) *:</label>
+          <input type="text" x-model="phanLoaiModal.form.id" :disabled="phanLoaiModal.mode === 'edit'" class="input-box font-mono" placeholder="VD: CK_MOI / BT_MOI / CT_MOI_01" />
+        </div>
+        <div>
+          <label class="label-title">Tên hiển thị *:</label>
+          <input type="text" x-model="phanLoaiModal.form.name" class="input-box" placeholder="Nhập tên..." />
+        </div>
+
+        <template x-if="phanLoaiModal.kind === 'specialty'">
+          <div class="space-y-3">
+            <div>
+              <label class="label-title">Thuộc chuyên khoa gốc (bỏ trống nếu là gốc):</label>
+              <input type="text" x-model="phanLoaiModal.form.parentId" class="input-box font-mono" placeholder="VD: CK_NOI" />
+            </div>
+            <div>
+              <label class="label-title">Ghi chú tính toán (Note):</label>
+              <textarea x-model="phanLoaiModal.form.note" rows="2" class="input-box" placeholder="Ghi chú hoặc quy tắc tính toán..."></textarea>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="phanLoaiModal.kind === 'disease'">
+          <div>
+            <label class="label-title">Mã Chuyên khoa / Phân khoa *:</label>
+            <input type="text" x-model="phanLoaiModal.form.specialtyId" class="input-box font-mono" />
+          </div>
+        </template>
+
+        <template x-if="phanLoaiModal.kind === 'classification'">
+          <div class="space-y-3">
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label class="label-title">Mã Bệnh tật *:</label>
+                <input type="text" x-model="phanLoaiModal.form.diseaseId" class="input-box font-mono" />
+              </div>
+              <div>
+                <label class="label-title">Phân loại (1–6, để trống nếu dùng Rule):</label>
+                <select x-model="phanLoaiModal.form.score" class="input-box">
+                  <option value="">-- Tính theo Rule --</option>
+                  <option value="1">Loại 1</option><option value="2">Loại 2</option>
+                  <option value="3">Loại 3</option><option value="4">Loại 4</option>
+                  <option value="5">Loại 5</option><option value="6">Loại 6</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="label-title">Rule tham chiếu (nếu có):</label>
+              <input type="text" x-model="phanLoaiModal.form.refRule" class="input-box" placeholder="VD: Theo thị lực chuẩn hạ 1 loại" />
+            </div>
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label class="label-title">Mã Bệnh tham chiếu:</label>
+                <input type="text" x-model="phanLoaiModal.form.refDiseaseId" class="input-box font-mono" placeholder="VD: BT_MAT_THI_LUC" />
+              </div>
+              <div>
+                <label class="label-title">Chỉ số điều chỉnh (adjust):</label>
+                <input type="text" x-model="phanLoaiModal.form.adjust" class="input-box" placeholder="VD: +1 loại hoặc 1" />
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button type="button" @click="showPhanLoaiModal = false" class="px-3.5 py-1.5 bg-slate-100 text-slate-700 rounded-lg font-medium">Hủy</button>
+        <button type="button" @click="savePhanLoaiModal()" class="px-4 py-1.5 bg-[#0F766E] text-white rounded-lg font-semibold">💾 Lưu</button>
+      </div>
+    </div>
+  </div>
+
   <!-- SCRIPT ALPINE.JS & LOGIC -->
   <script src="/static/js/app.js"></script>
 </body>

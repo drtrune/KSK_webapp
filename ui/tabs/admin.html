@@ -361,14 +361,7 @@
     <div class="flex items-center justify-between border-b border-slate-100 pb-3">
       <div>
         <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800">4. Quản lý & Tra cứu Danh mục Dùng chung</h3>
-        <p class="text-xs text-slate-500">Tra cứu, xem dữ liệu danh mục hiện có trong CSDL (ICD-10, Phân loại, Nghề nghiệp, Dân tộc...) hoặc nạp lại từ file seed_catalogs.tsv.</p>
-      </div>
-      <div class="flex items-center gap-2">
-        <button type="button" @click="reloadCatalogsFromAsset()" :disabled="adminCatalogLoading"
-                class="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm transition-colors">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          <span x-text="adminCatalogLoading ? 'Đang nạp...' : 'Nạp lại toàn bộ từ seed_catalogs.tsv'"></span>
-        </button>
+        <p class="text-xs text-slate-500">Tra cứu, thêm hoặc chỉnh sửa danh mục dùng chung trong CSDL (ICD-10, Nghề nghiệp, Dân tộc, Địa giới hành chính...).</p>
       </div>
     </div>
 
@@ -556,9 +549,9 @@
         <input type="text" x-model="phanLoaiSearch" placeholder="Tìm chuyên khoa, bệnh tật, quy tắc..." class="input-box text-xs w-64" />
         <button type="button" @click="expandAllPhanLoai(true)" class="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">Mở tất cả</button>
         <button type="button" @click="expandAllPhanLoai(false)" class="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">Thu gọn</button>
-        <button type="button" @click="reloadPhanLoaiXlsx()" :disabled="phanLoaiReloading"
-                class="px-3.5 py-2 bg-[#0F766E] hover:bg-[#115E59] disabled:opacity-50 text-white rounded-lg text-xs font-semibold whitespace-nowrap">
-          <span x-text="phanLoaiReloading ? 'Đang đồng bộ...' : '↻ Đồng bộ từ phan_loai.xlsx'"></span>
+        <button type="button" @click="openPhanLoaiModal('specialty', 'create', null, null)"
+                class="px-3.5 py-2 bg-[#0F766E] hover:bg-[#115E59] text-white rounded-lg text-xs font-semibold whitespace-nowrap">
+          + Thêm Chuyên khoa
         </button>
       </div>
     </div>
@@ -567,15 +560,19 @@
       <template x-for="root in filteredPhanLoaiTree()" :key="root.id">
         <div class="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/40">
           <!-- Cấp 1: Chuyên khoa gốc -->
-          <button type="button" @click="togglePhanLoaiNode(root.id)"
-                  class="w-full px-4 py-2.5 bg-slate-100 hover:bg-slate-200/70 flex items-center justify-between text-left transition-colors">
-            <div class="flex items-center gap-2">
+          <div class="w-full px-4 py-2.5 bg-slate-100 hover:bg-slate-200/70 flex flex-wrap items-center justify-between gap-2 transition-colors">
+            <button type="button" @click="togglePhanLoaiNode(root.id)" class="flex items-center gap-2 text-left flex-1 min-w-[200px]">
               <span class="text-xs font-bold text-slate-500" x-text="phanLoaiExpanded[root.id] ? '▼' : '▶'"></span>
               <span class="text-xs font-bold text-slate-900" x-text="root.name"></span>
               <span class="text-[10px] font-mono text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200" x-text="root.id"></span>
+            </button>
+            <div class="flex items-center gap-1.5 text-[11px]">
+              <span class="text-slate-500 mr-1" x-text="(root.children?.length || 0) + ' phân khoa · ' + (root.diseases?.length || 0) + ' bệnh'"></span>
+              <button type="button" @click="openPhanLoaiModal('specialty', 'edit', root, null)" class="px-2 py-1 bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 rounded font-medium">✎ Sửa</button>
+              <button type="button" @click="openPhanLoaiModal('specialty', 'create', null, root.id)" class="px-2 py-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-slate-200 rounded font-medium">+ Phân khoa</button>
+              <button type="button" @click="openPhanLoaiModal('disease', 'create', null, root.id)" class="px-2 py-1 bg-white hover:bg-indigo-50 text-indigo-700 border border-slate-200 rounded font-medium">+ Bệnh</button>
             </div>
-            <span class="text-[11px] text-slate-500" x-text="(root.children?.length || 0) + ' phân khoa · ' + (root.diseases?.length || 0) + ' bệnh'"></span>
-          </button>
+          </div>
 
           <!-- Note chuyên khoa gốc -->
           <div x-show="root.note && phanLoaiExpanded[root.id]" class="mx-4 mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
@@ -586,9 +583,13 @@
             <!-- Bệnh trực thuộc chuyên khoa gốc -->
             <template x-for="d in (root.diseases || [])" :key="d.id">
               <div class="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between gap-2">
                   <div class="text-xs font-semibold text-slate-800" x-text="d.name"></div>
-                  <span class="text-[10px] font-mono text-slate-400" x-text="d.id"></span>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <span class="text-[10px] font-mono text-slate-400" x-text="d.id"></span>
+                    <button type="button" @click="openPhanLoaiModal('disease', 'edit', d, root.id)" class="px-1.5 py-0.5 text-[11px] bg-slate-50 hover:bg-sky-50 text-sky-700 border border-slate-200 rounded">✎ Sửa</button>
+                    <button type="button" @click="openPhanLoaiModal('classification', 'create', null, d.id)" class="px-1.5 py-0.5 text-[11px] bg-slate-50 hover:bg-emerald-50 text-emerald-700 border border-slate-200 rounded">+ Tiêu chuẩn</button>
+                  </div>
                 </div>
                 <div class="space-y-1">
                   <template x-for="c in (d.classifications || [])" :key="c.id">
@@ -598,9 +599,12 @@
                         <span x-show="c.refRule" class="ml-2 inline-block px-2 py-0.5 rounded bg-amber-100 text-amber-900 text-[10.5px] font-medium"
                               x-text="'↳ ' + c.refRule + (c.refDiseaseId ? ' (' + c.refDiseaseId + ')' : '') + (c.adjust != null ? ' [' + c.adjust + ']' : '')"></span>
                       </div>
-                      <span class="px-2 py-0.5 rounded font-bold text-[11px]"
-                            :class="c.score ? ('score-' + c.score) : 'bg-indigo-100 text-indigo-800'"
-                            x-text="c.score ? ('Loại ' + c.score) : 'Tính theo Rule'"></span>
+                      <div class="flex items-center gap-1.5 shrink-0">
+                        <span class="px-2 py-0.5 rounded font-bold text-[11px]"
+                              :class="c.score ? ('score-' + c.score) : 'bg-indigo-100 text-indigo-800'"
+                              x-text="c.score ? ('Loại ' + c.score) : 'Tính theo Rule'"></span>
+                        <button type="button" @click="openPhanLoaiModal('classification', 'edit', c, d.id)" class="px-1.5 py-0.5 text-[11px] bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 rounded">✎</button>
+                      </div>
                     </div>
                   </template>
                 </div>
@@ -610,15 +614,18 @@
             <!-- Cấp 2: Phân khoa con -->
             <template x-for="sub in (root.children || [])" :key="sub.id">
               <div class="border border-slate-200 rounded-lg bg-white overflow-hidden">
-                <button type="button" @click="togglePhanLoaiNode(sub.id)"
-                        class="w-full px-3.5 py-2 bg-sky-50/70 hover:bg-sky-100/70 flex items-center justify-between text-left transition-colors">
-                  <div class="flex items-center gap-2">
+                <div class="w-full px-3.5 py-2 bg-sky-50/70 hover:bg-sky-100/70 flex flex-wrap items-center justify-between gap-2 transition-colors">
+                  <button type="button" @click="togglePhanLoaiNode(sub.id)" class="flex items-center gap-2 text-left flex-1 min-w-[180px]">
                     <span class="text-[11px] font-bold text-sky-700" x-text="phanLoaiExpanded[sub.id] ? '▼' : '▶'"></span>
                     <span class="text-xs font-semibold text-sky-900" x-text="sub.name"></span>
                     <span class="text-[10px] font-mono text-sky-700/70" x-text="sub.id"></span>
+                  </button>
+                  <div class="flex items-center gap-1.5 text-[11px]">
+                    <span class="text-sky-700 mr-1" x-text="(sub.diseases?.length || 0) + ' bệnh'"></span>
+                    <button type="button" @click="openPhanLoaiModal('specialty', 'edit', sub, root.id)" class="px-1.5 py-0.5 bg-white hover:bg-sky-50 text-sky-700 border border-sky-200 rounded font-medium">✎ Sửa</button>
+                    <button type="button" @click="openPhanLoaiModal('disease', 'create', null, sub.id)" class="px-1.5 py-0.5 bg-white hover:bg-emerald-50 text-emerald-700 border border-sky-200 rounded font-medium">+ Bệnh</button>
                   </div>
-                  <span class="text-[11px] text-sky-700" x-text="(sub.diseases?.length || 0) + ' bệnh'"></span>
-                </button>
+                </div>
 
                 <div x-show="sub.note && phanLoaiExpanded[sub.id]" class="mx-3 mt-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-900">
                   <strong>Ghi chú:</strong> <span x-text="sub.note"></span>
@@ -627,9 +634,13 @@
                 <div x-show="phanLoaiExpanded[sub.id]" class="p-3 space-y-2">
                   <template x-for="d in (sub.diseases || [])" :key="d.id">
                     <div class="border border-slate-200 rounded-lg p-2.5 space-y-1.5 bg-slate-50/40">
-                      <div class="flex items-center justify-between">
+                      <div class="flex items-center justify-between gap-2">
                         <div class="text-xs font-semibold text-slate-800" x-text="d.name"></div>
-                        <span class="text-[10px] font-mono text-slate-400" x-text="d.id"></span>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                          <span class="text-[10px] font-mono text-slate-400" x-text="d.id"></span>
+                          <button type="button" @click="openPhanLoaiModal('disease', 'edit', d, sub.id)" class="px-1.5 py-0.5 text-[11px] bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 rounded">✎ Sửa</button>
+                          <button type="button" @click="openPhanLoaiModal('classification', 'create', null, d.id)" class="px-1.5 py-0.5 text-[11px] bg-white hover:bg-emerald-50 text-emerald-700 border border-slate-200 rounded">+ Tiêu chuẩn</button>
+                        </div>
                       </div>
                       <template x-for="c in (d.classifications || [])" :key="c.id">
                         <div class="flex flex-wrap items-center justify-between gap-2 px-2.5 py-1 rounded bg-white border border-slate-100 text-xs">
@@ -638,9 +649,12 @@
                             <span x-show="c.refRule" class="ml-2 inline-block px-2 py-0.5 rounded bg-amber-100 text-amber-900 text-[10.5px] font-medium"
                                   x-text="'↳ ' + c.refRule + (c.refDiseaseId ? ' (' + c.refDiseaseId + ')' : '') + (c.adjust != null ? ' [' + c.adjust + ']' : '')"></span>
                           </div>
-                          <span class="px-2 py-0.5 rounded font-bold text-[11px]"
-                                :class="c.score ? ('score-' + c.score) : 'bg-indigo-100 text-indigo-800'"
-                                x-text="c.score ? ('Loại ' + c.score) : 'Tính theo Rule'"></span>
+                          <div class="flex items-center gap-1.5 shrink-0">
+                            <span class="px-2 py-0.5 rounded font-bold text-[11px]"
+                                  :class="c.score ? ('score-' + c.score) : 'bg-indigo-100 text-indigo-800'"
+                                  x-text="c.score ? ('Loại ' + c.score) : 'Tính theo Rule'"></span>
+                            <button type="button" @click="openPhanLoaiModal('classification', 'edit', c, d.id)" class="px-1.5 py-0.5 text-[11px] bg-slate-50 hover:bg-sky-50 text-sky-700 border border-slate-200 rounded">✎</button>
+                          </div>
                         </div>
                       </template>
                     </div>
