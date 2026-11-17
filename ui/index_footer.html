@@ -15,7 +15,23 @@
                 <template x-for="f in grp.fields" :key="f.namespaced_key">
                   <div>
                     <label class="label-title" x-text="f.label"></label>
-                    <template x-if="f.kind === 'select'">
+                    <template x-if="f.kind === 'select' && (f.options || []).length < 4">
+                      <div class="flex flex-wrap items-center gap-3 bg-white px-3 py-2 rounded-lg border border-slate-200">
+                        <template x-for="opt in f.options" :key="opt.value">
+                          <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs">
+                            <input type="radio"
+                                   :name="f.namespaced_key"
+                                   :value="opt.value"
+                                   :checked="(form[f.namespaced_key] || '') === opt.value"
+                                   @change="form[f.namespaced_key] = opt.value; isDirty = true"
+                                   :disabled="!isCurrentTabEditable()"
+                                   class="text-sky-600 focus:ring-sky-500" />
+                            <span class="font-medium text-slate-700" x-text="opt.label"></span>
+                          </label>
+                        </template>
+                      </div>
+                    </template>
+                    <template x-if="f.kind === 'select' && (f.options || []).length >= 4">
                       <select :value="form[f.namespaced_key] || ''"
                               @change="form[f.namespaced_key] = $event.target.value; isDirty = true"
                               :disabled="!isCurrentTabEditable()"
@@ -26,7 +42,24 @@
                         </template>
                       </select>
                     </template>
-                    <template x-if="f.kind !== 'select'">
+                    <template x-if="f.kind === 'icd10'">
+                      <div wire:ignore>
+                        <select multiple x-init="initIcdMultiSelect($el, f.namespaced_key)" class="input-box text-xs"></select>
+                      </div>
+                    </template>
+                    <template x-if="f.kind === 'date'">
+                      <div class="relative">
+                        <input type="text"
+                               :value="form[f.namespaced_key] || ''"
+                               x-init="initDatePicker($el, f.namespaced_key)"
+                               @input="form[f.namespaced_key] = $event.target.value; isDirty = true"
+                               :placeholder="f.placeholder || 'dd/mm/yyyy'"
+                               :disabled="!isCurrentTabEditable()"
+                               class="input-box text-xs pr-8 bg-white" />
+                        <span class="pointer-events-none absolute right-2.5 top-2 text-slate-400 text-xs">📅</span>
+                      </div>
+                    </template>
+                    <template x-if="!['select','icd10','date'].includes(f.kind)">
                       <input type="text"
                              :value="form[f.namespaced_key] || ''"
                              @input="form[f.namespaced_key] = $event.target.value; isDirty = true"
@@ -64,7 +97,11 @@
         <template x-if="!isLocked && isCurrentTabEditable()">
           <div class="flex items-center gap-2">
             <button x-show="activeTab !== 'reception'" type="button" @click="quickFillNormalDefaults()"
-                    class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-medium">⚡ Điền bình thường</button>
+                    class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-medium"
+                    title="Điền mặc định bình thường cho mục đang mở">⚡ Mặc định BT mục này</button>
+            <button type="button" @click="quickFillAllNormalDefaults()"
+                    class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold"
+                    title="Điền mặc định bình thường cho toàn bộ các mục của mẫu phiếu đang chọn">⚡ Mặc định BT toàn phiếu</button>
             <button type="button" @click="cancelCurrentTabEdit()"
                     class="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-medium">✕ Hủy</button>
             <button type="button" @click="saveCurrentSection(false)"
@@ -544,7 +581,13 @@
       </div>
       <div class="grid grid-cols-2 gap-2.5">
         <div><label class="label-title">Mã hợp đồng *:</label><input type="text" x-model="contractForm.contract_code" class="input-box" placeholder="HD2026-01" /></div>
-        <div><label class="label-title">Ngày khám (dd/mm/yyyy):</label><input type="text" x-model="contractForm.exam_date" class="input-box" placeholder="20/11/2026" /></div>
+        <div>
+          <label class="label-title">Ngày khám (dd/mm/yyyy):</label>
+          <div class="relative">
+            <input type="text" x-model="contractForm.exam_date" x-init="initContractDatePicker($el)" class="input-box pr-8 bg-white" placeholder="20/11/2026" />
+            <span class="pointer-events-none absolute right-2.5 top-2 text-slate-400 text-xs">📅</span>
+          </div>
+        </div>
       </div>
       <div class="grid grid-cols-3 gap-2.5">
         <div class="col-span-2"><label class="label-title">Tên đợt khám *:</label><input type="text" x-model="contractForm.title" class="input-box" /></div>

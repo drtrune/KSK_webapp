@@ -100,6 +100,7 @@ pub fn has_under18_template(raw: &str) -> bool {
 #[derive(Clone, Copy)]
 pub enum TemplateFieldKind {
     Text,
+    Date,
     Select(&'static [(&'static str, &'static str)]),
     Icd10,
 }
@@ -209,9 +210,9 @@ const D6_PHYSICAL_GROUPS: &[TemplateGroup] = &[
         title: "V. Đánh giá dinh dưỡng (Dưới 6 tuổi)",
         fields: &[
             TemplateField { key: "CHIEU_DAI", label: "Chiều dài / Chiều cao (cm)", placeholder: "95", default_normal: "", kind: TemplateFieldKind::Text },
-            TemplateField { key: "CHIEU_DAI_TUOI_SD", label: "Chiều dài/Tuổi (SD)", placeholder: "Bình thường", default_normal: "", kind: TemplateFieldKind::Text },
+            TemplateField { key: "CHIEU_DAI_TUOI_SD", label: "Chiều dài/Tuổi (SD)", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
             TemplateField { key: "CAN_NANG", label: "Cân nặng (kg)", placeholder: "14.5", default_normal: "", kind: TemplateFieldKind::Text },
-            TemplateField { key: "CAN_NANG_TUOI_SD", label: "Cân nặng/Tuổi (SD)", placeholder: "Bình thường", default_normal: "", kind: TemplateFieldKind::Text },
+            TemplateField { key: "CAN_NANG_TUOI_SD", label: "Cân nặng/Tuổi (SD)", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
             TemplateField { key: "VONG_DAU", label: "Vòng đầu (cm)", placeholder: "48", default_normal: "48", kind: TemplateFieldKind::Text },
             TemplateField { key: "DG_VONG_DAU", label: "Đánh giá vòng đầu", placeholder: "", default_normal: "Bình thường", kind: TemplateFieldKind::Select(OPT_VONG_DAU) },
             TemplateField { key: "CHU_VI_VONG_CANH_TAY", label: "Chu vi vòng cánh tay (mm)", placeholder: "145", default_normal: "145", kind: TemplateFieldKind::Text },
@@ -249,9 +250,9 @@ const MG_PHYSICAL_GROUPS: &[TemplateGroup] = &[
         title: "V. Đánh giá dinh dưỡng",
         fields: &[
             TemplateField { key: "CHIEU_DAI", label: "Chiều dài / Chiều cao (cm)", placeholder: "95", default_normal: "", kind: TemplateFieldKind::Text },
-            TemplateField { key: "CHIEU_DAI_TUOI_SD", label: "Chiều dài/Tuổi (SD)", placeholder: "Bình thường", default_normal: "", kind: TemplateFieldKind::Text },
+            TemplateField { key: "CHIEU_DAI_TUOI_SD", label: "Chiều dài/Tuổi (SD)", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
             TemplateField { key: "CAN_NANG", label: "Cân nặng (kg)", placeholder: "14.5", default_normal: "", kind: TemplateFieldKind::Text },
-            TemplateField { key: "CAN_NANG_TUOI_SD", label: "Cân nặng/Tuổi (SD)", placeholder: "Bình thường", default_normal: "", kind: TemplateFieldKind::Text },
+            TemplateField { key: "CAN_NANG_TUOI_SD", label: "Cân nặng/Tuổi (SD)", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
             TemplateField { key: "VONG_DAU", label: "Vòng đầu (cm)", placeholder: "48", default_normal: "48", kind: TemplateFieldKind::Text },
             TemplateField { key: "DG_VONG_DAU", label: "Đánh giá vòng đầu", placeholder: "", default_normal: "Bình thường", kind: TemplateFieldKind::Select(OPT_VONG_DAU) },
             TemplateField { key: "CHU_VI_VONG_CANH_TAY", label: "Chu vi vòng cánh tay (mm)", placeholder: "145", default_normal: "145", kind: TemplateFieldKind::Text },
@@ -324,6 +325,7 @@ const MG_CONCLUSION_GROUPS: &[TemplateGroup] = &[
             TemplateField { key: "BINH_THUONG", label: "Sức khỏe bình thường", placeholder: "", default_normal: "Có", kind: TemplateFieldKind::Select(OPT_CO_KHONG) },
             TemplateField { key: "NGUY_CO_MAC_LAO", label: "Có nguy cơ mắc lao", placeholder: "", default_normal: "Không", kind: TemplateFieldKind::Select(OPT_KHONG_CO) },
             TemplateField { key: "VAN_DE_SUC_KHOE", label: "Có vấn đề về sức khỏe", placeholder: "", default_normal: "Không", kind: TemplateFieldKind::Select(OPT_KHONG_CO) },
+            TemplateField { key: "KET_LUAN_BENH", label: "Mã/Tên bệnh kết luận (ICD-10)", placeholder: "Chọn mã bệnh ICD-10...", default_normal: "", kind: TemplateFieldKind::Icd10 },
             TemplateField { key: "CAN_TU_VAN_CHUYEN_CK", label: "Cần tư vấn và chuyển khám CK", placeholder: "", default_normal: "Không", kind: TemplateFieldKind::Select(OPT_KHONG_CO) },
             TemplateField { key: "GHI_RO_CHUYEN_CSKCB", label: "Ghi rõ cơ sở / chỉ định chuyển", placeholder: "Ghi rõ cơ sở chuyển khám...", default_normal: "", kind: TemplateFieldKind::Text },
         ],
@@ -339,7 +341,7 @@ const D6_CONCLUSION_GROUPS: &[TemplateGroup] = &[
             TemplateField { key: "VAN_DE_SUC_KHOE", label: "Có vấn đề về sức khỏe", placeholder: "", default_normal: "Không", kind: TemplateFieldKind::Select(OPT_KHONG_CO) },
             TemplateField { key: "KET_LUAN_BENH", label: "Kết luận bệnh (ICD-10)", placeholder: "Chọn mã bệnh ICD-10...", default_normal: "", kind: TemplateFieldKind::Icd10 },
             TemplateField { key: "GHI_RO_VAN_DE_SUC_KHOE", label: "Ghi rõ vấn đề sức khỏe", placeholder: "Ghi rõ nếu có...", default_normal: "", kind: TemplateFieldKind::Text },
-            TemplateField { key: "HEN_KHAM_LAN_SAU", label: "Hẹn khám lần sau", placeholder: "dd/mm/yyyy hoặc ghi chú...", default_normal: "", kind: TemplateFieldKind::Text },
+            TemplateField { key: "HEN_KHAM_LAN_SAU", label: "Hẹn khám lần sau", placeholder: "dd/mm/yyyy", default_normal: "", kind: TemplateFieldKind::Date },
             TemplateField { key: "CHUYEN_CSKCB", label: "Chuyển cơ sở KCB", placeholder: "", default_normal: "Không", kind: TemplateFieldKind::Select(OPT_KHONG_CO) },
         ],
     },
@@ -455,6 +457,7 @@ const HS_HISTORY_GROUPS: &[TemplateGroup] = &[
         title: "2a. Tiền sử bản thân - Sản khoa",
         fields: &[
             TemplateField { key: "TSBT_SAN_KHOA", label: "Tiền sử bản thân - Sản khoa", placeholder: "", default_normal: "Bình thường", kind: TemplateFieldKind::Select(OPT_BT_KBT) },
+            TemplateField { key: "MA_BENH_SAN_KHOA_KHONG_BT", label: "Mã bệnh sản khoa không BT (ICD-10)", placeholder: "Chọn mã bệnh ICD-10...", default_normal: "", kind: TemplateFieldKind::Icd10 },
         ],
     },
     TemplateGroup {
@@ -476,6 +479,7 @@ const HS_HISTORY_GROUPS: &[TemplateGroup] = &[
             TemplateField { key: "TSBT_MAC_BENH", label: "2c. Bản thân mắc bệnh bẩm sinh / mãn tính?", placeholder: "", default_normal: "Không", kind: TemplateFieldKind::Select(OPT_KHONG_CO) },
             TemplateField { key: "TSBT_MA_BENH", label: "Mã/Tên bệnh bẩm sinh, mãn tính (ICD-10)", placeholder: "Chọn mã bệnh ICD-10...", default_normal: "", kind: TemplateFieldKind::Icd10 },
             TemplateField { key: "DANG_DIEU_TRI_BENH", label: "2d. Hiện tại đang điều trị bệnh gì không?", placeholder: "", default_normal: "Không", kind: TemplateFieldKind::Select(OPT_KHONG_CO) },
+            TemplateField { key: "MA_BENH_DANG_DT", label: "Mã bệnh đang điều trị (ICD-10)", placeholder: "Chọn mã bệnh ICD-10...", default_normal: "", kind: TemplateFieldKind::Icd10 },
             TemplateField { key: "GHI_RO_BENH_DANG_DT", label: "Ghi rõ bệnh và thuốc đang điều trị", placeholder: "", default_normal: "", kind: TemplateFieldKind::Text },
         ],
     },
@@ -516,6 +520,7 @@ const U18_HISTORY_GROUPS: &[TemplateGroup] = &[
             TemplateField { key: "TSBT_MAC_BENH", label: "2c. Bản thân mắc bệnh bẩm sinh / mãn tính?", placeholder: "", default_normal: "Không", kind: TemplateFieldKind::Select(OPT_KHONG_CO) },
             TemplateField { key: "TSBT_MA_BENH", label: "Mã/Tên bệnh bẩm sinh, mãn tính (ICD-10)", placeholder: "Chọn mã bệnh ICD-10...", default_normal: "", kind: TemplateFieldKind::Icd10 },
             TemplateField { key: "DANG_DIEU_TRI_BENH", label: "2d. Hiện tại đang điều trị bệnh gì không?", placeholder: "", default_normal: "Không", kind: TemplateFieldKind::Select(OPT_KHONG_CO) },
+            TemplateField { key: "MA_BENH_DANG_DT", label: "Mã bệnh đang điều trị (ICD-10)", placeholder: "Chọn mã bệnh ICD-10...", default_normal: "", kind: TemplateFieldKind::Icd10 },
             TemplateField { key: "GHI_RO_BENH_DANG_DT", label: "Ghi rõ bệnh và thuốc đang điều trị", placeholder: "", default_normal: "", kind: TemplateFieldKind::Text },
         ],
     },

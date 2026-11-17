@@ -409,8 +409,10 @@ function kskApp() {
       { field: 'TSBT_BENH_KHAC', label: 'Các bệnh khác chưa nêu ở trên', hasIcd: true }
     ],
 
-    // Instance Tom Select để điều khiển
+    // Instance Tom Select & Flatpickr để điều khiển
     tomInstances: {},
+    fpInstances: {},
+    icdSelectKeys: [],
 
     async initApp() {
       this.loadUserPreferences();
@@ -753,31 +755,58 @@ function kskApp() {
 
     // Khởi tạo Flatpickr
     initDatePicker(el, fieldName) {
-      if (typeof flatpickr === 'undefined') return;
-      flatpickr(el, {
+      if (typeof flatpickr === 'undefined' || !el) return;
+      if (this.fpInstances[fieldName]) {
+        try { this.fpInstances[fieldName].destroy(); } catch (e) { }
+      }
+      const fp = flatpickr(el, {
         dateFormat: 'd/m/Y',
         allowInput: true,
-        locale: (window.flatpickr && flatpickr.l1ons && flatpickr.l1ons.vn) ? flatpickr.l1ons.vn : 'default',
+        defaultDate: this.form[fieldName] || null,
+        locale: (window.flatpickr && flatpickr.l10ns && flatpickr.l10ns.vn) ? flatpickr.l10ns.vn : 'default',
         onChange: (selectedDates, dateStr) => {
           this.form[fieldName] = dateStr;
+          this.isDirty = true;
         }
       });
+      this.fpInstances[fieldName] = fp;
+    },
+
+    initContractDatePicker(el) {
+      if (typeof flatpickr === 'undefined' || !el) return;
+      if (this.fpInstances['_contract_exam_date']) {
+        try { this.fpInstances['_contract_exam_date'].destroy(); } catch (e) { }
+      }
+      const fp = flatpickr(el, {
+        dateFormat: 'd/m/Y',
+        allowInput: true,
+        defaultDate: this.contractForm?.exam_date || null,
+        locale: (window.flatpickr && flatpickr.l10ns && flatpickr.l10ns.vn) ? flatpickr.l10ns.vn : 'default',
+        onChange: (selectedDates, dateStr) => {
+          this.contractForm.exam_date = dateStr;
+        }
+      });
+      this.fpInstances['_contract_exam_date'] = fp;
     },
 
     // Khởi tạo Tom Select cho ICD-10 (Đa chọn / Tìm kiếm nhanh từ xa Remote Query)
     initIcdMultiSelect(el, fieldName) {
       if (typeof TomSelect === 'undefined' || !el) return;
+      if (!this.icdSelectKeys.includes(fieldName)) {
+        this.icdSelectKeys.push(fieldName);
+      }
       if (this.tomInstances[fieldName]) {
         try { this.tomInstances[fieldName].destroy(); } catch (e) { }
       }
 
       const instance = new TomSelect(el, {
-        plugins: ['remove_button'],
+        plugins: ['remove_button', 'clear_button'],
         valueField: 'value',
         labelField: 'text',
         searchField: ['value', 'text'],
         create: true,
         maxItems: 20,
+        closeAfterSelect: false,
         placeholder: 'Gõ mã ICD (ví dụ: I10, E11) hoặc tên bệnh tật...',
         load: (query, callback) => {
           if (!query || !query.trim().length) return callback();
@@ -802,18 +831,29 @@ function kskApp() {
             return `<div><span class="font-bold text-sky-700">${escape(data.value)}</span> - ${escape(data.text ? data.text.replace(data.value + ' - ', '') : '')}</div>`;
           }
         },
+        onItemAdd: function () {
+          this.setTextboxValue('');
+          this.refreshOptions(false);
+        },
         onChange: (values) => {
           this.form[fieldName] = Array.isArray(values) ? values.join('; ') : (values || '');
+          this.isDirty = true;
         }
       });
 
       // Nếu đã có giá trị sẵn trong form (ví dụ khi nạp hồ sơ cũ)
       if (this.form[fieldName]) {
-        const valArr = this.form[fieldName].split(/[,;]/).map(s => s.trim()).filter(Boolean);
+        const valArr = String(this.form[fieldName]).split(/[,;]/).map(s => s.trim()).filter(Boolean);
         valArr.forEach(v => {
           instance.addOption({ value: v, text: v });
         });
         instance.setValue(valArr, true);
+      }
+
+      if (!this.isCurrentTabEditable()) {
+        instance.disable();
+      } else {
+        instance.enable();
       }
 
       this.tomInstances[fieldName] = instance;
@@ -832,7 +872,8 @@ function kskApp() {
       });
 
       // 1. Điền sẵn option thuần vào thẻ <select> để đảm bảo luôn hiển thị
-      let optionsHtml = '<option value="">-- Tìm kiếm hoặc chọn --</option>';
+      const emptyLabel = fieldName === 'NHOM_MAU' ? '-- Để trống --' : '-- Tìm kiếm hoặc chọn --';
+      let optionsHtml = `<option value="">${emptyLabel}</option>`;
       for (const opt of formatted) {
         optionsHtml += `<option value="${opt.value}">${opt.text}</option>`;
       }
@@ -848,20 +889,25 @@ function kskApp() {
       if (typeof TomSelect !== 'undefined') {
         let instance = this.tomInstances[fieldName];
         if (!instance) {
-          instance = new TomSelect(el, {
+          const tsOpts = {
             valueField: 'value',
             labelField: 'text',
             searchField: ['value', 'text'],
             create: isFreeText,
+            allowEmptyOption: fieldName === 'NHOM_MAU',
             maxOptions: 1200,
-            placeholder: '-- Tìm kiếm hoặc chọn --',
+            placeholder: emptyLabel,
             onChange: (val) => {
               this.form[fieldName] = val || '';
               if (fieldName === 'MATINH_CU_TRU') {
                 this.onProvinceChange(val);
               }
             }
-          });
+          };
+          if (fieldName === 'NHOM_MAU') {
+            tsOpts.plugins = ['clear_button'];
+          }
+          instance = new TomSelect(el, tsOpts);
           this.tomInstances[fieldName] = instance;
         }
 
@@ -880,6 +926,14 @@ function kskApp() {
       }
     },
 
+    clearBloodGroup() {
+      this.form.NHOM_MAU = '';
+      if (this.tomInstances['NHOM_MAU']) {
+        this.tomInstances['NHOM_MAU'].clear();
+      }
+      this.isDirty = true;
+    },
+
     // Khởi tạo tất cả Searchable Select ở Tiếp nhận
     initAllSearchableSelects() {
       this.updateSearchableSelect('select_noicap_cccd', 'NOICAP_CCCD', this.catalogs.noi_cap, 'Cục Cảnh sát QLHC về TTXH', true);
@@ -894,7 +948,17 @@ function kskApp() {
       }
     },
 
-    // Đồng bộ giá trị tất cả TomSelect trên giao diện
+    // Đồng bộ giá trị tất cả TomSelect & Flatpickr trên giao diện
+    syncTomSelectDisabledState() {
+      const canEdit = this.isCurrentTabEditable();
+      for (const k in this.tomInstances) {
+        if (this.tomInstances[k]) {
+          if (canEdit) this.tomInstances[k].enable();
+          else this.tomInstances[k].disable();
+        }
+      }
+    },
+
     syncAllSelects() {
       setTimeout(() => {
         // 1. Single selects
@@ -909,13 +973,14 @@ function kskApp() {
           }
         }
 
-        // 2. Multi selects ICD-10
-        const multiFields = ['CAC_BENH_TAT_NEU_CO', 'TSGD_MA_BENH', 'TSBT_MA_BENH_KHAC', 'TSBT_MA_BENH', 'TSBT_MA_BENH_THAI_SAN'];
+        // 2. Multi selects ICD-10 (cho cả TREN_18 và 5 mẫu riêng)
+        const baseIcd = ['CAC_BENH_TAT_NEU_CO', 'TSGD_MA_BENH', 'TSBT_MA_BENH_KHAC', 'TSBT_MA_BENH', 'TSBT_MA_BENH_THAI_SAN'];
+        const multiFields = Array.from(new Set([...baseIcd, ...(this.icdSelectKeys || [])]));
         for (const f of multiFields) {
           if (this.tomInstances[f]) {
             this.tomInstances[f].clear(true);
             if (this.form[f]) {
-              const arr = this.form[f].split(/[,;]/).map(s => s.trim()).filter(Boolean);
+              const arr = String(this.form[f]).split(/[,;]/).map(s => s.trim()).filter(Boolean);
               arr.forEach(code => {
                 this.tomInstances[f].addOption({ value: code, text: code });
               });
@@ -923,6 +988,17 @@ function kskApp() {
             }
           }
         }
+
+        // 3. Đồng bộ Flatpickr ngày tháng
+        for (const [k, fp] of Object.entries(this.fpInstances || {})) {
+          if (!fp || k.startsWith('_')) continue;
+          const v = this.form[k] || '';
+          if (v) fp.setDate(v, false, 'd/m/Y');
+          else fp.clear(false);
+        }
+
+        // 4. Đồng bộ trạng thái khóa/mở sửa
+        this.syncTomSelectDisabledState();
       }, 50);
     },
 
@@ -3191,6 +3267,7 @@ function kskApp() {
           body: JSON.stringify({ exam_templates: list.join(',') })
         });
       }
+      this.$nextTick(() => this.syncAllSelects());
     },
 
     // --- TRẠNG THÁI ĐÃ KHÁM / CHƯA KHÁM & STICKY FOOTER ---
@@ -3226,6 +3303,7 @@ function kskApp() {
     enterCurrentTabEdit() {
       const sec = this.currentSectionKey();
       this.editingSections[sec] = true;
+      this.$nextTick(() => this.syncTomSelectDisabledState());
     },
 
     cancelCurrentTabEdit() {
@@ -3233,11 +3311,13 @@ function kskApp() {
       this.editingSections[sec] = false;
       this.isDirty = false;
       if (this.recordId) this.selectRecord({ id: this.recordId });
+      this.$nextTick(() => this.syncTomSelectDisabledState());
     },
 
     switchExamTab(tab) {
       this.activeTab = tab;
       this.isDirty = false;
+      this.$nextTick(() => this.syncAllSelects());
     },
 
     cycleExamTab(delta) {
@@ -3259,7 +3339,72 @@ function kskApp() {
       }
       this.editingSections[sec] = false;
       this.isDirty = false;
+      this.$nextTick(() => this.syncTomSelectDisabledState());
       if (moveNext) this.cycleExamTab(1);
+    },
+
+    getTren18NormalDefaultsMap() {
+      const hist = { TSGD_MAC_BENH: '0', TSBT_DANG_DIEU_TRI_BENH: '0' };
+      for (const it of (this.personalHistoryItems || [])) {
+        hist[it.field] = '0';
+      }
+      if (this.form.GIOI_TINH === '2') {
+        hist.TSBT_THAI_SAN = '0';
+      }
+      return {
+        history: hist,
+        physical: {
+          MACH: '75',
+          HUYET_AP: '120/80',
+          NHIP_THO: '18',
+          NHIET_DO: '36.8',
+          KHAM_THE_LUC_PL: '1',
+          THE_LUC_PL: '1'
+        },
+        paraclinical: {
+          CLS_HUYET_HOC: 'Bình thường',
+          CLS_DUONG_MAU: '5.2 mmol/L (Bình thường)',
+          CLS_URE: '5.1 mmol/L',
+          CLS_CREATININ: '78 µmol/L',
+          CLS_ASAT_GOT: '24 U/L',
+          CLS_ALAT_GPT: '22 U/L',
+          CLS_NUOC_TIEU: 'Bình thường',
+          CLS_XQ_TIM_PHOI: 'Hình tim phổi bình thường',
+          CLS_KHAC_CO: '0',
+          CLS_DINH_KY_KET_QUA: 'Bình thường'
+        },
+        conclusion: {
+          PHAN_LOAI_SK: '1',
+          KET_LUAN_BENH: 'Hiện tại đủ sức khỏe học tập và công tác'
+        },
+        clin_noi: {
+          NOI_KHOA_TUAN_HOAN: 'Bình thường', NOI_KHOA_TUAN_HOAN_PL: '1',
+          NOI_KHOA_HO_HAP: 'Bình thường', NOI_KHOA_HO_HAP_PL: '1',
+          NOI_KHOA_TIEU_HOA: 'Bình thường', NOI_KHOA_TIEU_HOA_PL: '1',
+          NOI_KHOA_THAN_TIETNIEU: 'Bình thường', NOI_KHOA_THAN_TIETNIEU_PL: '1',
+          NOI_KHOA_NOI_TIET: 'Bình thường', NOI_KHOA_NOI_TIET_PL: '1',
+          NOI_KHOA_CO_XUONG_KHOP: 'Bình thường', NOI_KHOA_CO_XUONG_KHOP_PL: '1',
+          NOI_KHOA_THAN_KINH: 'Bình thường', NOI_KHOA_THAN_KINH_PL: '1',
+          NOI_KHOA_TAM_THAN: 'Bình thường', NOI_KHOA_TAM_THAN_PL: '1'
+        },
+        clin_ngoai: { KET_QUA_KHAM_NGOAI_KHOA: 'Bình thường', KHAM_NGOAI_KHOA_PL: '1' },
+        clin_dalieu: { KET_QUA_KHAM_DA_LIEU: 'Bình thường', KHAM_DA_LIEU_PL: '1' },
+        clin_san: { KET_QUA_KHAM_SAN_PHU_KHOA: 'Bình thường', KHAM_SAN_PHU_KHOA_PL: '1' },
+        clin_mat: {
+          KHONG_KINH_MAT_PHAI: '10/10', KHONG_KINH_MAT_TRAI: '10/10',
+          THINHLUC_SAU_KINH_PHAI: '10/10', THINHLUC_SAU_KINH_TRAI: '10/10',
+          BENH_KHAC_MAT: 'Bình thường', KHAM_MAT_PL: '1'
+        },
+        clin_tmh: {
+          TAI_PHAI_NOI_THUONG: '5m', TAI_PHAI_NOI_THAM: '0.5m',
+          TAI_TRAI_NOI_THUONG: '5m', TAI_TRAI_NOI_THAM: '0.5m',
+          BENH_KHAC_TAI_MUI_HONG: 'Bình thường', KHAM_TAI_MUI_HONG_PL: '1'
+        },
+        clin_rhm: {
+          HAM_TREN: 'Bình thường', HAM_DUOI: 'Bình thường',
+          BENH_KHAC_RANG_HAM_MAT: 'Bình thường', KHAM_RANG_HAM_MAT_PL: '1'
+        }
+      };
     },
 
     quickFillNormalDefaults() {
@@ -3272,26 +3417,74 @@ function kskApp() {
           }
         }
         this.isDirty = true;
+        this.$nextTick(() => this.syncAllSelects());
+        this.toast('Đã điền mặc định bình thường cho mục này!', 'success');
         return;
       }
-      const map = {
-        history: { TSGD_MAC_BENH: '0', TSBT_BENH_KHAC: '0', TSBT_DANG_DIEU_TRI_BENH: '0' },
-        physical: { KHAM_THE_LUC_PL: '1', THE_LUC_PL: '1' },
-        paraclinical: { CLS_HUYET_HOC: 'Bình thường', CLS_NUOC_TIEU: 'Bình thường', CLS_XQ_TIM_PHOI: 'Bình thường', CLS_DINH_KY_KET_QUA: 'Bình thường' },
-        conclusion: { PHAN_LOAI_SK: '1', KET_LUAN_BENH_TAT: 'Hiện tại đủ sức khỏe làm việc / học tập' },
-        clin_noi: { NOI_KHOA_TUAN_HOAN: 'Bình thường', NOI_KHOA_TUAN_HOAN_PL: '1', NOI_KHOA_HO_HAP: 'Bình thường', NOI_KHOA_HO_HAP_PL: '1' },
-        clin_ngoai: { KET_QUA_KHAM_NGOAI_KHOA: 'Bình thường', KHAM_NGOAI_KHOA_PL: '1' },
-        clin_dalieu: { KET_QUA_KHAM_DA_LIEU: 'Bình thường', KHAM_DA_LIEU_PL: '1' },
-        clin_san: { KET_QUA_KHAM_SAN_PHU_KHOA: 'Bình thường', KHAM_SAN_PHU_KHOA_PL: '1' },
-        clin_mat: { KHONG_KINH_MAT_PHAI: '10/10', KHONG_KINH_MAT_TRAI: '10/10', BENH_KHAC_MAT: 'Bình thường', KHAM_MAT_PL: '1' },
-        clin_tmh: { TAI_PHAI_NOI_THUONG: '5m', TAI_PHAI_NOI_THAM: '0.5m', TAI_TRAI_NOI_THUONG: '5m', TAI_TRAI_NOI_THAM: '0.5m', BENH_KHAC_TAI_MUI_HONG: 'Bình thường', KHAM_TAI_MUI_HONG_PL: '1' },
-        clin_rhm: { HAM_TREN: 'Bình thường', HAM_DUOI: 'Bình thường', BENH_KHAC_RANG_HAM_MAT: 'Bình thường', KHAM_RANG_HAM_MAT_PL: '1' }
-      };
-      const defs = map[this.currentSectionKey()] || {};
-      for (const [k, v] of Object.entries(defs)) {
-        if (!(this.form[k] || '').trim()) this.form[k] = v;
+      const map = this.getTren18NormalDefaultsMap();
+      if (this.activeTab === 'clinical' && this.clinicalSubTab === 'all') {
+        const clinKeys = ['clin_noi', 'clin_ngoai', 'clin_dalieu', 'clin_mat', 'clin_tmh', 'clin_rhm'];
+        if (this.form.GIOI_TINH === '2') clinKeys.push('clin_san');
+        for (const sk of clinKeys) {
+          for (const [k, v] of Object.entries(map[sk] || {})) {
+            if (!(this.form[k] || '').trim()) this.form[k] = v;
+          }
+        }
+      } else {
+        const defs = map[this.currentSectionKey()] || {};
+        for (const [k, v] of Object.entries(defs)) {
+          if (!(this.form[k] || '').trim()) this.form[k] = v;
+        }
+        if (this.currentSectionKey() === 'clin_noi') {
+          this.initDefaultClassifications();
+        }
       }
       this.isDirty = true;
+      this.$nextTick(() => this.syncAllSelects());
+      this.toast('Đã điền mặc định bình thường cho mục này!', 'success');
+    },
+
+    quickFillAllNormalDefaults() {
+      if (this.isLocked) {
+        this.toast('Hồ sơ đã khóa, không thể sửa!', 'error');
+        return;
+      }
+      this.enterCurrentTabEdit();
+      if (this.activeRecordTemplate !== 'TREN_18') {
+        const meta = (this.allTemplatesMeta || []).find(t => t.code === this.activeRecordTemplate);
+        const tabs = ['history', 'physical', 'clinical', 'conclusion'];
+        const examined = (this.form._EXAMINED_SECTIONS || '').split(',').map(s => s.trim()).filter(Boolean);
+        const groupsMap = meta && (meta.groups || meta.groups_by_tab);
+        if (groupsMap) {
+          for (const tab of tabs) {
+            for (const g of (groupsMap[tab] || [])) {
+              for (const f of (g.fields || [])) {
+                if (f.default_normal && !(this.form[f.namespaced_key] || '').trim()) {
+                  this.form[f.namespaced_key] = f.default_normal;
+                }
+              }
+            }
+            const secKey = `tpl_${this.activeRecordTemplate}_${tab}`;
+            if (!examined.includes(secKey)) examined.push(secKey);
+          }
+        }
+        this.form._EXAMINED_SECTIONS = examined.join(',');
+      } else {
+        const map = this.getTren18NormalDefaultsMap();
+        const examined = (this.form._EXAMINED_SECTIONS || '').split(',').map(s => s.trim()).filter(Boolean);
+        for (const [secKey, defs] of Object.entries(map)) {
+          if (secKey === 'clin_san' && this.form.GIOI_TINH !== '2') continue;
+          for (const [k, v] of Object.entries(defs)) {
+            if (!(this.form[k] || '').trim()) this.form[k] = v;
+          }
+          if (!examined.includes(secKey)) examined.push(secKey);
+        }
+        this.initDefaultClassifications();
+        this.form._EXAMINED_SECTIONS = examined.join(',');
+      }
+      this.isDirty = true;
+      this.$nextTick(() => this.syncAllSelects());
+      this.toast('Đã điền mặc định bình thường cho toàn bộ mẫu phiếu!', 'success');
     },
 
     canPrintFullKsk() {

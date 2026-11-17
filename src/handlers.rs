@@ -4087,6 +4087,7 @@ pub async fn get_templates_metadata_handler() -> Response {
                             .map(|f| {
                                 let (kind_str, select_opts): (&str, Vec<(&str, &str)>) = match f.kind {
                                     crate::templates::TemplateFieldKind::Text => ("text", Vec::new()),
+                                    crate::templates::TemplateFieldKind::Date => ("date", Vec::new()),
                                     crate::templates::TemplateFieldKind::Select(opts) => {
                                         ("select", opts.to_vec())
                                     }

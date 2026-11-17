@@ -37,7 +37,10 @@
       </div>
       <div>
         <label class="label-title">Ngày vào khám (DD/MM/YYYY) <span class="text-red-500">*</span></label>
-        <input type="text" x-model="form.NGAY_VAO" x-init="initDatePicker($el, 'NGAY_VAO')" placeholder="DD/MM/YYYY" class="input-box bg-white" />
+        <div class="relative">
+          <input type="text" x-model="form.NGAY_VAO" x-init="initDatePicker($el, 'NGAY_VAO')" placeholder="DD/MM/YYYY" class="input-box bg-white pr-8" />
+          <span class="pointer-events-none absolute right-2.5 top-2 text-slate-400 text-xs">📅</span>
+        </div>
       </div>
     </div>
 
@@ -49,14 +52,23 @@
       </div>
       <div>
         <label class="label-title">Giới tính <span class="text-red-500">*</span></label>
-        <select x-model="form.GIOI_TINH" class="input-box font-medium">
-          <option value="1">1 - Nam</option>
-          <option value="2">2 - Nữ</option>
-        </select>
+        <div class="flex items-center gap-4 bg-white px-3 py-2 rounded-lg border border-[#E2E8F0]">
+          <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs">
+            <input type="radio" name="GIOI_TINH" value="1" x-model="form.GIOI_TINH" class="text-sky-600 focus:ring-sky-500" />
+            <span class="font-medium text-slate-800">1 - Nam</span>
+          </label>
+          <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs">
+            <input type="radio" name="GIOI_TINH" value="2" x-model="form.GIOI_TINH" class="text-pink-600 focus:ring-pink-500" />
+            <span class="font-medium text-slate-800">2 - Nữ</span>
+          </label>
+        </div>
       </div>
       <div>
         <label class="label-title">Ngày sinh (DD/MM/YYYY) <span class="text-red-500">*</span></label>
-        <input type="text" x-model="form.NGAY_SINH" x-init="initDatePicker($el, 'NGAY_SINH')" placeholder="31/01/2000" class="input-box bg-white" />
+        <div class="relative">
+          <input type="text" x-model="form.NGAY_SINH" x-init="initDatePicker($el, 'NGAY_SINH')" placeholder="31/01/2000" class="input-box bg-white pr-8" />
+          <span class="pointer-events-none absolute right-2.5 top-2 text-slate-400 text-xs">📅</span>
+        </div>
       </div>
     </div>
 
@@ -68,7 +80,10 @@
       </div>
       <div>
         <label class="label-title">Ngày cấp CCCD (DD/MM/YYYY)</label>
-        <input type="text" x-model="form.NGAYCAP_CCCD" x-init="initDatePicker($el, 'NGAYCAP_CCCD')" placeholder="DD/MM/YYYY" class="input-box bg-white" />
+        <div class="relative">
+          <input type="text" x-model="form.NGAYCAP_CCCD" x-init="initDatePicker($el, 'NGAYCAP_CCCD')" placeholder="DD/MM/YYYY" class="input-box bg-white pr-8" />
+          <span class="pointer-events-none absolute right-2.5 top-2 text-slate-400 text-xs">📅</span>
+        </div>
       </div>
       <div>
         <label class="label-title">Nơi cấp CCCD (Tìm kiếm hoặc gõ mới)</label>
@@ -91,7 +106,10 @@
         <input type="text" x-model="form.DIEN_THOAI" placeholder="09xxxxxxx" class="input-box" />
       </div>
       <div>
-        <label class="label-title">Nhóm máu (Tìm kiếm hoặc gõ)</label>
+        <div class="flex items-center justify-between">
+          <label class="label-title mb-0">Nhóm máu (Có thể để trống)</label>
+          <button x-show="form.NHOM_MAU && isCurrentTabEditable()" type="button" @click="clearBloodGroup()" class="text-[11px] text-red-600 hover:underline font-medium">✕ Xóa</button>
+        </div>
         <select id="select_nhom_mau" class="input-box"></select>
       </div>
     </div>
@@ -186,11 +204,16 @@
     <div x-show="activeRecordTemplate === 'DUOI_6'" class="p-3 rounded-lg bg-pink-50/60 border border-pink-200 grid grid-cols-1 md:grid-cols-2 gap-3" x-cloak>
       <div>
         <label class="label-title">Sinh non / Đẻ non</label>
-        <select x-model="form.SINH_NON" class="input-box text-xs bg-white">
-          <option value="">-- Chọn --</option>
-          <option value="0">Không (Đủ tháng)</option>
-          <option value="1">Có (Sinh non)</option>
-        </select>
+        <div class="flex items-center gap-4 bg-white px-3 py-2 rounded-lg border border-pink-200">
+          <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs">
+            <input type="radio" name="SINH_NON" value="0" x-model="form.SINH_NON" class="text-sky-600 focus:ring-sky-500" />
+            <span class="font-medium text-slate-700">0 - Không (Đủ tháng)</span>
+          </label>
+          <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs">
+            <input type="radio" name="SINH_NON" value="1" x-model="form.SINH_NON" class="text-pink-600 focus:ring-pink-500" />
+            <span class="font-medium text-pink-700">1 - Có (Sinh non)</span>
+          </label>
+        </div>
       </div>
       <div>
         <label class="label-title">Số tuần thai khi sinh</label>
