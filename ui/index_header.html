@@ -49,7 +49,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- MÀN HÌNH ĐĂNG NHẬP                                                    -->
+  <!-- MÀN HÌNH KHỞI TẠO LẦN ĐẦU / ĐĂNG NHẬP                                 -->
   <!-- ===================================================================== -->
   <div x-show="!token" x-cloak class="min-h-screen flex items-center justify-center p-4 bg-[#F4F6F8] no-print">
     <div class="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-sm p-6 space-y-5">
@@ -57,11 +57,39 @@
         <div
           class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#3498DB] text-white font-bold text-lg mb-2 shadow-sm">
           KSK</div>
-        <h1 class="text-lg font-bold text-[#2C3E50]">Đăng nhập Hệ thống</h1>
-        <p class="text-xs text-[#7F8C8D]">Phần mềm Quản lý Khám Sức Khỏe</p>
+        <h1 class="text-lg font-bold text-[#2C3E50]" x-text="!setupStatus.initialized ? 'Khởi tạo Máy chủ KSK' : 'Đăng nhập Hệ thống'"></h1>
+        <p class="text-xs text-[#7F8C8D]">Phần mềm Quản lý Khám Sức Khỏe (Web Server)</p>
       </div>
 
-      <form @submit.prevent="handleLogin()" class="space-y-4">
+      <!-- Khởi tạo lần đầu khi DB chưa có Master Key -->
+      <div x-show="!setupStatus.initialized" class="space-y-3 text-xs">
+        <div x-show="!setupRecoveryKey">
+          <div class="space-y-3">
+            <div class="p-3 bg-sky-50 border border-sky-200 rounded-lg text-sky-900 text-[11px]">
+              Đặt mật khẩu cho tài khoản <strong>admin</strong> để tạo khóa mã hóa AES-256-GCM cho toàn bộ hồ sơ.
+            </div>
+            <div>
+              <label class="label-title">Mật khẩu Admin (tối thiểu 4 ký tự):</label>
+              <input type="password" x-model="setupPassword" placeholder="••••••" class="input-box" />
+            </div>
+            <button type="button" @click="initServerSetup()" class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-medium text-xs">
+              Khởi tạo Hệ thống & Tạo Recovery Key
+            </button>
+          </div>
+        </div>
+        <div x-show="setupRecoveryKey" class="space-y-3">
+          <div class="p-3 bg-amber-50 border border-amber-300 rounded-lg space-y-1.5">
+            <div class="font-bold text-amber-900">QUAN TRỌNG: Lưu lại Recovery Key sau!</div>
+            <div class="font-mono font-bold text-sm text-slate-900 bg-white p-2 rounded border border-amber-200 select-all" x-text="setupRecoveryKey"></div>
+          </div>
+          <button type="button" @click="setupStatus.initialized = true; setupRecoveryKey = ''" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium text-xs">
+            Đã lưu Recovery Key — Vào Đăng nhập
+          </button>
+        </div>
+      </div>
+
+      <!-- Form Đăng nhập -->
+      <form x-show="setupStatus.initialized && !showRecoverForm" @submit.prevent="handleLogin()" class="space-y-4">
         <div>
           <label class="label-title">Tên đăng nhập:</label>
           <input type="text" x-model="loginForm.username" placeholder="letan / bstheluc / admin..." class="input-box"
@@ -75,6 +103,27 @@
           class="w-full py-2.5 bg-[#3498DB] hover:bg-[#2980B9] disabled:opacity-50 text-white rounded-lg font-medium text-xs transition-colors shadow-sm">
           <span x-text="loginLoading ? 'Đang xác thực...' : 'Đăng nhập'"></span>
         </button>
+        <div class="text-center">
+          <button type="button" @click="showRecoverForm = true" class="text-[11px] text-slate-500 hover:text-sky-600 underline">
+            Quên mật khẩu Admin? Khôi phục bằng Recovery Key
+          </button>
+        </div>
+      </form>
+
+      <!-- Form Khôi phục Admin -->
+      <form x-show="setupStatus.initialized && showRecoverForm" @submit.prevent="recoverAdminWithKey()" class="space-y-3 text-xs">
+        <div>
+          <label class="label-title">Recovery Key:</label>
+          <input type="text" x-model="recoverForm.recovery_key" placeholder="KSK-XXXX-..." class="input-box font-mono" />
+        </div>
+        <div>
+          <label class="label-title">Mật khẩu Admin mới:</label>
+          <input type="password" x-model="recoverForm.new_password" placeholder="••••••" class="input-box" />
+        </div>
+        <div class="flex gap-2">
+          <button type="button" @click="showRecoverForm = false" class="flex-1 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium">Quay lại</button>
+          <button type="submit" class="flex-1 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium">Khôi phục</button>
+        </div>
       </form>
     </div>
   </div>
@@ -207,50 +256,61 @@
       </div>
     </header>
 
-    <!-- 2. THANH TAB QUY TRÌNH (YOUTUBE-STYLE CHIPS / PILLS - design.md 3.3) -->
+    <!-- 2. THANH TAB QUY TRÌNH (VISUAL STEPPER CHIPS) -->
     <nav class="bg-white border-b border-[#E2E8F0] px-4 py-2.5 overflow-x-auto shadow-xs sticky top-16 z-30 no-print">
       <div class="w-full flex items-center gap-2">
-        <button type="button" @click="activeTab = 'reception'" :class="activeTab === 'reception' ? 'active' : ''"
-          class="yt-chip">
-          <span>1. Tiếp nhận</span>
+        <button type="button" @click="switchExamTab('reception')" :class="activeTab === 'reception' ? 'active' : ''"
+          class="yt-chip flex items-center gap-1.5">
+          <span>📋 1. Tiếp nhận</span>
+          <span x-show="isSectionExamined('reception')" class="text-[10px] px-1.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">✓</span>
         </button>
 
-        <button type="button" @click="activeTab = 'history'" :class="activeTab === 'history' ? 'active' : ''"
-          class="yt-chip">
-          <span>2. Tiền sử bệnh</span>
+        <button type="button" @click="switchExamTab('history')" :class="activeTab === 'history' ? 'active' : ''"
+          class="yt-chip flex items-center gap-1.5">
+          <span>🕒 2. Tiền sử</span>
+          <span x-show="isSectionExamined('history')" class="text-[10px] px-1.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">✓</span>
         </button>
 
-        <button type="button" @click="activeTab = 'physical'" :class="activeTab === 'physical' ? 'active' : ''"
-          class="yt-chip">
-          <span>3. Thể lực</span>
+        <button type="button" @click="switchExamTab('physical')" :class="activeTab === 'physical' ? 'active' : ''"
+          class="yt-chip flex items-center gap-1.5">
+          <span>💓 3. Thể lực</span>
+          <span x-show="isSectionExamined('physical')" class="text-[10px] px-1.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">✓</span>
         </button>
 
-        <button type="button" @click="activeTab = 'clinical'" :class="activeTab === 'clinical' ? 'active' : ''"
-          class="yt-chip">
-          <span>4. Khám lâm sàng</span>
+        <button type="button" @click="switchExamTab('clinical')" :class="activeTab === 'clinical' ? 'active' : ''"
+          class="yt-chip flex items-center gap-1.5">
+          <span>🩺 4. Lâm sàng</span>
+          <span x-show="isSectionExamined('clinical')" class="text-[10px] px-1.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">✓</span>
         </button>
 
-        <button type="button" @click="activeTab = 'paraclinical'" :class="activeTab === 'paraclinical' ? 'active' : ''"
-          class="yt-chip">
-          <span>5. Cận lâm sàng</span>
-          <span class="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-full font-normal">(Đi
-            làm/học)</span>
+        <button x-show="activeRecordTemplate === 'TREN_18'" type="button" @click="switchExamTab('paraclinical')" :class="activeTab === 'paraclinical' ? 'active' : ''"
+          class="yt-chip flex items-center gap-1.5">
+          <span>🔬 5. Cận lâm sàng</span>
+          <span x-show="isSectionExamined('paraclinical')" class="text-[10px] px-1.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">✓</span>
         </button>
 
-        <button type="button" @click="activeTab = 'conclusion'" :class="activeTab === 'conclusion' ? 'active' : ''"
-          class="yt-chip">
-          <span>6. Kết luận & Ký</span>
+        <button type="button" @click="switchExamTab('conclusion')" :class="activeTab === 'conclusion' ? 'active' : ''"
+          class="yt-chip flex items-center gap-1.5">
+          <span x-text="activeRecordTemplate === 'TREN_18' ? '✅ 6. Kết luận' : '✅ 5. Kết luận'"></span>
+          <span x-show="isSectionExamined('conclusion')" class="text-[10px] px-1.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">✓</span>
           <span x-show="isLocked" class="w-2 h-2 rounded-full bg-[#E74C3C]"></span>
+        </button>
+
+        <div class="h-5 w-px bg-slate-200 mx-1"></div>
+
+        <button type="button" @click="openGroupTab()" :class="activeTab === 'group' ? 'active' : ''"
+          class="yt-chip text-sky-700">
+          <span>🏢 Khám đoàn & HĐ</span>
         </button>
 
         <button type="button" @click="openExportTab()" :class="activeTab === 'export' ? 'active' : ''"
           class="yt-chip text-[#1E8449]">
-          <span>📤 Xuất dữ liệu CSV</span>
+          <span>📤 Xuất CSV</span>
         </button>
 
-        <button x-show="isAdmin" type="button" @click="activeTab = 'admin'"
+        <button x-show="isAdmin" type="button" @click="activeTab = 'admin'; loadServerBackups()"
           :class="activeTab === 'admin' ? 'active' : ''" class="yt-chip text-[#8E44AD]">
-          <span>⚙ Quản trị & Cấu hình</span>
+          <span>⚙ Quản trị</span>
         </button>
       </div>
     </nav>
@@ -418,4 +478,53 @@
       </aside>
 
       <!-- KHU VỰC NHẬP LIỆU CHÍNH (MAIN CONTENT AREA TRÀN 2 BÊN) -->
-      <main class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 h-[calc(100vh-112px)] w-full">
+      <main class="flex-1 overflow-y-auto p-4 sm:p-6 pb-24 space-y-4 h-[calc(100vh-112px)] w-full">
+
+        <!-- PATIENT HEADER BANNER + CHỌN MẪU + IN PDF A4 -->
+        <div x-show="['reception','history','physical','clinical','paraclinical','conclusion'].includes(activeTab)"
+             class="bg-white rounded-xl border border-[#E2E8F0] p-3.5 shadow-2xs space-y-2.5 no-print">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-bold text-sm text-[#2C3E50]" x-text="form.HO_TEN || '(Hồ sơ mới chưa có tên)'"></span>
+              <span x-show="form.MA_TIEP_NHAN" class="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[11px] font-mono font-semibold" x-text="'Số TN: ' + form.MA_TIEP_NHAN"></span>
+              <span x-show="recordTemplates.length <= 1" class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold" x-text="'📄 ' + templateShortLabel(activeRecordTemplate)"></span>
+              <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                    :class="recordStatus >= 2 ? 'bg-red-100 text-red-700' : (recordStatus === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800')"
+                    x-text="recordStatus >= 2 ? '🔒 Đã ký khóa' : (recordStatus === 1 ? '✓ Hoàn tất' : '⏳ Đang khám')"></span>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap">
+              <button x-show="recordId" type="button" @click="printRecordPdf(true)"
+                      class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1">
+                <span>🖨 In Tiếp Nhận</span>
+              </button>
+              <button x-show="recordId && canPrintFullKsk()" type="button" @click="printRecordPdf(false)"
+                      class="px-3 py-1.5 bg-[#0F766E] hover:bg-[#115E59] text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-xs">
+                <span>📄 In Giấy KSK</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Chọn nhiều mẫu cho hồ sơ (ở tab Tiếp nhận) hoặc chuyển đổi mẫu khi hồ sơ có > 1 mẫu -->
+          <div x-show="activeTab === 'reception' || recordTemplates.length > 1" class="pt-2 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
+            <div x-show="activeTab === 'reception'" class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[11px] font-semibold text-slate-500 mr-1">Mẫu phiếu áp dụng:</span>
+              <template x-for="t in allTemplatesMeta" :key="t.code">
+                <button type="button" @click="toggleRecordTemplate(t.code)"
+                        class="px-2.5 py-1 rounded-md border text-[11px] font-medium transition-colors"
+                        :class="recordTemplates.includes(t.code) ? 'bg-teal-50 border-teal-600 text-teal-800 font-semibold' : 'bg-white border-slate-200 text-slate-600'">
+                  <span x-text="(recordTemplates.includes(t.code) ? '☑ ' : '☐ ') + t.short_label"></span>
+                </button>
+              </template>
+            </div>
+            <div x-show="recordTemplates.length > 1" class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[11px] font-semibold text-slate-500">Mẫu đang nhập:</span>
+              <template x-for="code in recordTemplates" :key="code">
+                <button type="button" @click="activeRecordTemplate = code"
+                        class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors"
+                        :class="activeRecordTemplate === code ? 'bg-[#0F766E] border-[#0F766E] text-white' : 'bg-slate-50 border-slate-200 text-slate-700'"
+                        x-text="templateShortLabel(code)"></button>
+              </template>
+            </div>
+          </div>
+        </div>

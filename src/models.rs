@@ -580,6 +580,10 @@ impl User {
     pub fn has_role(&self, r: &str) -> bool {
         self.roles().iter().any(|role| role == r || role == "admin")
     }
+
+    pub fn has_any_role(&self, allowed: &[&str]) -> bool {
+        allowed.iter().any(|r| self.has_role(r))
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -816,7 +820,7 @@ pub struct ExamContractSummary {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GroupImportRow {
     pub row_index: usize,
     pub ma_tiep_nhan: String,

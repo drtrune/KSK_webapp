@@ -1,28 +1,92 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 mod config;
 mod crypto;
 mod db;
 mod group_import;
-mod gui;
 mod handlers;
 mod models;
 mod pdf_print;
 mod templates;
-mod updater;
 
-use axum::{routing::post, Router};
+use axum::{
+    response::{Html, IntoResponse},
+    routing::{delete, get, post, put},
+    Router,
+};
 use config::AppConfig;
-use gui::AppLaunchCtx;
-use handlers::{mock_his_api_handler, push_his_patient_handler, AppState};
+use handlers::*;
+use rust_embed::Embed;
 use std::{
     fs::OpenOptions,
     io::Write,
     net::SocketAddr,
     sync::{Arc, Mutex},
+    time::Duration,
 };
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
+
+#[derive(Embed)]
+#[folder = "ui/"]
+pub struct WebAssets;
+
+const INDEX_HTML: &str = concat!(
+    include_str!("../ui/index_header.html"),
+    include_str!("../ui/tabs/reception.html"),
+    include_str!("../ui/tabs/history.html"),
+    include_str!("../ui/tabs/physical.html"),
+    include_str!("../ui/tabs/clinical.html"),
+    include_str!("../ui/tabs/paraclinical.html"),
+    include_str!("../ui/tabs/conclusion.html"),
+    include_str!("../ui/tabs/group.html"),
+    include_str!("../ui/tabs/export_csv.html"),
+    include_str!("../ui/tabs/admin.html"),
+    include_str!("../ui/tabs/print.html"),
+    include_str!("../ui/index_footer.html"),
+);
+
+async fn index_ui_handler() -> Html<&'static str> {
+    Html(INDEX_HTML)
+}
+
+async fn static_file_handler(
+    axum::extract::Path(path): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let disk_path = std::path::Path::new("ui").join(&path);
+    if disk_path.exists() && disk_path.is_file() {
+        if let Ok(data) = tokio::fs::read(&disk_path).await {
+            let mime = mime_guess::from_path(&disk_path).first_or_octet_stream();
+            return (
+                [
+                    (axum::http::header::CONTENT_TYPE, mime.as_ref()),
+                    (
+                        axum::http::header::CACHE_CONTROL,
+                        "no-cache, no-store, must-revalidate",
+                    ),
+                ],
+                data,
+            )
+                .into_response();
+        }
+    }
+
+    match WebAssets::get(&path) {
+        Some(content) => {
+            let mime = mime_guess::from_path(&path).first_or_octet_stream();
+            (
+                [
+                    (axum::http::header::CONTENT_TYPE, mime.as_ref()),
+                    (
+                        axum::http::header::CACHE_CONTROL,
+                        "no-cache, no-store, must-revalidate",
+                    ),
+                ],
+                content.data,
+            )
+                .into_response()
+        }
+        None => (axum::http::StatusCode::NOT_FOUND, "File not found").into_response(),
+    }
+}
 
 fn setup_logging_and_panic_hook() {
     let log_file = OpenOptions::new()
@@ -32,7 +96,6 @@ fn setup_logging_and_panic_hook() {
         .ok();
     let log_mutex = Arc::new(Mutex::new(log_file));
 
-    // Ghi toàn bộ panic (kể cả trong Dioxus Scope) ra file ksk_app.log
     let panic_log = log_mutex.clone();
     std::panic::set_hook(Box::new(move |info| {
         let bt = std::backtrace::Backtrace::force_capture();
@@ -51,7 +114,6 @@ fn setup_logging_and_panic_hook() {
         }
     }));
 
-    // Ghi tracing log ra ksk_app.log
     let writer_log = log_mutex;
     let make_writer = move || LogFileWriter(writer_log.clone());
     let _ = tracing_subscriber::fmt()
@@ -88,104 +150,151 @@ impl Write for LogFileWriter {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     setup_logging_and_panic_hook();
-    updater::cleanup_old_exe_on_startup();
-
-    tracing::info!("=== Khoi dong KSK Native Desktop (GPUI) ===");
 
     let cfg = AppConfig::load();
-    tracing::info!("Database path: {}", cfg.database_path);
+    tracing::info!("Khởi tạo SQLite tại: {}", cfg.database_path);
 
-    let rt = Arc::new(
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("Không thể khởi tạo Tokio Runtime"),
-    );
-
-    let pool = rt
-        .block_on(db::init_db(&cfg.database_path))
+    let pool = db::init_db(&cfg.database_path)
+        .await
         .expect("Không thể khởi tạo cơ sở dữ liệu SQLite");
 
     let http_client = reqwest::Client::builder()
         .build()
         .expect("Không thể khởi tạo HTTP Client");
 
-    let (his_tx, _his_rx) = broadcast::channel::<String>(32);
+    let addr_str = format!("{}:{}", cfg.server_host, cfg.server_port);
+    let addr: SocketAddr = addr_str
+        .parse()
+        .unwrap_or_else(|_| SocketAddr::from(([0, 0, 0, 0], 8080)));
 
     let state = Arc::new(AppState {
         db: RwLock::new(pool),
         config: RwLock::new(cfg.clone()),
         master_key: RwLock::new(None),
         http_client,
-        his_push_tx: Some(his_tx.clone()),
+        his_push_tx: None,
     });
 
-    // Khởi chạy Local IPC Receiver (127.0.0.1:18080) để nhận dữ liệu từ AutoHotkey v2 UIA Bridge
-    let ipc_state = state.clone();
-    let ipc_port = cfg.local_ipc_port;
-    rt.spawn(async move {
-        let cors = CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any);
-
-        let app = Router::new()
-            .route("/api/his/push", post(push_his_patient_handler))
-            .route("/api/his/mock", post(mock_his_api_handler))
-            .layer(cors)
-            .with_state(ipc_state);
-
-        let addr = SocketAddr::from(([127, 0, 0, 1], ipc_port));
-        if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
-            tracing::info!("Local HIS Bridge IPC dang lang nghe tai http://{}", addr);
-            let _ = axum::serve(listener, app).await;
-        } else {
-            tracing::warn!("Cong Local IPC {} da duoc tien trinh khac su dung", ipc_port);
+    // Tác vụ sao lưu database tự động trên máy chủ theo chu kỳ
+    let backup_state = state.clone();
+    tokio::spawn(async move {
+        loop {
+            let (enabled, interval_mins, bk_dir, keep_cnt) = {
+                let c = backup_state.config.read().await;
+                (
+                    c.auto_backup_enabled,
+                    c.backup_interval_minutes.max(5),
+                    c.backup_dir_path.clone(),
+                    c.backup_keep_count.max(3),
+                )
+            };
+            tokio::time::sleep(Duration::from_secs(interval_mins * 60)).await;
+            if !enabled {
+                continue;
+            }
+            let db_guard = backup_state.db.read().await;
+            if let Ok(info) = db::create_server_backup(&*db_guard, &bk_dir, "auto").await {
+                tracing::info!("Auto-backup server DB: {}", info.filename);
+                let all = db::list_server_backups(&bk_dir);
+                let autos: Vec<_> = all
+                    .into_iter()
+                    .filter(|b| b.filename.contains("_auto"))
+                    .collect();
+                for old in autos.into_iter().skip(keep_cnt) {
+                    let _ = db::delete_server_backup(&bk_dir, &old.filename);
+                }
+            }
         }
     });
 
-    let launch_ctx = AppLaunchCtx {
-        rt: rt.handle().clone(),
-        state,
-        his_tx,
-        initial_cfg: cfg.clone(),
-    };
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
 
-    let window_title = format!("Quản Lý Khám Sức Khỏe (KSK) - {}", cfg.ten_cskcb);
+    let app = Router::new()
+        .route("/", get(index_ui_handler))
+        .route("/static/*path", get(static_file_handler))
+        // Setup & Auth
+        .route("/api/setup/status", get(setup_status_handler))
+        .route("/api/setup/init", post(setup_init_handler))
+        .route("/api/auth/recover", post(recover_admin_handler))
+        .route("/api/login", post(login_handler))
+        .route("/api/me", get(me_handler))
+        .route("/api/me/change-password", post(change_my_password_handler))
+        .route("/api/me/profile", put(update_my_profile_handler))
+        .route("/api/users", get(list_users_handler).post(create_user_handler))
+        .route("/api/users/:id", put(update_user_handler))
+        .route("/api/users/:id/toggle-lock", post(toggle_lock_user_handler))
+        // Tích hợp HIS (Chế độ 1: API HIS, Chế độ 2: AHK Bridge Push)
+        .route("/api/his", get(fetch_his_patient_handler))
+        .route("/api/his/push", post(push_his_patient_handler))
+        .route("/api/his/mock", post(mock_his_api_handler))
+        .route("/api/admin/his/test", post(test_his_connection_handler))
+        // Metadata 6 Mẫu Phiếu KSK
+        .route("/api/templates", get(get_templates_metadata_handler))
+        // Quản lý Hồ sơ KSK & In PDF A4
+        .route("/api/records", get(list_records_handler).post(save_record_handler))
+        .route("/api/records/by-ma-tn/:ma_tn", get(get_record_by_ma_tn_handler))
+        .route("/api/records/:id", get(get_record_handler))
+        .route("/api/records/:id/lock", post(lock_record_handler))
+        .route("/api/records/:id/unlock", post(unlock_record_handler))
+        .route("/api/records/:id/templates", put(update_record_templates_handler))
+        .route("/api/records/:id/pdf", get(export_record_pdf_handler))
+        .route("/api/records/:id/docx", get(export_record_docx_handler))
+        // Khám đoàn (Công ty, Hợp đồng, Import & In cả đoàn)
+        .route("/api/companies", get(list_companies_handler).post(create_company_handler))
+        .route("/api/companies/:id", put(update_company_handler))
+        .route("/api/companies/:id/toggle-active", post(toggle_company_active_handler))
+        .route("/api/contracts", get(list_contracts_handler).post(create_contract_handler))
+        .route("/api/contracts/sample-csv", get(download_sample_csv_handler))
+        .route("/api/contracts/:id", put(update_contract_handler))
+        .route("/api/contracts/:id/records", get(list_contract_records_handler))
+        .route("/api/contracts/:id/pdf", get(export_contract_pdf_handler))
+        .route("/api/contracts/:id/import-preview", post(import_contract_preview_handler))
+        .route("/api/contracts/:id/import-commit", post(import_contract_commit_handler))
+        // Trích xuất CSV
+        .route("/api/export/csv", get(export_csv_handler))
+        // Quản lý Danh mục
+        .route("/api/catalogs", get(list_catalogs_handler))
+        .route("/api/catalogs/versions", get(get_catalog_versions_handler))
+        .route("/api/catalogs/bulk", post(bulk_import_catalogs_handler))
+        .route("/api/catalogs/bulk-delete", post(bulk_delete_catalogs_handler))
+        .route("/api/catalogs/bulk-status", post(bulk_status_catalogs_handler))
+        .route("/api/catalogs/:id/set-default", post(set_default_catalog_handler))
+        .route("/api/catalogs/:id/toggle-active", post(toggle_active_catalog_handler))
+        .route("/api/catalogs/:id", delete(delete_catalog_handler).put(update_catalog_handler))
+        // Admin Settings & Sao lưu DB trên Máy chủ
+        .route(
+            "/api/admin/settings",
+            get(get_admin_settings_handler).post(update_admin_settings_handler),
+        )
+        .route("/api/admin/db/switch", post(switch_database_handler))
+        .route("/api/admin/db/backups", get(list_db_backups_handler))
+        .route("/api/admin/db/backup", post(create_db_backup_handler))
+        .route("/api/admin/db/restore", post(restore_db_backup_handler))
+        .route(
+            "/api/admin/db/backups/:filename",
+            get(download_db_backup_handler).delete(delete_db_backup_handler),
+        )
+        .route("/api/admin/catalogs/reload-asset", post(reload_asset_catalogs_handler))
+        .layer(cors)
+        .with_state(state);
 
-    use gpui::AppContext as _;
-    gpui_kit::application().run(move |cx| {
-        gpui_kit::init(cx);
+    tracing::info!("==============================================================");
+    tracing::info!(" HỆ THỐNG KHÁM SỨC KHỎE (KSK) - SINGLE BINARY WEB SERVER ");
+    tracing::info!(" Địa chỉ   : http://{}:{}", cfg.server_host, cfg.server_port);
+    tracing::info!(" Cơ sở     : {} ({})", cfg.ten_cskcb, cfg.ma_cskcb);
+    tracing::info!("==============================================================");
 
-        let bounds = gpui::Bounds::centered(
-            None,
-            gpui::size(gpui::px(1360.0), gpui::px(840.0)),
-            cx,
-        );
-        let mut tb_opts = gpui_component::TitleBar::title_bar_options();
-        tb_opts.title = Some(window_title.clone().into());
-        let options = gpui::WindowOptions {
-            window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
-            titlebar: Some(tb_opts),
-            is_movable: true,
-            is_resizable: true,
-            ..Default::default()
-        };
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .expect("Không thể mở cổng mạng cho Web Server");
 
-        let ctx = launch_ctx.clone();
-        match gpui_kit::open_window(options, cx, move |window, cx| {
-            tracing::info!("Tao KskGpuiApp view...");
-            let app_view = cx.new(|cx| gui::KskGpuiApp::new(ctx, window, cx));
-            cx.new(|cx| gpui_component::Root::new(app_view, window, cx))
-        }) {
-            Ok(_) => tracing::info!("Da mo cua so GPUI thanh cong!"),
-            Err(e) => tracing::error!("Khong the mo cua so GPUI: {:?}", e),
-        }
-        cx.activate(true);
-    });
-    tracing::info!("GPUI Application::run da ket thuc.");
-
-    drop(rt);
+    axum::serve(listener, app)
+        .await
+        .expect("Lỗi vận hành Axum Web Server");
 }

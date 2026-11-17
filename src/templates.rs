@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Định nghĩa 5 mẫu phiếu khám sức khỏe độc lập.
 /// - `TREN_18`: Khám sức khỏe người từ đủ 18 tuổi trở lên (dùng cây danh mục 22 bệnh lý)
 /// - `TU_6_DUOI_18`: Khám sức khỏe từ 6 đến dưới 18 tuổi (Import_KSK_6 den Duoi 18.xlsm)

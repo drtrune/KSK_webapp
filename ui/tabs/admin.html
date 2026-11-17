@@ -118,75 +118,123 @@
       </div>
     </div>
 
-    <!-- API HIS -->
+    <!-- API HIS (2 CHẾ ĐỘ) -->
     <div class="pt-3 border-t border-slate-100 space-y-4">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <div class="font-semibold text-slate-800 text-xs uppercase tracking-wide">Cấu hình kết nối API HIS nội bộ bệnh viện</div>
-          <div class="text-[11px] text-slate-500">Phần mềm KSK sẽ gọi API này để lấy thông tin hành chính bệnh nhân theo Mã tiếp nhận.</div>
+          <div class="font-semibold text-slate-800 text-xs uppercase tracking-wide">Cấu hình Tích hợp HIS (2 Chế độ)</div>
+          <div class="text-[11px] text-slate-500">Chọn phương thức đồng bộ bệnh nhân từ phần mềm HIS bệnh viện vào Máy chủ KSK.</div>
         </div>
         <button type="button" @click="setToDefaultMockHis()" class="px-2.5 py-1 text-xs bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded font-medium transition-colors">
           ↺ Đặt về Mock API mặc định
         </button>
       </div>
 
-      <!-- Bật/Tắt Mock HIS -->
-      <div class="p-3 bg-sky-50/70 rounded-lg border border-sky-200 flex items-center justify-between">
-        <div class="space-y-0.5">
-          <div class="font-semibold text-xs text-sky-950 flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full" :class="adminSettings.his_use_mock ? 'bg-emerald-500' : 'bg-slate-400'"></span>
-            <span>Chế độ Mock API HIS nội bộ (Dùng thử nghiệm khi chưa nối HIS thật)</span>
+      <!-- Chọn chế độ HIS -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label class="p-3 rounded-lg border cursor-pointer flex items-start gap-2.5 transition-colors"
+               :class="(adminSettings.his_mode || 'api') === 'api' ? 'border-sky-500 bg-sky-50/70' : 'border-slate-200 bg-white'">
+          <input type="radio" value="api" x-model="adminSettings.his_mode" class="mt-0.5 text-sky-600" />
+          <div class="space-y-0.5 text-xs">
+            <div class="font-semibold text-slate-900">Chế độ 1: Gọi API HIS trực tiếp (Token Auth)</div>
+            <div class="text-[11px] text-slate-600">Cấu hình tài khoản/API đăng nhập để máy chủ tự lấy Token và truy vấn thông tin theo Mã tiếp nhận.</div>
           </div>
-          <div class="text-[11px] text-sky-800">
-            Khi <strong>BẬT</strong>: Ứng dụng tự động trả về dữ liệu mẫu (TN.2611.0004018, TN.2611.0004019...) không cần gọi ra ngoài. Khi <strong>TẮT</strong>: Gọi tới URL HIS thật bên dưới.
+        </label>
+
+        <label class="p-3 rounded-lg border cursor-pointer flex items-start gap-2.5 transition-colors"
+               :class="adminSettings.his_mode === 'ahk' ? 'border-emerald-500 bg-emerald-50/70' : 'border-slate-200 bg-white'">
+          <input type="radio" value="ahk" x-model="adminSettings.his_mode" class="mt-0.5 text-emerald-600" />
+          <div class="space-y-0.5 text-xs">
+            <div class="font-semibold text-slate-900">Chế độ 2: AHK UIA Bridge đẩy qua HTTP API</div>
+            <div class="text-[11px] text-slate-600">Dùng script <code>his_tiep_nhan_bridge.ahk</code> đọc màn hình HIS; bấm <strong>F9</strong> hiện hộp thoại xác nhận rồi đẩy về <code>/api/his/push</code>.</div>
           </div>
-        </div>
-        <label class="relative inline-flex items-center cursor-pointer ml-4">
-          <input type="checkbox" x-model="adminSettings.his_use_mock" class="sr-only peer">
-          <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-600"></div>
         </label>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="md:col-span-2">
-          <label class="label-title">URL Endpoint API HIS:</label>
-          <input type="text" x-model="adminSettings.his_api_url" placeholder="http://127.0.0.1:8080/api/his/mock hoặc http://his.hospital.local/api/patient" class="input-box text-xs font-mono" />
+      <!-- Chi tiết Chế độ 1 -->
+      <div x-show="(adminSettings.his_mode || 'api') === 'api'" class="space-y-4">
+        <div class="p-3 bg-sky-50/70 rounded-lg border border-sky-200 flex items-center justify-between">
+          <div class="space-y-0.5">
+            <div class="font-semibold text-xs text-sky-950 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full" :class="adminSettings.his_use_mock ? 'bg-emerald-500' : 'bg-slate-400'"></span>
+              <span>Chế độ Mock API HIS nội bộ (Thử nghiệm khi chưa nối HIS thật)</span>
+            </div>
+            <div class="text-[11px] text-sky-800">
+              Khi <strong>BẬT</strong>: tự động trả về dữ liệu mẫu (TN.2611.0004018, TN.2611.0004019...). Khi <strong>TẮT</strong>: đăng nhập lấy Token và gọi API HIS thật.
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer ml-4">
+            <input type="checkbox" x-model="adminSettings.his_use_mock" class="sr-only peer">
+            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-600"></div>
+          </label>
         </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+          <div>
+            <label class="label-title">URL Đăng nhập HIS (lấy Token):</label>
+            <input type="text" x-model="adminSettings.his_login_url" placeholder="http://his.local/api/auth/login" class="input-box text-xs font-mono" />
+          </div>
+          <div>
+            <label class="label-title">Tài khoản API HIS:</label>
+            <input type="text" x-model="adminSettings.his_username" placeholder="ksk_api_user" class="input-box text-xs font-mono" />
+          </div>
+          <div>
+            <label class="label-title">Mật khẩu API HIS:</label>
+            <input type="password" x-model="adminSettings.his_password" placeholder="••••••" class="input-box text-xs font-mono" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="md:col-span-2">
+            <label class="label-title">URL Endpoint lấy Bệnh nhân HIS:</label>
+            <input type="text" x-model="adminSettings.his_api_url" placeholder="http://his.local/api/patient" class="input-box text-xs font-mono" />
+          </div>
+          <div>
+            <label class="label-title">Phương thức HTTP:</label>
+            <select x-model="adminSettings.his_http_method" class="input-box text-xs font-mono">
+              <option value="POST">POST (Gửi body JSON)</option>
+              <option value="GET">GET (Query param)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="label-title">Auth Header (nếu không dùng Login Token):</label>
+            <input type="text" x-model="adminSettings.his_auth_header" placeholder="x-api-key hoặc Authorization" class="input-box text-xs font-mono" />
+          </div>
+          <div>
+            <label class="label-title">API Key tĩnh (tùy chọn):</label>
+            <input type="text" x-model="adminSettings.his_api_key" placeholder="HIS_SECRET_API_KEY_2026..." class="input-box text-xs font-mono" />
+          </div>
+          <div>
+            <label class="label-title">Thời gian chờ (Timeout giây):</label>
+            <input type="number" x-model.number="adminSettings.his_timeout_seconds" placeholder="10" class="input-box text-xs font-mono" />
+          </div>
+        </div>
+
         <div>
-          <label class="label-title">Phương thức HTTP:</label>
-          <select x-model="adminSettings.his_http_method" class="input-box text-xs font-mono">
-            <option value="POST">POST (Gửi body JSON)</option>
-            <option value="GET">GET (Query param)</option>
-          </select>
+          <label class="label-title">Mẫu Payload gửi đi (Request Body):</label>
+          <input type="text" x-model="adminSettings.his_payload_template" placeholder='{"ma_tiep_nhan": "{{ma_tn}}"}' class="input-box text-xs font-mono" />
+          <span class="text-[10.5px] text-slate-500 italic">* Hệ thống tự động thay thế <code>{{ma_tn}}</code> bằng Mã tiếp nhận cần tìm.</span>
+        </div>
+
+        <div class="flex items-center gap-3 pt-1">
+          <button type="button" @click="testHisConnection()" class="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            <span>Kiểm tra kết nối API HIS (Mã TN.2611.0004018)</span>
+          </button>
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label class="label-title">Tên Header xác thực (Auth Header):</label>
-          <input type="text" x-model="adminSettings.his_auth_header" placeholder="x-api-key hoặc Authorization" class="input-box text-xs font-mono" />
-        </div>
-        <div>
-          <label class="label-title">API Key (Khóa xác thực):</label>
-          <input type="text" x-model="adminSettings.his_api_key" placeholder="HIS_SECRET_API_KEY_2026..." class="input-box text-xs font-mono" />
-        </div>
-        <div>
-          <label class="label-title">Thời gian chờ (Timeout giây):</label>
-          <input type="number" x-model.number="adminSettings.his_timeout_seconds" placeholder="10" class="input-box text-xs font-mono" />
-        </div>
-      </div>
-
-      <div>
-        <label class="label-title">Mẫu Payload gửi đi (Request Body):</label>
-        <input type="text" x-model="adminSettings.his_payload_template" placeholder='{"ma_tiep_nhan": "{{ma_tn}}"}' class="input-box text-xs font-mono" />
-        <span class="text-[10.5px] text-slate-500 italic">* Hệ thống sẽ tự động thay thế chuỗi <code>{{ma_tn}}</code> bằng Mã tiếp nhận người dùng tìm kiếm.</span>
-      </div>
-
-      <div class="flex items-center gap-3 pt-1">
-        <button type="button" @click="testHisConnection()" class="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-          <span>Kiểm tra kết nối API HIS (Mã TN.2611.0004018)</span>
-        </button>
+      <!-- Chi tiết Chế độ 2 (AHK) -->
+      <div x-show="adminSettings.his_mode === 'ahk'" class="p-4 bg-emerald-50/70 rounded-lg border border-emerald-200 space-y-2 text-xs text-emerald-950">
+        <div class="font-semibold">Hướng dẫn Chế độ 2 (AutoHotkey v2 UIA Bridge qua HTTP API):</div>
+        <ul class="list-disc pl-5 space-y-1 text-[11.5px]">
+          <li>Chạy <code>ahk/his_tiep_nhan_bridge.ahk</code> trên máy trạm tiếp nhận có mở phần mềm HIS.</li>
+          <li>Cấu hình địa chỉ máy chủ (VD: <code>http://&lt;IP_MAY_CHU&gt;:8080</code>) và đăng nhập bằng tài khoản Tiếp nhận.</li>
+          <li>Khi đứng trên màn hình tiếp nhận của HIS, nhấn <strong>F9</strong> để hiện hộp thoại <strong>Xác nhận</strong> thông tin trước khi đẩy qua API <code>POST /api/his/push</code> lên máy chủ.</li>
+        </ul>
       </div>
     </div>
 
@@ -247,6 +295,54 @@
           <input type="text" x-model="newDbFilename" placeholder="ksk_2026.db" class="input-box text-xs font-mono" />
           <button type="button" @click="newDbFilename && switchDatabase(newDbFilename)" :disabled="!newDbFilename" class="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium whitespace-nowrap">Tạo / Kết nối</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Sao lưu & Khôi phục Database trực tiếp trên Máy chủ -->
+    <div class="pt-4 border-t border-slate-200 space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800">Sao lưu & Khôi phục Database trên Máy chủ</h4>
+          <p class="text-[11px] text-slate-500">Các bản sao lưu được lưu trực tiếp trong thư mục <code class="font-mono" x-text="serverBackupDir || 'backups'"></code> trên máy chủ (hỗ trợ sao lưu nóng khi đang chạy).</p>
+        </div>
+        <button type="button" @click="loadServerBackups()" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-medium">↻ Làm mới</button>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <input type="text" x-model="serverBackupNote" placeholder="Ghi chú bản sao lưu (VD: truoc_import_doan)..." class="input-box text-xs max-w-xs" />
+        <button type="button" @click="createServerBackup()" :disabled="serverBackupLoading" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs">
+          <span x-text="serverBackupLoading ? 'Đang sao lưu...' : '💾 Sao lưu ngay trên máy chủ'"></span>
+        </button>
+      </div>
+
+      <div class="overflow-x-auto border border-slate-200 rounded-lg max-h-64 overflow-y-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+              <th class="py-2 px-3">Tên file sao lưu (trên Server)</th>
+              <th class="py-2 px-3">Thời gian tạo</th>
+              <th class="py-2 px-3 text-right">Dung lượng</th>
+              <th class="py-2 px-3 text-right">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 bg-white">
+            <template x-if="serverBackups.length === 0">
+              <tr><td colspan="4" class="py-4 text-center text-slate-400">Chưa có bản sao lưu nào trên máy chủ.</td></tr>
+            </template>
+            <template x-for="b in serverBackups" :key="b.filename">
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-3 font-mono font-medium text-slate-900" x-text="b.filename"></td>
+                <td class="py-2 px-3 text-slate-600" x-text="b.created_at"></td>
+                <td class="py-2 px-3 text-right font-mono text-slate-700" x-text="(b.size_bytes / 1024).toFixed(1) + ' KB'"></td>
+                <td class="py-2 px-3 text-right space-x-2 whitespace-nowrap">
+                  <button type="button" @click="restoreServerBackup(b.filename)" class="text-amber-700 hover:underline font-semibold">↺ Khôi phục</button>
+                  <button type="button" @click="downloadServerBackup(b.filename)" class="text-sky-700 hover:underline font-medium">⬇ Tải về</button>
+                  <button type="button" @click="deleteServerBackup(b.filename)" class="text-red-600 hover:underline font-medium">🗑 Xóa</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>

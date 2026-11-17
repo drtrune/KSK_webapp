@@ -40,6 +40,14 @@ pub struct AppConfig {
     pub dia_danh: String,
     #[serde(default = "default_his_use_mock")]
     pub his_use_mock: bool,
+    #[serde(default = "default_his_mode")]
+    pub his_mode: String,
+    #[serde(default = "default_his_login_url")]
+    pub his_login_url: String,
+    #[serde(default = "default_his_username")]
+    pub his_username: String,
+    #[serde(default = "default_his_password")]
+    pub his_password: String,
     #[serde(default = "default_his_api_url")]
     pub his_api_url: String,
     #[serde(default = "default_his_http_method")]
@@ -77,10 +85,10 @@ fn default_local_ipc_port() -> u16 {
     18080
 }
 fn default_server_host() -> String {
-    "127.0.0.1".to_string()
+    "0.0.0.0".to_string()
 }
 fn default_server_port() -> u16 {
-    18080
+    8080
 }
 fn default_ma_cskcb() -> String {
     "52208".to_string()
@@ -97,8 +105,20 @@ fn default_dia_danh() -> String {
 fn default_his_use_mock() -> bool {
     true
 }
+fn default_his_mode() -> String {
+    "api".to_string()
+}
+fn default_his_login_url() -> String {
+    "".to_string()
+}
+fn default_his_username() -> String {
+    "".to_string()
+}
+fn default_his_password() -> String {
+    "".to_string()
+}
 fn default_his_api_url() -> String {
-    "http://127.0.0.1:18080/api/his/mock".to_string()
+    "http://127.0.0.1:8080/api/his/mock".to_string()
 }
 fn default_his_http_method() -> String {
     "POST".to_string()
@@ -145,6 +165,10 @@ impl Default for AppConfig {
             ten_cskcb: default_ten_cskcb(),
             dia_danh: default_dia_danh(),
             his_use_mock: default_his_use_mock(),
+            his_mode: default_his_mode(),
+            his_login_url: default_his_login_url(),
+            his_username: default_his_username(),
+            his_password: default_his_password(),
             his_api_url: default_his_api_url(),
             his_http_method: default_his_http_method(),
             his_auth_header: default_his_auth_header(),

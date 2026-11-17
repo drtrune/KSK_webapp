@@ -107,6 +107,41 @@ function kskApp() {
 
     // Trạng thái mở khóa sửa theo từng đầu mục khi hồ sơ đã lưu
     editingSections: {},
+    isDirty: false,
+
+    // Setup lần đầu & Khôi phục Admin
+    setupStatus: { initialized: true, unlocked: true },
+    setupPassword: '',
+    setupRecoveryKey: '',
+    showRecoverForm: false,
+    recoverForm: { recovery_key: '', new_password: '' },
+
+    // 6 Mẫu Phiếu KSK & In PDF A4
+    allTemplatesMeta: [],
+    recordTemplates: ['TREN_18'],
+    activeRecordTemplate: 'TREN_18',
+    showPrintTemplateModal: false,
+    printModalIsReception: false,
+    printModalTemplates: ['TREN_18'],
+
+    // Khám đoàn & Hợp đồng
+    groupCompanies: [],
+    groupContracts: [],
+    selectedContractForView: null,
+    groupContractRecords: [],
+    showCompanyModal: false,
+    companyForm: { id: null, code: '', name: '', tax_code: '', address: '', contact_person: '', contact_phone: '', note: '' },
+    showContractModal: false,
+    contractForm: { id: null, company_id: 0, contract_code: '', title: '', exam_date: '', expected_count: 0, templates_arr: ['TREN_18'], note: '' },
+    showGroupImportModal: false,
+    importTargetContract: null,
+    importPreviewRows: [],
+
+    // Sao lưu Database trên Máy chủ
+    serverBackups: [],
+    serverBackupDir: 'backups',
+    serverBackupNote: '',
+    serverBackupLoading: false,
 
     isSectionEditing(secKey) {
       if (!this.isSaved) return true; // Hồ sơ mới chưa lưu: luôn ở chế độ nhập/sửa
@@ -382,6 +417,9 @@ function kskApp() {
       const todayVn = this.todayFormatted();
       this.exportFilters.fromDate = todayVn;
       this.exportFilters.toDate = todayVn;
+
+      await this.checkSetupStatus();
+      await this.loadTemplatesMetadata();
 
       if (this.token) {
         await this.loadMe();
@@ -1257,6 +1295,12 @@ function kskApp() {
       this.updatedBy = rec.updated_by || '';
       this.updatedAt = rec.updated_at || '';
       this.editingSections = {}; // Reset tất cả các mục về trạng thái chỉ xem ban đầu, yêu cầu bấm nút Sửa
+      this.isDirty = false;
+      const tpls = (rec.exam_templates || 'TREN_18').split(',').map(s => s.trim()).filter(Boolean);
+      this.recordTemplates = tpls.length ? tpls : ['TREN_18'];
+      if (!this.recordTemplates.includes(this.activeRecordTemplate)) {
+        this.activeRecordTemplate = this.recordTemplates[0];
+      }
 
       const payload = rec.payload
         ? rec.payload
@@ -1291,6 +1335,9 @@ function kskApp() {
       this.updatedAt = '';
       this.searchMaTn = '';
       this.editingSections = {}; // Reset trạng thái sửa
+      this.isDirty = false;
+      this.recordTemplates = ['TREN_18'];
+      this.activeRecordTemplate = 'TREN_18';
       // Quay về tab chuyên khoa được phân công thay vì cố định về reception
       this.navigateToUserDefaultTab();
 
@@ -3011,6 +3058,397 @@ function kskApp() {
     getSelectedStandardName(diseaseId) {
       const sel = this.getSelectedClassification(diseaseId);
       return sel ? sel.name : '';
+    },
+
+    // --- SETUP & RECOVERY ---
+    async checkSetupStatus() {
+      try {
+        const res = await fetch('/api/setup/status');
+        if (res.ok) this.setupStatus = await res.json();
+      } catch (e) {}
+    },
+
+    async initServerSetup() {
+      if (!this.setupPassword || this.setupPassword.length < 4) {
+        this.toast('Mật khẩu Admin phải có ít nhất 4 ký tự!', 'error');
+        return;
+      }
+      const res = await fetch('/api/setup/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_password: this.setupPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) { this.toast(data.error || 'Lỗi khởi tạo', 'error'); return; }
+      this.setupRecoveryKey = data.recovery_key;
+      this.toast('Đã khởi tạo hệ thống thành công!', 'success');
+    },
+
+    async recoverAdminWithKey() {
+      const res = await fetch('/api/auth/recover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.recoverForm)
+      });
+      const data = await res.json();
+      if (!res.ok) { this.toast(data.error || 'Khôi phục thất bại', 'error'); return; }
+      this.showRecoverForm = false;
+      this.toast(data.message || 'Khôi phục mật khẩu thành công!', 'success');
+    },
+
+    // --- 6 MẪU PHIẾU KSK ---
+    async loadTemplatesMetadata() {
+      try {
+        const res = await fetch('/api/templates');
+        if (res.ok) this.allTemplatesMeta = await res.json();
+      } catch (e) {}
+    },
+
+    templateShortLabel(code) {
+      const found = (this.allTemplatesMeta || []).find(t => t.code === code);
+      return found ? found.short_label : code;
+    },
+
+    templateFullLabel(code) {
+      const found = (this.allTemplatesMeta || []).find(t => t.code === code);
+      return found ? found.full_label : code;
+    },
+
+    activeTemplateGroups() {
+      const found = (this.allTemplatesMeta || []).find(t => t.code === this.activeRecordTemplate);
+      if (!found || !found.groups) return [];
+      return found.groups[this.activeTab] || [];
+    },
+
+    async toggleRecordTemplate(code) {
+      if (!this.isCurrentTabEditable() && this.isSaved) return;
+      let list = [...(this.recordTemplates || ['TREN_18'])];
+      if (list.includes(code)) {
+        if (list.length <= 1) return;
+        list = list.filter(c => c !== code);
+      } else {
+        list.push(code);
+      }
+      this.recordTemplates = list;
+      if (!list.includes(this.activeRecordTemplate)) {
+        this.activeRecordTemplate = list[0];
+      } else if (list.includes(code)) {
+        this.activeRecordTemplate = code;
+      }
+      this.form._EXAM_TEMPLATES = list.join(',');
+      if (this.recordId) {
+        await fetch(`/api/records/${this.recordId}/templates`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.token}` },
+          body: JSON.stringify({ exam_templates: list.join(',') })
+        });
+      }
+    },
+
+    // --- TRẠNG THÁI ĐÃ KHÁM / CHƯA KHÁM & STICKY FOOTER ---
+    currentSectionKey() {
+      if (this.activeTab === 'reception') return 'reception';
+      if (this.activeRecordTemplate !== 'TREN_18') {
+        return `tpl_${this.activeRecordTemplate}_${this.activeTab}`;
+      }
+      if (this.activeTab === 'clinical') {
+        const sub = this.clinicalSubTab === 'all' ? 'noi' : this.clinicalSubTab;
+        return `clin_${sub}`;
+      }
+      return this.activeTab;
+    },
+
+    isSectionExamined(secKey) {
+      if (!this.recordId) return false;
+      const raw = this.form._EXAMINED_SECTIONS;
+      if (typeof raw === 'string' && raw.length > 0) {
+        return raw.split(',').map(s => s.trim()).includes(secKey);
+      }
+      if (secKey === 'reception') return !!(this.form.HO_TEN && this.form.HO_TEN.trim());
+      return false;
+    },
+
+    isCurrentTabEditable() {
+      if (this.isLocked) return false;
+      const sec = this.currentSectionKey();
+      if (!this.isSectionExamined(sec)) return true;
+      return !!this.editingSections[sec];
+    },
+
+    enterCurrentTabEdit() {
+      const sec = this.currentSectionKey();
+      this.editingSections[sec] = true;
+    },
+
+    cancelCurrentTabEdit() {
+      const sec = this.currentSectionKey();
+      this.editingSections[sec] = false;
+      this.isDirty = false;
+      if (this.recordId) this.selectRecord({ id: this.recordId });
+    },
+
+    switchExamTab(tab) {
+      this.activeTab = tab;
+      this.isDirty = false;
+    },
+
+    cycleExamTab(delta) {
+      const order = this.activeRecordTemplate === 'TREN_18'
+        ? ['reception', 'history', 'physical', 'clinical', 'paraclinical', 'conclusion']
+        : ['reception', 'history', 'physical', 'clinical', 'conclusion'];
+      const idx = order.indexOf(this.activeTab);
+      const next = order[(idx + delta + order.length) % order.length];
+      this.switchExamTab(next);
+    },
+
+    async saveCurrentSection(moveNext) {
+      const sec = this.currentSectionKey();
+      const set = (this.form._EXAMINED_SECTIONS || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!set.includes(sec)) set.push(sec);
+      this.form._EXAMINED_SECTIONS = set.join(',');
+      if (typeof this.handleSave === 'function') {
+        await this.handleSave();
+      }
+      this.editingSections[sec] = false;
+      this.isDirty = false;
+      if (moveNext) this.cycleExamTab(1);
+    },
+
+    quickFillNormalDefaults() {
+      if (this.activeRecordTemplate !== 'TREN_18') {
+        for (const g of this.activeTemplateGroups()) {
+          for (const f of g.fields) {
+            if (f.default_normal && !(this.form[f.namespaced_key] || '').trim()) {
+              this.form[f.namespaced_key] = f.default_normal;
+            }
+          }
+        }
+        this.isDirty = true;
+        return;
+      }
+      const map = {
+        history: { TSGD_MAC_BENH: '0', TSBT_BENH_KHAC: '0', TSBT_DANG_DIEU_TRI_BENH: '0' },
+        physical: { KHAM_THE_LUC_PL: '1', THE_LUC_PL: '1' },
+        paraclinical: { CLS_HUYET_HOC: 'Bình thường', CLS_NUOC_TIEU: 'Bình thường', CLS_XQ_TIM_PHOI: 'Bình thường', CLS_DINH_KY_KET_QUA: 'Bình thường' },
+        conclusion: { PHAN_LOAI_SK: '1', KET_LUAN_BENH_TAT: 'Hiện tại đủ sức khỏe làm việc / học tập' },
+        clin_noi: { NOI_KHOA_TUAN_HOAN: 'Bình thường', NOI_KHOA_TUAN_HOAN_PL: '1', NOI_KHOA_HO_HAP: 'Bình thường', NOI_KHOA_HO_HAP_PL: '1' },
+        clin_ngoai: { KET_QUA_KHAM_NGOAI_KHOA: 'Bình thường', KHAM_NGOAI_KHOA_PL: '1' },
+        clin_dalieu: { KET_QUA_KHAM_DA_LIEU: 'Bình thường', KHAM_DA_LIEU_PL: '1' },
+        clin_san: { KET_QUA_KHAM_SAN_PHU_KHOA: 'Bình thường', KHAM_SAN_PHU_KHOA_PL: '1' },
+        clin_mat: { KHONG_KINH_MAT_PHAI: '10/10', KHONG_KINH_MAT_TRAI: '10/10', BENH_KHAC_MAT: 'Bình thường', KHAM_MAT_PL: '1' },
+        clin_tmh: { TAI_PHAI_NOI_THUONG: '5m', TAI_PHAI_NOI_THAM: '0.5m', TAI_TRAI_NOI_THUONG: '5m', TAI_TRAI_NOI_THAM: '0.5m', BENH_KHAC_TAI_MUI_HONG: 'Bình thường', KHAM_TAI_MUI_HONG_PL: '1' },
+        clin_rhm: { HAM_TREN: 'Bình thường', HAM_DUOI: 'Bình thường', BENH_KHAC_RANG_HAM_MAT: 'Bình thường', KHAM_RANG_HAM_MAT_PL: '1' }
+      };
+      const defs = map[this.currentSectionKey()] || {};
+      for (const [k, v] of Object.entries(defs)) {
+        if (!(this.form[k] || '').trim()) this.form[k] = v;
+      }
+      this.isDirty = true;
+    },
+
+    canPrintFullKsk() {
+      if (!this.recordId) return false;
+      if (this.recordStatus >= 1) return true;
+      return this.isSectionExamined('conclusion');
+    },
+
+    printRecordPdf(isReception) {
+      if (!this.recordId) return;
+      const tpls = this.recordTemplates && this.recordTemplates.length ? this.recordTemplates : [this.activeRecordTemplate];
+      if (tpls.length <= 1) {
+        const url = `/api/records/${this.recordId}/pdf?reception=${isReception ? 1 : 0}&templates=${encodeURIComponent(tpls[0])}&token=${encodeURIComponent(this.token)}`;
+        window.open(url, '_blank');
+        return;
+      }
+      this.printModalIsReception = isReception;
+      this.printModalTemplates = [...tpls];
+      this.showPrintTemplateModal = true;
+    },
+
+    confirmPrintModalPdf() {
+      if (!this.printModalTemplates.length) {
+        this.toast('Vui lòng chọn ít nhất 1 mẫu!', 'error');
+        return;
+      }
+      const url = `/api/records/${this.recordId}/pdf?reception=${this.printModalIsReception ? 1 : 0}&templates=${encodeURIComponent(this.printModalTemplates.join(','))}&token=${encodeURIComponent(this.token)}`;
+      window.open(url, '_blank');
+      this.showPrintTemplateModal = false;
+    },
+
+    // --- KHÁM ĐOÀN ---
+    async openGroupTab() {
+      this.activeTab = 'group';
+      await this.loadGroupData();
+    },
+
+    async loadGroupData() {
+      const h = { 'Authorization': `Bearer ${this.token}` };
+      const [cRes, ctRes] = await Promise.all([
+        fetch('/api/companies', { headers: h }),
+        fetch('/api/contracts', { headers: h })
+      ]);
+      if (cRes.ok) this.groupCompanies = await cRes.json();
+      if (ctRes.ok) this.groupContracts = await ctRes.json();
+    },
+
+    openCompanyModal(comp = null) {
+      this.companyForm = comp
+        ? { ...comp }
+        : { id: null, code: '', name: '', tax_code: '', address: '', contact_person: '', contact_phone: '', note: '' };
+      this.showCompanyModal = true;
+    },
+
+    async saveCompany() {
+      const isEdit = !!this.companyForm.id;
+      const res = await fetch(isEdit ? `/api/companies/${this.companyForm.id}` : '/api/companies', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.token}` },
+        body: JSON.stringify(this.companyForm)
+      });
+      const data = await res.json();
+      if (!res.ok) { this.toast(data.error || 'Lỗi lưu công ty', 'error'); return; }
+      this.showCompanyModal = false;
+      await this.loadGroupData();
+      this.toast('Đã lưu công ty!', 'success');
+    },
+
+    openContractModal(ct = null, companyId = null) {
+      if (ct) {
+        this.contractForm = {
+          ...ct,
+          templates_arr: (ct.default_templates || 'TREN_18').split(',').map(s => s.trim()).filter(Boolean)
+        };
+      } else {
+        const defComp = companyId || (this.groupCompanies[0]?.id || 0);
+        this.contractForm = { id: null, company_id: defComp, contract_code: '', title: '', exam_date: '', expected_count: 0, templates_arr: ['TREN_18'], note: '' };
+      }
+      this.showContractModal = true;
+    },
+
+    async saveContract() {
+      const isEdit = !!this.contractForm.id;
+      const body = {
+        ...this.contractForm,
+        default_templates: (this.contractForm.templates_arr || ['TREN_18']).join(',')
+      };
+      const res = await fetch(isEdit ? `/api/contracts/${this.contractForm.id}` : '/api/contracts', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.token}` },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) { this.toast(data.error || 'Lỗi lưu hợp đồng', 'error'); return; }
+      this.showContractModal = false;
+      await this.loadGroupData();
+      this.toast('Đã lưu hợp đồng!', 'success');
+    },
+
+    async openContractRecords(ct) {
+      this.selectedContractForView = ct;
+      const res = await fetch(`/api/contracts/${ct.id}/records`, {
+        headers: { 'Authorization': `Bearer ${this.token}` }
+      });
+      if (res.ok) this.groupContractRecords = await res.json();
+    },
+
+    printContractPdf(contractId, isReception) {
+      window.open(`/api/contracts/${contractId}/pdf?reception=${isReception ? 1 : 0}&token=${encodeURIComponent(this.token)}`, '_blank');
+    },
+
+    openGroupImportModal(ct) {
+      this.importTargetContract = ct;
+      this.importPreviewRows = [];
+      this.showGroupImportModal = true;
+    },
+
+    async previewGroupImportFile(ev) {
+      const file = ev.target.files[0];
+      if (!file || !this.importTargetContract) return;
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/contracts/${this.importTargetContract.id}/import-preview`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${this.token}` },
+        body: fd
+      });
+      const data = await res.json();
+      if (!res.ok) { this.toast(data.error || 'Lỗi đọc file', 'error'); return; }
+      this.importPreviewRows = data;
+    },
+
+    async commitGroupImport() {
+      if (!this.importTargetContract || !this.importPreviewRows.length) return;
+      const res = await fetch(`/api/contracts/${this.importTargetContract.id}/import-commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.token}` },
+        body: JSON.stringify({ rows: this.importPreviewRows })
+      });
+      const data = await res.json();
+      if (!res.ok) { this.toast(data.error || 'Lỗi import', 'error'); return; }
+      this.showGroupImportModal = false;
+      await this.loadGroupData();
+      await this.loadRecordsList();
+      this.toast(`Đã import ${data.inserted} hồ sơ (bỏ qua ${data.skipped})!`, 'success');
+    },
+
+    // --- SAO LƯU & KHÔI PHỤC DB TRÊN MÁY CHỦ ---
+    async loadServerBackups() {
+      const res = await fetch('/api/admin/db/backups', {
+        headers: { 'Authorization': `Bearer ${this.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        this.serverBackupDir = data.backup_dir || 'backups';
+        this.serverBackups = data.backups || [];
+      }
+    },
+
+    async createServerBackup() {
+      this.serverBackupLoading = true;
+      try {
+        const res = await fetch('/api/admin/db/backup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.token}` },
+          body: JSON.stringify({ note: this.serverBackupNote || '' })
+        });
+        const data = await res.json();
+        if (!res.ok) { this.toast(data.error || 'Lỗi sao lưu', 'error'); return; }
+        this.serverBackupNote = '';
+        await this.loadServerBackups();
+        this.toast(data.message || 'Đã sao lưu trên máy chủ!', 'success');
+      } finally {
+        this.serverBackupLoading = false;
+      }
+    },
+
+    async restoreServerBackup(filename) {
+      if (!confirm(`Khôi phục CSDL máy chủ từ bản sao lưu '${filename}'?\nHệ thống sẽ tự động tạo 1 bản sao lưu an toàn trước khi khôi phục.`)) return;
+      const res = await fetch('/api/admin/db/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.token}` },
+        body: JSON.stringify({ filename })
+      });
+      const data = await res.json();
+      if (!res.ok) { this.toast(data.error || 'Lỗi khôi phục', 'error'); return; }
+      await this.loadServerBackups();
+      await this.loadRecordsList();
+      this.toast(data.message || 'Đã khôi phục CSDL!', 'success');
+    },
+
+    downloadServerBackup(filename) {
+      window.open(`/api/admin/db/backups/${encodeURIComponent(filename)}?token=${encodeURIComponent(this.token)}`, '_blank');
+    },
+
+    async deleteServerBackup(filename) {
+      if (!confirm(`Xóa bản sao lưu '${filename}' trên máy chủ?`)) return;
+      const res = await fetch(`/api/admin/db/backups/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${this.token}` }
+      });
+      if (res.ok) {
+        await this.loadServerBackups();
+        this.toast('Đã xóa bản sao lưu!', 'success');
+      }
     },
 
   };

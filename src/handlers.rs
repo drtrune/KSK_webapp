@@ -129,6 +129,26 @@ pub async fn login_handler(
         );
     }
 
+    // Tự động mở khóa Master Key trên RAM máy chủ nếu chưa mở và user có wrapped_mk
+    {
+        let mut mk_guard = state.master_key.write().await;
+        if mk_guard.is_none() {
+            if let Ok(Some((wmk,))) = sqlx::query_as::<_, (String,)>(
+                "SELECT wrapped_mk FROM users WHERE id = ?",
+            )
+            .bind(user.id)
+            .fetch_optional(&*db)
+            .await
+            {
+                if !wmk.trim().is_empty() {
+                    if let Ok(mk) = crate::crypto::unwrap_master_key(&wmk, req.password.trim()) {
+                        *mk_guard = Some(mk);
+                    }
+                }
+            }
+        }
+    }
+
     let token = Uuid::new_v4().to_string();
     if let Err(e) = sqlx::query("INSERT INTO sessions (token, user_id) VALUES (?, ?)")
         .bind(&token)
@@ -515,7 +535,35 @@ pub async fn fetch_his_patient_handler(
 
     let mut req_builder = state.http_client.request(method, &cfg.his_api_url);
 
-    if !cfg.his_api_key.is_empty() {
+    // Chế độ 1 (API HIS): nếu cấu hình his_login_url + his_username + his_password -> tự động lấy Bearer token
+    let mut dynamic_bearer: Option<String> = None;
+    if !cfg.his_login_url.trim().is_empty() && !cfg.his_username.trim().is_empty() {
+        if let Ok(login_resp) = state
+            .http_client
+            .post(cfg.his_login_url.trim())
+            .json(&json!({
+                "username": cfg.his_username.trim(),
+                "password": cfg.his_password
+            }))
+            .timeout(Duration::from_secs(cfg.his_timeout_seconds))
+            .send()
+            .await
+        {
+            if let Ok(val) = login_resp.json::<Value>().await {
+                let tok = val
+                    .get("token")
+                    .or_else(|| val.get("access_token"))
+                    .or_else(|| val.get("data").and_then(|d| d.get("token").or_else(|| d.get("access_token"))))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                dynamic_bearer = tok;
+            }
+        }
+    }
+
+    if let Some(tok) = dynamic_bearer {
+        req_builder = req_builder.header(header::AUTHORIZATION, format!("Bearer {}", tok));
+    } else if !cfg.his_api_key.is_empty() {
         let auth_hdr = if cfg.his_auth_header.is_empty() { "x-api-key" } else { &cfg.his_auth_header };
         req_builder = req_builder.header(auth_hdr, &cfg.his_api_key);
         if auth_hdr.eq_ignore_ascii_case("authorization") && !cfg.his_api_key.starts_with("Bearer ") {
@@ -655,36 +703,26 @@ pub async fn mock_his_api_handler(
     execute_mock_his(req.ma_tiep_nhan.trim())
 }
 
-/// Endpoint nội bộ (127.0.0.1:18080) nhận dữ liệu bệnh nhân từ AutoHotkey v2 UIA Bridge (HIS Bình Định)
+/// Endpoint nhận dữ liệu bệnh nhân từ AutoHotkey v2 UIA Bridge (Chế độ 2) qua HTTP API
 pub async fn push_his_patient_handler(
     State(state): State<SharedState>,
     headers: HeaderMap,
     Json(req): Json<HisPushRequest>,
 ) -> Response {
     let cfg = state.config.read().await.clone();
-    let provided_key = headers
+    let db = state.db.read().await;
+    let provided_api_key = headers
         .get("x-api-key")
         .and_then(|v| v.to_str().ok())
-        .or_else(|| {
-            headers
-                .get(header::AUTHORIZATION)
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.strip_prefix("Bearer "))
-        })
         .unwrap_or("");
 
-    if !cfg.his_api_key.is_empty() && provided_key != cfg.his_api_key {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({
-                "status": 401,
-                "message": "Invalid API Key"
-            })),
-        )
-            .into_response();
+    let authed_by_key = !cfg.his_api_key.is_empty() && provided_api_key == cfg.his_api_key;
+    if !authed_by_key {
+        if let Err(resp) = authenticate(&*db, &headers, None).await {
+            return resp;
+        }
     }
 
-    let db = state.db.read().await;
     let mk = *state.master_key.read().await;
     match upsert_patient_from_his(&*db, &cfg, &req, mk.as_ref()).await {
         Ok((id, payload_val)) => {
@@ -3758,6 +3796,745 @@ pub async fn reload_asset_catalogs_handler(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Lỗi khi nạp danh mục từ asset: {}", e),
         ),
+    }
+}
+
+// ============================================================================
+// 8. WEB SERVER EXTENSIONS: SETUP, TEMPLATES, PDF, GROUP EXAM & SERVER BACKUP
+// ============================================================================
+
+#[derive(Deserialize)]
+pub struct SetupInitReq {
+    pub admin_password: String,
+}
+
+#[derive(Deserialize)]
+pub struct RecoverAdminReq {
+    pub recovery_key: String,
+    pub new_password: String,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateRecordTemplatesReq {
+    pub exam_templates: String,
+}
+
+#[derive(Deserialize)]
+pub struct PdfPrintQuery {
+    #[serde(default)]
+    pub reception: Option<u8>,
+    #[serde(default)]
+    pub templates: Option<String>,
+    #[serde(default)]
+    pub token: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct CompanyPayload {
+    pub code: String,
+    pub name: String,
+    #[serde(default)]
+    pub tax_code: String,
+    #[serde(default)]
+    pub address: String,
+    #[serde(default)]
+    pub contact_person: String,
+    #[serde(default)]
+    pub contact_phone: String,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default = "default_one_i64")]
+    pub is_active: i64,
+}
+
+fn default_one_i64() -> i64 {
+    1
+}
+
+#[derive(Deserialize)]
+pub struct ContractPayload {
+    pub company_id: i64,
+    pub contract_code: String,
+    pub title: String,
+    #[serde(default)]
+    pub exam_date: String,
+    #[serde(default)]
+    pub expected_count: i64,
+    #[serde(default)]
+    pub status: i64,
+    #[serde(default)]
+    pub scan_file_path: String,
+    #[serde(default)]
+    pub default_templates: String,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Deserialize)]
+pub struct ContractImportCommitReq {
+    pub rows: Vec<crate::models::GroupImportRow>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateBackupReq {
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Deserialize)]
+pub struct RestoreBackupReq {
+    pub filename: String,
+}
+
+pub async fn setup_status_handler(State(state): State<SharedState>) -> Response {
+    let db = state.db.read().await;
+    let initialized = crate::db::has_master_key_setup(&*db).await;
+    let unlocked = state.master_key.read().await.is_some();
+    Json(json!({
+        "initialized": initialized,
+        "unlocked": unlocked
+    }))
+    .into_response()
+}
+
+pub async fn setup_init_handler(
+    State(state): State<SharedState>,
+    Json(req): Json<SetupInitReq>,
+) -> Response {
+    let pw = req.admin_password.trim();
+    if pw.len() < 4 {
+        return api_error(StatusCode::BAD_REQUEST, "Mật khẩu Admin phải có ít nhất 4 ký tự");
+    }
+    let db = state.db.read().await;
+    if crate::db::has_master_key_setup(&*db).await {
+        return api_error(StatusCode::CONFLICT, "Hệ thống đã được khởi tạo trước đó");
+    }
+    match crate::db::initialize_master_key_for_admin(&*db, pw).await {
+        Ok((mk, rk)) => {
+            *state.master_key.write().await = Some(mk);
+            Json(json!({
+                "message": "Đã khởi tạo Master Key & Tài khoản Admin",
+                "recovery_key": rk
+            }))
+            .into_response()
+        }
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+pub async fn recover_admin_handler(
+    State(state): State<SharedState>,
+    Json(req): Json<RecoverAdminReq>,
+) -> Response {
+    let db = state.db.read().await;
+    match crate::db::recover_admin_with_key(
+        &*db,
+        req.recovery_key.trim(),
+        req.new_password.trim(),
+    )
+    .await
+    {
+        Ok(mk) => {
+            *state.master_key.write().await = Some(mk);
+            Json(json!({ "message": "Khôi phục mật khẩu Admin thành công!" })).into_response()
+        }
+        Err(e) => api_error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
+pub async fn get_templates_metadata_handler() -> Response {
+    let list: Vec<Value> = crate::templates::ALL_TEMPLATES
+        .iter()
+        .map(|(code, short_lbl, full_lbl)| {
+            let tabs = ["history", "physical", "clinical", "conclusion"];
+            let mut groups_by_tab = Map::new();
+            for tab in tabs {
+                let grps: Vec<Value> = crate::templates::get_template_groups(code, tab)
+                    .into_iter()
+                    .map(|g| {
+                        let fields: Vec<Value> = g
+                            .fields
+                            .into_iter()
+                            .map(|f| {
+                                let (kind_str, select_opts): (&str, Vec<(&str, &str)>) = match f.kind {
+                                    crate::templates::TemplateFieldKind::Text => ("text", Vec::new()),
+                                    crate::templates::TemplateFieldKind::Select(opts) => {
+                                        ("select", opts.to_vec())
+                                    }
+                                    crate::templates::TemplateFieldKind::Icd10 => ("icd10", Vec::new()),
+                                };
+                                let options = if select_opts.is_empty() {
+                                    crate::templates::field_options(code, f.key)
+                                        .into_iter()
+                                        .map(|s| (s, s))
+                                        .collect::<Vec<_>>()
+                                } else {
+                                    select_opts
+                                };
+                                json!({
+                                    "key": f.key,
+                                    "namespaced_key": crate::templates::namespaced_key(code, f.key),
+                                    "label": f.label,
+                                    "placeholder": f.placeholder,
+                                    "kind": kind_str,
+                                    "default_normal": f.default_normal,
+                                    "options": options.into_iter().map(|(v, l)| json!({"value": v, "label": l})).collect::<Vec<_>>()
+                                })
+                            })
+                            .collect();
+                        json!({
+                            "title": g.title,
+                            "fields": fields
+                        })
+                    })
+                    .collect();
+                groups_by_tab.insert(tab.to_string(), Value::Array(grps));
+            }
+            json!({
+                "code": code,
+                "short_label": short_lbl,
+                "full_label": full_lbl,
+                "groups": groups_by_tab
+            })
+        })
+        .collect();
+    Json(list).into_response()
+}
+
+pub async fn update_record_templates_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<UpdateRecordTemplatesReq>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_any_role(&["admin", "reception"]) {
+        return api_error(StatusCode::FORBIDDEN, "Không có quyền đổi mẫu phiếu khám");
+    }
+    let normalized = crate::templates::format_template_list(
+        &crate::templates::parse_template_list(&req.exam_templates),
+    );
+    match crate::db::update_record_templates(&*db, id, &normalized).await {
+        Ok(_) => Json(json!({ "exam_templates": normalized })).into_response(),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+pub async fn export_record_pdf_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Query(q): Query<PdfPrintQuery>,
+) -> Response {
+    let db = state.db.read().await;
+    if let Err(resp) = authenticate(&*db, &headers, q.token.as_deref()).await {
+        return resp;
+    }
+    let cfg = state.config.read().await.clone();
+    let mk = *state.master_key.read().await;
+    let is_rec = q.reception.unwrap_or(0) == 1;
+    let templates = match q.templates {
+        Some(ref s) if !s.trim().is_empty() => crate::templates::parse_template_list(s),
+        _ => Vec::new(),
+    };
+    let res = if templates.is_empty() {
+        generate_record_pdf(&*db, &cfg, id, is_rec, mk.as_ref()).await
+    } else {
+        generate_record_pdf_for_templates(&*db, &cfg, id, is_rec, &templates, mk.as_ref()).await
+    };
+    match res {
+        Ok((filename, bytes)) => (
+            [
+                (header::CONTENT_TYPE, "application/pdf".to_string()),
+                (
+                    header::CONTENT_DISPOSITION,
+                    format!("inline; filename=\"{}\"", filename),
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+pub async fn list_companies_handler(State(state): State<SharedState>, headers: HeaderMap) -> Response {
+    let db = state.db.read().await;
+    if let Err(resp) = authenticate(&*db, &headers, None).await {
+        return resp;
+    }
+    Json(crate::db::list_companies(&*db).await).into_response()
+}
+
+pub async fn create_company_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(req): Json<CompanyPayload>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_any_role(&["admin", "business", "reception"]) {
+        return api_error(StatusCode::FORBIDDEN, "Không có quyền quản lý công ty");
+    }
+    match crate::db::upsert_company(
+        &*db,
+        None,
+        &req.code,
+        &req.name,
+        &req.tax_code,
+        &req.address,
+        &req.contact_person,
+        &req.contact_phone,
+        &req.note,
+    )
+    .await
+    {
+        Ok(id) => Json(json!({ "id": id })).into_response(),
+        Err(e) => api_error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
+pub async fn update_company_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<CompanyPayload>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_any_role(&["admin", "business", "reception"]) {
+        return api_error(StatusCode::FORBIDDEN, "Không có quyền sửa công ty");
+    }
+    match crate::db::upsert_company(
+        &*db,
+        Some(id),
+        &req.code,
+        &req.name,
+        &req.tax_code,
+        &req.address,
+        &req.contact_person,
+        &req.contact_phone,
+        &req.note,
+    )
+    .await
+    {
+        Ok(_) => Json(json!({ "ok": true })).into_response(),
+        Err(e) => api_error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
+pub async fn toggle_company_active_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<CompanyPayload>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_any_role(&["admin", "business", "reception"]) {
+        return api_error(StatusCode::FORBIDDEN, "Không có quyền");
+    }
+    match crate::db::toggle_company_active(&*db, id, req.is_active != 0).await {
+        Ok(_) => Json(json!({ "ok": true })).into_response(),
+        Err(e) => api_error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
+pub async fn list_contracts_handler(State(state): State<SharedState>, headers: HeaderMap) -> Response {
+    let db = state.db.read().await;
+    if let Err(resp) = authenticate(&*db, &headers, None).await {
+        return resp;
+    }
+    Json(crate::db::list_exam_contracts(&*db, None).await).into_response()
+}
+
+pub async fn create_contract_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(req): Json<ContractPayload>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_any_role(&["admin", "business", "reception"]) {
+        return api_error(StatusCode::FORBIDDEN, "Không có quyền tạo hợp đồng");
+    }
+    let tpls = if req.default_templates.trim().is_empty() {
+        "TREN_18".to_string()
+    } else {
+        req.default_templates
+    };
+    match crate::db::upsert_exam_contract(
+        &*db,
+        None,
+        req.company_id,
+        &req.contract_code,
+        &req.title,
+        &req.exam_date,
+        req.expected_count,
+        &tpls,
+        &req.note,
+    )
+    .await
+    {
+        Ok(id) => Json(json!({ "id": id })).into_response(),
+        Err(e) => api_error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
+pub async fn update_contract_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<ContractPayload>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_any_role(&["admin", "business", "reception"]) {
+        return api_error(StatusCode::FORBIDDEN, "Không có quyền sửa hợp đồng");
+    }
+    match crate::db::upsert_exam_contract(
+        &*db,
+        Some(id),
+        req.company_id,
+        &req.contract_code,
+        &req.title,
+        &req.exam_date,
+        req.expected_count,
+        &req.default_templates,
+        &req.note,
+    )
+    .await
+    {
+        Ok(_) => Json(json!({ "ok": true })).into_response(),
+        Err(e) => api_error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
+pub async fn list_contract_records_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    let db = state.db.read().await;
+    if let Err(resp) = authenticate(&*db, &headers, None).await {
+        return resp;
+    }
+    let mk = *state.master_key.read().await;
+    let rows = query_filtered_records(
+        &*db,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some("doan"),
+        Some(id),
+        Some(5000),
+        false,
+        mk.as_ref(),
+    )
+    .await;
+    Json(rows).into_response()
+}
+
+pub async fn export_contract_pdf_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Query(q): Query<PdfPrintQuery>,
+) -> Response {
+    let db = state.db.read().await;
+    if let Err(resp) = authenticate(&*db, &headers, q.token.as_deref()).await {
+        return resp;
+    }
+    let cfg = state.config.read().await.clone();
+    let mk = *state.master_key.read().await;
+    let is_rec = q.reception.unwrap_or(0) == 1;
+    match generate_group_print_pdf(&*db, &cfg, id, is_rec, mk.as_ref()).await {
+        Ok((filename, bytes, _count)) => (
+            [
+                (header::CONTENT_TYPE, "application/pdf".to_string()),
+                (
+                    header::CONTENT_DISPOSITION,
+                    format!("inline; filename=\"{}\"", filename),
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+pub async fn import_contract_preview_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    mut multipart: axum::extract::Multipart,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_any_role(&["admin", "business", "reception"]) {
+        return api_error(StatusCode::FORBIDDEN, "Không có quyền import danh sách đoàn");
+    }
+    let mut file_bytes: Option<(String, Vec<u8>)> = None;
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let name = field.file_name().unwrap_or("import.csv").to_string();
+        if let Ok(bytes) = field.bytes().await {
+            file_bytes = Some((name, bytes.to_vec()));
+            break;
+        }
+    }
+    let Some((filename, bytes)) = file_bytes else {
+        return api_error(StatusCode::BAD_REQUEST, "Vui lòng chọn file CSV hoặc Excel (.xlsx)");
+    };
+    let tmp_path = std::env::temp_dir().join(format!("ksk_imp_{}_{}", Uuid::new_v4(), filename));
+    if let Err(e) = fs::write(&tmp_path, &bytes) {
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    let (company_name, exam_date): (String, String) = sqlx::query_as(
+        "SELECT co.name, c.exam_date FROM exam_contracts c JOIN companies co ON co.id = c.company_id WHERE c.id = ?",
+    )
+    .bind(id)
+    .fetch_optional(&*db)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default();
+
+    let catalogs: Vec<CatalogItem> = sqlx::query_as(
+        "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE is_active = 1",
+    )
+    .fetch_all(&*db)
+    .await
+    .unwrap_or_default();
+
+    let existing_ma_tn = crate::db::get_existing_ma_tiep_nhan_set(&*db).await;
+    let mk = *state.master_key.read().await;
+    let existing_cccds = crate::db::get_existing_contract_cccd_set(&*db, id, mk.as_ref()).await;
+
+    let parsed = crate::group_import::parse_group_import_file(
+        &tmp_path,
+        &company_name,
+        &exam_date,
+        &catalogs,
+        &existing_ma_tn,
+        &existing_cccds,
+    );
+    let _ = fs::remove_file(&tmp_path);
+
+    let rows = match parsed {
+        Ok(r) => r,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
+    Json(rows).into_response()
+}
+
+pub async fn import_contract_commit_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<ContractImportCommitReq>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_any_role(&["admin", "business", "reception"]) {
+        return api_error(StatusCode::FORBIDDEN, "Không có quyền import danh sách đoàn");
+    }
+    let cfg = state.config.read().await.clone();
+    let mk = *state.master_key.read().await;
+    match crate::db::batch_insert_group_records(
+        &*db,
+        id,
+        &cfg.ma_cskcb,
+        &cfg.ma_gtin_cskcb,
+        &user.username,
+        mk.as_ref(),
+        &req.rows,
+    )
+    .await
+    {
+        Ok((inserted, skipped)) => Json(json!({
+            "inserted": inserted,
+            "skipped": skipped
+        }))
+        .into_response(),
+        Err(e) => api_error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
+pub async fn download_sample_csv_handler() -> Response {
+    let csv = crate::group_import::sample_group_import_csv_bytes();
+    (
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"mau_import_kham_doan.csv\"".to_string(),
+            ),
+        ],
+        csv,
+    )
+        .into_response()
+}
+
+pub async fn list_db_backups_handler(State(state): State<SharedState>, headers: HeaderMap) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_role("admin") {
+        return api_error(StatusCode::FORBIDDEN, "Chỉ Quản trị viên mới được xem sao lưu máy chủ");
+    }
+    let cfg = state.config.read().await.clone();
+    let list = crate::db::list_server_backups(&cfg.backup_dir_path);
+    Json(json!({
+        "backup_dir": cfg.backup_dir_path,
+        "backups": list
+    }))
+    .into_response()
+}
+
+pub async fn create_db_backup_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(req): Json<CreateBackupReq>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_role("admin") {
+        return api_error(StatusCode::FORBIDDEN, "Chỉ Quản trị viên mới được sao lưu máy chủ");
+    }
+    let cfg = state.config.read().await.clone();
+    match crate::db::create_server_backup(&*db, &cfg.backup_dir_path, &req.note).await {
+        Ok(info) => Json(json!({
+            "message": format!("Đã sao lưu trên máy chủ: {}", info.filename),
+            "backup": info
+        }))
+        .into_response(),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+pub async fn restore_db_backup_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(req): Json<RestoreBackupReq>,
+) -> Response {
+    {
+        let db = state.db.read().await;
+        let user = match authenticate(&*db, &headers, None).await {
+            Ok(u) => u,
+            Err(resp) => return resp,
+        };
+        if !user.has_role("admin") {
+            return api_error(StatusCode::FORBIDDEN, "Chỉ Quản trị viên mới được khôi phục máy chủ");
+        }
+    }
+    let cfg = state.config.read().await.clone();
+    let mut db_write = state.db.write().await;
+    match crate::db::restore_server_backup(
+        &*db_write,
+        &cfg.backup_dir_path,
+        &req.filename,
+        &cfg.database_path,
+    )
+    .await
+    {
+        Ok(new_pool) => {
+            *db_write = new_pool;
+            Json(json!({
+                "message": format!("Đã khôi phục CSDL máy chủ từ '{}'", req.filename)
+            }))
+            .into_response()
+        }
+        Err(e) => api_error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
+pub async fn download_db_backup_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(filename): Path<String>,
+    Query(q): Query<PdfPrintQuery>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, q.token.as_deref()).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_role("admin") {
+        return api_error(StatusCode::FORBIDDEN, "Chỉ Quản trị viên mới được tải sao lưu");
+    }
+    if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
+        return api_error(StatusCode::BAD_REQUEST, "Tên file không hợp lệ");
+    }
+    let cfg = state.config.read().await.clone();
+    let path = std::path::Path::new(&cfg.backup_dir_path).join(&filename);
+    match fs::read(&path) {
+        Ok(bytes) => (
+            [
+                (header::CONTENT_TYPE, "application/octet-stream".to_string()),
+                (
+                    header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{}\"", filename),
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(e) => api_error(StatusCode::NOT_FOUND, format!("Không đọc được file sao lưu: {}", e)),
+    }
+}
+
+pub async fn delete_db_backup_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(filename): Path<String>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_role("admin") {
+        return api_error(StatusCode::FORBIDDEN, "Chỉ Quản trị viên mới được xóa sao lưu");
+    }
+    let cfg = state.config.read().await.clone();
+    match crate::db::delete_server_backup(&cfg.backup_dir_path, &filename) {
+        Ok(_) => Json(json!({ "ok": true })).into_response(),
+        Err(e) => api_error(StatusCode::BAD_REQUEST, e),
     }
 }
 

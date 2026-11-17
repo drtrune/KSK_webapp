@@ -1,5 +1,80 @@
+        <!-- FORM ĐỘNG CHO 5 MẪU RIÊNG (LÁI XE, 6-18, DƯỚI 6, MẪU GIÁO, HỌC SINH) -->
+        <div x-show="activeRecordTemplate !== 'TREN_18' && ['history','physical','clinical','conclusion'].includes(activeTab)"
+             class="bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-2xs space-y-4 no-print">
+          <div class="border-b border-slate-100 pb-2.5 flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900" x-text="templateFullLabel(activeRecordTemplate)"></h3>
+              <p class="text-[11px] text-slate-500">Dữ liệu lưu tách biệt hoàn toàn theo mẫu đang chọn.</p>
+            </div>
+          </div>
+
+          <template x-for="grp in activeTemplateGroups()" :key="grp.title">
+            <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+              <div class="font-bold text-xs text-[#0F766E] uppercase tracking-wide border-b border-slate-200 pb-1.5" x-text="grp.title"></div>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <template x-for="f in grp.fields" :key="f.namespaced_key">
+                  <div>
+                    <label class="label-title" x-text="f.label"></label>
+                    <template x-if="f.kind === 'select'">
+                      <select :value="form[f.namespaced_key] || ''"
+                              @change="form[f.namespaced_key] = $event.target.value; isDirty = true"
+                              :disabled="!isCurrentTabEditable()"
+                              class="input-box text-xs">
+                        <option value="">-- Chọn --</option>
+                        <template x-for="opt in f.options" :key="opt.value">
+                          <option :value="opt.value" x-text="opt.label" :selected="(form[f.namespaced_key] || '') === opt.value"></option>
+                        </template>
+                      </select>
+                    </template>
+                    <template x-if="f.kind !== 'select'">
+                      <input type="text"
+                             :value="form[f.namespaced_key] || ''"
+                             @input="form[f.namespaced_key] = $event.target.value; isDirty = true"
+                             :placeholder="f.placeholder || ''"
+                             :disabled="!isCurrentTabEditable()"
+                             class="input-box text-xs" />
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+
       </main>
     </div>
+
+    <!-- THANH FOOTER CỐ ĐỊNH 1 HÀNG NÚT (STICKY ACTION BAR) -->
+    <footer x-show="['reception','history','physical','clinical','paraclinical','conclusion'].includes(activeTab)"
+            class="hidden md:flex h-12 bg-white border-t border-[#E2E8F0] fixed bottom-0 left-0 right-0 z-40 px-4 items-center justify-between shadow-sm no-print">
+      <div class="flex items-center gap-2 text-xs">
+        <span x-show="isDirty && isCurrentTabEditable()" class="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">● Có thay đổi chưa lưu</span>
+        <span x-show="!isDirty && isCurrentTabEditable() && isSectionExamined(currentSectionKey())" class="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 font-semibold">Đang sửa (Đã khám)</span>
+        <span x-show="!isDirty && isCurrentTabEditable() && !isSectionExamined(currentSectionKey())" class="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 font-semibold">Chưa khám · Đang nhập liệu</span>
+        <span x-show="!isCurrentTabEditable() && isSectionExamined(currentSectionKey())" class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">Đã khám · Chế độ xem</span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button type="button" @click="cycleExamTab(-1)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">◀ Bước trước</button>
+        <button type="button" @click="cycleExamTab(1)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">Bước sau ▶</button>
+
+        <button x-show="!isLocked && !isCurrentTabEditable()" type="button" @click="enterCurrentTabEdit()"
+                class="px-3.5 py-1.5 bg-[#0F766E] hover:bg-[#115E59] text-white rounded-lg text-xs font-semibold">✎ Sửa mục này</button>
+
+        <template x-if="!isLocked && isCurrentTabEditable()">
+          <div class="flex items-center gap-2">
+            <button x-show="activeTab !== 'reception'" type="button" @click="quickFillNormalDefaults()"
+                    class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-medium">⚡ Điền bình thường</button>
+            <button type="button" @click="cancelCurrentTabEdit()"
+                    class="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-medium">✕ Hủy</button>
+            <button type="button" @click="saveCurrentSection(false)"
+                    class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold">💾 Lưu</button>
+            <button type="button" @click="saveCurrentSection(true)"
+                    class="px-3.5 py-1.5 bg-[#0F766E] hover:bg-[#115E59] text-white rounded-lg text-xs font-semibold">💾 Lưu &amp; Tiếp ➔</button>
+          </div>
+        </template>
+      </div>
+    </footer>
 
     <!-- ===================================================================== -->
     <!-- THANH ĐIỀU HƯỚNG ĐÁY MOBILE (BOTTOM BAR 56PX - DESIGN.MD 3.4 & 18:9) -->
@@ -397,6 +472,133 @@
       <div class="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
         <button type="button" @click="showCustomDiseaseModal = false" class="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-medium">Hủy</button>
         <button type="button" @click="submitCustomDisease()" class="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium shadow-sm transition-colors">Thêm vào hồ sơ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CHỌN MẪU IN PDF (CHỈ HIỆN KHI HỒ SƠ LƯU >= 2 MẪU) -->
+  <div x-show="showPrintTemplateModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 no-print">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 class="font-bold text-slate-900 text-sm" x-text="printModalIsReception ? 'Chọn mẫu in Phôi Tiếp Nhận (PDF A4)' : 'Chọn mẫu in Giấy KSK (PDF A4)'"></h3>
+        <button type="button" @click="showPrintTemplateModal = false" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+      <div class="space-y-2 max-h-72 overflow-y-auto">
+        <template x-for="t in allTemplatesMeta" :key="t.code">
+          <label class="flex items-center justify-between p-2.5 rounded-lg border cursor-pointer text-xs"
+                 :class="printModalTemplates.includes(t.code) ? 'bg-teal-50 border-teal-500' : 'bg-slate-50 border-slate-200'">
+            <div class="flex items-center gap-2">
+              <input type="checkbox" :value="t.code" x-model="printModalTemplates" class="rounded text-teal-600" />
+              <div>
+                <div class="font-semibold text-slate-900" x-text="t.short_label"></div>
+                <div class="text-[11px] text-slate-500" x-text="t.full_label"></div>
+              </div>
+            </div>
+            <span x-show="recordTemplates.includes(t.code)" class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-semibold">Mẫu của hồ sơ</span>
+          </label>
+        </template>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button type="button" @click="showPrintTemplateModal = false" class="px-3.5 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium">Hủy</button>
+        <button type="button" @click="confirmPrintModalPdf()" class="px-4 py-1.5 bg-[#0F766E] text-white rounded-lg text-xs font-semibold">📄 In PDF A4</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CÔNG TY (KHÁM ĐOÀN) -->
+  <div x-show="showCompanyModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 no-print">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-3 text-xs">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 class="font-bold text-slate-900 text-sm" x-text="companyForm.id ? 'Sửa thông tin Công ty' : 'Thêm Công ty mới'"></h3>
+        <button type="button" @click="showCompanyModal = false" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5">
+        <div><label class="label-title">Mã công ty *:</label><input type="text" x-model="companyForm.code" class="input-box" placeholder="CTY01" /></div>
+        <div><label class="label-title">Mã số thuế:</label><input type="text" x-model="companyForm.tax_code" class="input-box" /></div>
+      </div>
+      <div><label class="label-title">Tên công ty *:</label><input type="text" x-model="companyForm.name" class="input-box" /></div>
+      <div><label class="label-title">Địa chỉ:</label><input type="text" x-model="companyForm.address" class="input-box" /></div>
+      <div class="grid grid-cols-2 gap-2.5">
+        <div><label class="label-title">Người liên hệ:</label><input type="text" x-model="companyForm.contact_person" class="input-box" /></div>
+        <div><label class="label-title">Số điện thoại:</label><input type="text" x-model="companyForm.contact_phone" class="input-box" /></div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button type="button" @click="showCompanyModal = false" class="px-3.5 py-1.5 bg-slate-100 text-slate-700 rounded-lg font-medium">Hủy</button>
+        <button type="button" @click="saveCompany()" class="px-4 py-1.5 bg-sky-600 text-white rounded-lg font-semibold">Lưu Công ty</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL HỢP ĐỒNG (KHÁM ĐOÀN) -->
+  <div x-show="showContractModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 no-print">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-3 text-xs">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 class="font-bold text-slate-900 text-sm" x-text="contractForm.id ? 'Sửa Hợp đồng khám đoàn' : 'Thêm Hợp đồng khám đoàn'"></h3>
+        <button type="button" @click="showContractModal = false" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+      <div>
+        <label class="label-title">Công ty *:</label>
+        <select x-model.number="contractForm.company_id" class="input-box">
+          <template x-for="c in groupCompanies" :key="c.id"><option :value="c.id" x-text="c.code + ' - ' + c.name"></option></template>
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5">
+        <div><label class="label-title">Mã hợp đồng *:</label><input type="text" x-model="contractForm.contract_code" class="input-box" placeholder="HD2026-01" /></div>
+        <div><label class="label-title">Ngày khám (dd/mm/yyyy):</label><input type="text" x-model="contractForm.exam_date" class="input-box" placeholder="20/11/2026" /></div>
+      </div>
+      <div class="grid grid-cols-3 gap-2.5">
+        <div class="col-span-2"><label class="label-title">Tên đợt khám *:</label><input type="text" x-model="contractForm.title" class="input-box" /></div>
+        <div><label class="label-title">Số người dự kiến:</label><input type="number" x-model.number="contractForm.expected_count" class="input-box" /></div>
+      </div>
+      <div>
+        <label class="label-title">Mẫu phiếu mặc định:</label>
+        <div class="flex flex-wrap gap-2 p-2 bg-slate-50 rounded border border-slate-200">
+          <template x-for="t in allTemplatesMeta" :key="t.code">
+            <label class="flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" :value="t.code" x-model="contractForm.templates_arr" />
+              <span x-text="t.short_label"></span>
+            </label>
+          </template>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button type="button" @click="showContractModal = false" class="px-3.5 py-1.5 bg-slate-100 text-slate-700 rounded-lg font-medium">Hủy</button>
+        <button type="button" @click="saveContract()" class="px-4 py-1.5 bg-slate-800 text-white rounded-lg font-semibold">Lưu Hợp đồng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL IMPORT EXCEL / CSV ĐOÀN -->
+  <div x-show="showGroupImportModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 no-print">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl p-6 space-y-3 text-xs max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 class="font-bold text-slate-900 text-sm" x-text="'Import danh sách đoàn — ' + (importTargetContract?.contract_code || '')"></h3>
+        <button type="button" @click="showGroupImportModal = false" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <input type="file" accept=".csv,.xlsx,.xls" @change="previewGroupImportFile($event)" class="text-xs" />
+        <a href="/api/contracts/sample-csv" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium">⬇ Tải file CSV mẫu</a>
+      </div>
+      <div x-show="importPreviewRows.length > 0" class="overflow-x-auto border border-slate-200 rounded-lg max-h-64 overflow-y-auto">
+        <table class="w-full text-left border-collapse text-[11px]">
+          <thead><tr class="bg-slate-50 border-b"><th class="p-2">Dòng</th><th class="p-2">Mã TN</th><th class="p-2">Họ tên</th><th class="p-2">Ngày sinh</th><th class="p-2">CCCD</th><th class="p-2">Trạng thái</th></tr></thead>
+          <tbody class="divide-y divide-slate-100">
+            <template x-for="r in importPreviewRows" :key="r.row_index">
+              <tr>
+                <td class="p-2" x-text="r.row_index"></td>
+                <td class="p-2 font-mono" x-text="r.ma_tiep_nhan"></td>
+                <td class="p-2 font-semibold" x-text="r.ho_ten"></td>
+                <td class="p-2" x-text="r.ngay_sinh"></td>
+                <td class="p-2 font-mono" x-text="r.so_cccd"></td>
+                <td class="p-2" :class="r.error ? 'text-red-600 font-semibold' : 'text-emerald-700'" x-text="r.error || 'Hợp lệ'"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button type="button" @click="showGroupImportModal = false" class="px-3.5 py-1.5 bg-slate-100 text-slate-700 rounded-lg font-medium">Đóng</button>
+        <button x-show="importPreviewRows.length > 0" type="button" @click="commitGroupImport()" class="px-4 py-1.5 bg-emerald-600 text-white rounded-lg font-semibold">📥 Xác nhận Import vào Hợp đồng</button>
       </div>
     </div>
   </div>
