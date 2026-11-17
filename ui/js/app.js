@@ -3346,14 +3346,35 @@ function kskApp() {
       return false;
     },
 
+    canEditCurrentTabRole() {
+      if (this.isLocked || !this.currentUser) return false;
+      if (this.isAdmin) return true;
+      if (this.activeTab === 'reception') return this.isReceptionist;
+      if (this.activeTab === 'history') return this.isTiensuRole;
+      if (this.activeTab === 'physical') return this.isDoctorTheLuc;
+      if (this.activeTab === 'paraclinical') return this.isDoctorCls;
+      if (this.activeTab === 'conclusion') return this.isDoctorKetLuan;
+      if (this.activeTab === 'clinical') {
+        if (this.activeRecordTemplate !== 'TREN_18' || this.clinicalSubTab === 'all') {
+          return this.isDoctorNoi || this.isDoctorNgoai || this.isDoctorDaLieu || this.isDoctorSan || this.isDoctorMat || this.isDoctorTmh || this.isDoctorRhm;
+        }
+        return this.canUnlockSection(this.getCurrentClinicalSectionKey());
+      }
+      return false;
+    },
+
     isCurrentTabEditable() {
-      if (this.isLocked) return false;
+      if (this.isLocked || !this.canEditCurrentTabRole()) return false;
+      if (!this.isSaved) return true;
       const sec = this.currentSectionKey();
-      if (!this.isSectionExamined(sec)) return true;
       return !!this.editingSections[sec];
     },
 
     enterCurrentTabEdit() {
+      if (!this.canEditCurrentTabRole()) {
+        this.toast('Bạn không có quyền chỉnh sửa mục này!', 'error');
+        return;
+      }
       const sec = this.currentSectionKey();
       this.editingSections[sec] = true;
       this.$nextTick(() => this.syncTomSelectDisabledState());

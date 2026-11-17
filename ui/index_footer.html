@@ -92,7 +92,8 @@
         <button type="button" @click="cycleExamTab(1)" class="px-2.5 lg:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">Bước sau ▶</button>
 
         <button x-show="!isLocked && !isCurrentTabEditable()" type="button" @click="enterCurrentTabEdit()"
-                class="px-3.5 py-1.5 bg-[#0F766E] hover:bg-[#115E59] text-white rounded-lg text-xs font-semibold">✎ Sửa mục này</button>
+                :disabled="!canEditCurrentTabRole()"
+                class="px-3.5 py-1.5 bg-[#0F766E] hover:bg-[#115E59] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold">✎ Sửa mục này</button>
 
         <template x-if="!isLocked && isCurrentTabEditable()">
           <div class="flex flex-wrap items-center gap-1.5 lg:gap-2">
@@ -122,7 +123,8 @@
 
       <div class="flex items-center gap-1.5 overflow-x-auto ml-auto">
         <button x-show="!isLocked && !isCurrentTabEditable()" type="button" @click="enterCurrentTabEdit()"
-                class="px-3.5 py-1.5 bg-[#0F766E] text-white rounded-lg text-xs font-semibold whitespace-nowrap">✎ Sửa mục này</button>
+                :disabled="!canEditCurrentTabRole()"
+                class="px-3.5 py-1.5 bg-[#0F766E] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold whitespace-nowrap">✎ Sửa mục này</button>
 
         <template x-if="!isLocked && isCurrentTabEditable()">
           <div class="flex items-center gap-1">
