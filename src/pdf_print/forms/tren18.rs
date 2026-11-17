@@ -312,7 +312,7 @@ fn render_clinical_section(fv: &FormValues, cur: &mut PdfPageCursor) {
 
     // 5. Mắt
     draw_exam_custom_row(cur, col1_w, col2_w, 30.0, fv.text(&["BS_MAT"]), |c, lx, rx| {
-        draw_text(&c.layer, &c.fonts.bold, FONT_BODY, lx, c.y, "5. Mắt - Kết quả khám thị lực:");
+        draw_text(&c.layer, &c.fonts.bold, FONT_BODY, lx, c.y, "5. Mắt:");
         c.y -= LINE_H;
         draw_inline_two(
             c,
@@ -339,7 +339,7 @@ fn render_clinical_section(fv: &FormValues, cur: &mut PdfPageCursor) {
 
     // 6. Tai - Mũi - Họng
     draw_exam_custom_row(cur, col1_w, col2_w, 30.0, fv.text(&["BS_TMH"]), |c, lx, rx| {
-        draw_text(&c.layer, &c.fonts.bold, FONT_BODY, lx, c.y, "6. Tai - Mũi - Họng - Kết quả khám thính lực:");
+        draw_text(&c.layer, &c.fonts.bold, FONT_BODY, lx, c.y, "6. Tai - Mũi - Họng:");
         c.y -= LINE_H;
         draw_inline_two(
             c,
@@ -366,7 +366,7 @@ fn render_clinical_section(fv: &FormValues, cur: &mut PdfPageCursor) {
 
     // 7. Răng - Hàm - Mặt
     draw_exam_custom_row(cur, col1_w, col2_w, 28.0, fv.text(&["BS_RHM"]), |c, lx, rx| {
-        draw_text(&c.layer, &c.fonts.bold, FONT_BODY, lx, c.y, "7. Răng - Hàm - Mặt - Kết quả khám:");
+        draw_text(&c.layer, &c.fonts.bold, FONT_BODY, lx, c.y, "7. Răng - Hàm - Mặt:");
         c.y -= LINE_H;
         draw_inline_slot(c, lx, rx, c.y, "Hàm trên:", fv.text(&["HAM_TREN", "RHM_HAM_TREN"]), false);
         c.y -= LINE_H;
