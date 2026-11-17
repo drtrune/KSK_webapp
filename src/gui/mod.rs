@@ -3983,20 +3983,107 @@ impl Render for KskGpuiApp {
             .flex()
             .flex_col()
             .overflow_hidden()
-            .child(
-                gpui_component::TitleBar::new().child(
-                    div()
-                        .text_xs()
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(rgb(text_main()))
-                        .child(win_title),
-                ),
-            )
+            .child(self.render_window_title_bar(win_title))
             .child(div().flex_1().min_h_0().overflow_hidden().child(body))
     }
 }
 
 impl KskGpuiApp {
+    /// Kết xuất thanh tiêu đề cửa sổ tùy biến (vùng kéo + 3 nút Thu nhỏ, Phóng to, Đóng).
+    fn render_window_title_bar(&self, title: String) -> AnyElement {
+        div()
+            .id("custom-window-titlebar")
+            .h(px(32.0))
+            .w_full()
+            .bg(rgb(bg_card()))
+            .border_b_1()
+            .border_color(rgb(border_col()))
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .id("titlebar-drag-area")
+                    .flex_1()
+                    .h_full()
+                    .px(px(12.0))
+                    .flex()
+                    .items_center()
+                    .window_control_area(gpui::WindowControlArea::Drag)
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(rgb(text_main()))
+                            .truncate()
+                            .child(title),
+                    ),
+            )
+            .child(
+                div()
+                    .h_full()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .child(
+                        div()
+                            .id("win-btn-min")
+                            .w(px(42.0))
+                            .h_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_sm()
+                            .text_color(rgb(text_main()))
+                            .cursor_pointer()
+                            .window_control_area(gpui::WindowControlArea::Min)
+                            .hover(|s| s.bg(rgb(bg_subtle())))
+                            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+                                window.minimize_window();
+                            })
+                            .child("─"),
+                    )
+                    .child(
+                        div()
+                            .id("win-btn-max")
+                            .w(px(42.0))
+                            .h_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_sm()
+                            .text_color(rgb(text_main()))
+                            .cursor_pointer()
+                            .window_control_area(gpui::WindowControlArea::Max)
+                            .hover(|s| s.bg(rgb(bg_subtle())))
+                            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+                                window.zoom_window();
+                            })
+                            .child("□"),
+                    )
+                    .child(
+                        div()
+                            .id("win-btn-close")
+                            .w(px(42.0))
+                            .h_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_sm()
+                            .text_color(rgb(text_main()))
+                            .cursor_pointer()
+                            .window_control_area(gpui::WindowControlArea::Close)
+                            .hover(|s| s.bg(rgb(0xdc2626)).text_color(rgb(0xffffff)))
+                            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+                                window.remove_window();
+                            })
+                            .child("✕"),
+                    ),
+            )
+            .into_any_element()
+    }
+
     /// Kết xuất giao diện làm việc chính (thanh điều hướng, nội dung tab và các hộp thoại).
     fn render_main_shell(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
 
