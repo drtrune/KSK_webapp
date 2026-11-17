@@ -512,62 +512,62 @@ function kskApp() {
     get canEditReception() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isReceptionist) return false;
-      return !this.isSaved || !!this.editingSections['reception'];
+      return !this.isSaved || !this.isSectionExamined('reception') || !!this.editingSections['reception'];
     },
     get canEditHistory() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isTiensuRole) return false;
-      return !this.isSaved || !!this.editingSections['history'];
+      return !this.isSaved || !this.isSectionExamined('history') || !!this.editingSections['history'];
     },
     get canEditPhysical() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isDoctorTheLuc) return false;
-      return !this.isSaved || !!this.editingSections['physical'];
+      return !this.isSaved || !this.isSectionExamined('physical') || !!this.editingSections['physical'];
     },
     get canEditClinicalNoi() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isDoctorNoi) return false;
-      return !this.isSaved || !!this.editingSections['clinical_noi'];
+      return !this.isSaved || !this.isSectionExamined('clin_noi') || !!this.editingSections['clinical_noi'] || !!this.editingSections['clin_noi'];
     },
     get canEditClinicalNgoai() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isDoctorNgoai) return false;
-      return !this.isSaved || !!this.editingSections['clinical_ngoai'];
+      return !this.isSaved || !this.isSectionExamined('clin_ngoai') || !!this.editingSections['clinical_ngoai'] || !!this.editingSections['clin_ngoai'];
     },
     get canEditClinicalDaLieu() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isDoctorDaLieu) return false;
-      return !this.isSaved || !!this.editingSections['clinical_dalieu'];
+      return !this.isSaved || !this.isSectionExamined('clin_dalieu') || !!this.editingSections['clinical_dalieu'] || !!this.editingSections['clin_dalieu'];
     },
     get canEditClinicalSan() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isDoctorSan) return false;
-      return !this.isSaved || !!this.editingSections['clinical_san'];
+      return !this.isSaved || !this.isSectionExamined('clin_san') || !!this.editingSections['clinical_san'] || !!this.editingSections['clin_san'];
     },
     get canEditClinicalMat() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isDoctorMat) return false;
-      return !this.isSaved || !!this.editingSections['clinical_mat'];
+      return !this.isSaved || !this.isSectionExamined('clin_mat') || !!this.editingSections['clinical_mat'] || !!this.editingSections['clin_mat'];
     },
     get canEditClinicalTmh() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isDoctorTmh) return false;
-      return !this.isSaved || !!this.editingSections['clinical_tmh'];
+      return !this.isSaved || !this.isSectionExamined('clin_tmh') || !!this.editingSections['clinical_tmh'] || !!this.editingSections['clin_tmh'];
     },
     get canEditClinicalRhm() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isDoctorRhm) return false;
-      return !this.isSaved || !!this.editingSections['clinical_rhm'];
+      return !this.isSaved || !this.isSectionExamined('clin_rhm') || !!this.editingSections['clinical_rhm'] || !!this.editingSections['clin_rhm'];
     },
     get canEditParaclinical() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isDoctorCls) return false;
-      return !this.isSaved || !!this.editingSections['paraclinical'];
+      return !this.isSaved || !this.isSectionExamined('paraclinical') || !!this.editingSections['paraclinical'];
     },
     get canEditConclusion() {
       if (this.isLocked) return false;
       if (!this.isAdmin && !this.isDoctorKetLuan) return false;
-      return !this.isSaved || !!this.editingSections['conclusion'];
+      return !this.isSaved || !this.isSectionExamined('conclusion') || !!this.editingSections['conclusion'];
     },
 
     // Lấy key chuyên khoa lâm sàng hiện tại đang mở trên giao diện
@@ -745,11 +745,22 @@ function kskApp() {
       if (this.canEditPhysical) {
         this.form.BS_THE_LUC = docName;
       }
-      if (this.canEditParaclinical) {
-        this.form.BS_CLS = docName;
+      const hasClsData = ['CLS_HUYET_HOC', 'CLS_DUONG_MAU', 'CLS_URE', 'CLS_CREATININ', 'CLS_ASAT_GOT', 'CLS_ALAT_GPT', 'CLS_NUOC_TIEU', 'CLS_XQ_TIM_PHOI', 'CLS_DINH_KY_KET_QUA']
+        .some(k => !!(this.form[k] && String(this.form[k]).trim()));
+      if (this.activeTab === 'paraclinical' || (this.canEditParaclinical && hasClsData)) {
+        if (this.isAdmin || this.isDoctorCls) {
+          this.form.BS_CLS = docName;
+        }
       }
-      if (this.canEditConclusion) {
-        this.form.BS_KET_LUAN = docName;
+      const hasConcData = !!(this.form.KET_LUAN_BENH && String(this.form.KET_LUAN_BENH).trim())
+        || !!(this.form.PHAN_LOAI_SK && String(this.form.PHAN_LOAI_SK).trim())
+        || !!(this.form.LX_KET_LUAN_SK && String(this.form.LX_KET_LUAN_SK).trim());
+      if (this.activeTab === 'conclusion' || (this.canEditConclusion && hasConcData)) {
+        if (this.isAdmin || this.isDoctorKetLuan) {
+          this.form.BS_KET_LUAN = docName;
+          this.form.LX_BS_KET_LUAN = docName;
+          this.form.BAC_SI_KHAM = docName;
+        }
       }
     },
 
@@ -3439,6 +3450,7 @@ function kskApp() {
           this.initDefaultClassifications();
         }
       }
+      this.autoFillDoctorNames();
       this.isDirty = true;
       this.$nextTick(() => this.syncAllSelects());
       this.toast('Đã điền mặc định bình thường cho mục này!', 'success');
@@ -3482,6 +3494,7 @@ function kskApp() {
         this.initDefaultClassifications();
         this.form._EXAMINED_SECTIONS = examined.join(',');
       }
+      this.autoFillDoctorNames();
       this.isDirty = true;
       this.$nextTick(() => this.syncAllSelects());
       this.toast('Đã điền mặc định bình thường cho toàn bộ mẫu phiếu!', 'success');

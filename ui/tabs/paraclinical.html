@@ -17,6 +17,10 @@
         <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800">5. Kết quả Xét nghiệm & Cận lâm sàng</h3>
       </div>
       <div class="text-xs text-slate-500 flex items-center gap-2">
+        <div class="text-xs flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+          <span class="text-slate-500">Bác sĩ / Cán bộ CLS:</span>
+          <span class="font-semibold text-purple-700" x-text="form.BS_CLS || ((isAdmin || isDoctorCls) ? (currentUser?.full_name || 'Tự động theo tài khoản') : 'Chưa có')"></span>
+        </div>
         <span x-show="isSaved && !isSectionEditing('paraclinical')" class="text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200">Chế độ xem (Bấm Sửa để thay đổi)</span>
         <span x-show="isSaved && isSectionEditing('paraclinical')" class="text-purple-800 bg-purple-50 px-2.5 py-0.5 rounded border border-purple-200 font-medium">Đang chỉnh sửa</span>
         <span x-show="!canUnlockSection('paraclinical')" class="text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Chỉ xem (Cần quyền Cận lâm sàng hoặc Admin)</span>
@@ -96,10 +100,6 @@
       <textarea x-model="form.CLS_DINH_KY_KET_QUA" rows="3" placeholder="Ghi nhận các chỉ định xét nghiệm và kết quả cụ thể trong KSK định kỳ..." class="input-box text-xs"></textarea>
     </div>
 
-    <div class="max-w-sm">
-      <label class="label-title">Bác sĩ / Cán bộ Cận lâm sàng:</label>
-      <input type="text" x-model="form.BS_CLS" placeholder="Họ và tên bác sĩ CLS..." class="input-box text-xs" />
-    </div>
   </fieldset>
 </div>
 

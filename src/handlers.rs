@@ -1287,18 +1287,48 @@ pub async fn save_record_handler(
     ];
 
     for (role_tag, field_name, sample_field) in doctor_mappings {
-        // Chỉ tự động điền tên Bác sĩ khi chuyên khoa đó thực sự có dữ liệu
+        // Chỉ tự động điền tên Bác sĩ khi chuyên khoa đó thực sự có dữ liệu hoặc đang lưu đúng section đó
         let has_content = merged.get(sample_field).and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false)
-            || (role_tag == "bs_ketluan" && merged.get("PHAN_LOAI_SK").and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false));
+            || (role_tag == "bs_cls" && (
+                req.section.as_deref() == Some("paraclinical")
+                || ["CLS_DUONG_MAU", "CLS_URE", "CLS_CREATININ", "CLS_ASAT_GOT", "CLS_ALAT_GPT", "CLS_NUOC_TIEU", "CLS_XQ_TIM_PHOI", "CLS_DINH_KY_KET_QUA"]
+                    .iter()
+                    .any(|f| merged.get(*f).and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false))
+            ))
+            || (role_tag == "bs_ketluan" && (
+                req.section.as_deref().map(|s| s == "conclusion" || s.ends_with("_conclusion")).unwrap_or(false)
+                || merged.get("PHAN_LOAI_SK").and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false)
+                || merged.get("LX_KET_LUAN_SK").and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false)
+            ));
         if has_content {
             if user.role.split(',').any(|r| r.trim() == role_tag) {
                 merged.insert(field_name.to_string(), Value::String(user.full_name.clone()));
             } else if user.has_role(role_tag) {
                 let cur = merged.get(field_name).and_then(|v| v.as_str()).unwrap_or("").trim();
-                if cur.is_empty() {
+                if cur.is_empty() || (role_tag == "bs_cls" && req.section.as_deref() == Some("paraclinical"))
+                    || (role_tag == "bs_ketluan" && req.section.as_deref().map(|s| s == "conclusion" || s.ends_with("_conclusion")).unwrap_or(false))
+                {
                     merged.insert(field_name.to_string(), Value::String(user.full_name.clone()));
                 }
             }
+        }
+    }
+
+    // Tự động điền bác sĩ cho mẫu Lái xe & Học sinh/Mẫu giáo nếu có dữ liệu
+    if (user.has_role("bs_ketluan") || user.has_role("admin"))
+        && (req.section.as_deref().map(|s| s == "conclusion" || s.ends_with("_conclusion")).unwrap_or(false)
+            || merged.get("LX_KET_LUAN_SK").and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false)
+            || merged.get("KET_LUAN_BENH").and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false))
+    {
+        merged.insert("LX_BS_KET_LUAN".to_string(), Value::String(user.full_name.clone()));
+        merged.entry("BAC_SI_KHAM".to_string()).or_insert_with(|| Value::String(user.full_name.clone()));
+    }
+    if user.has_role("bs_cls") || user.has_role("admin") {
+        if merged.get("LX_XN_MA_TUY").and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false) {
+            merged.entry("LX_BS_XN_MA_TUY".to_string()).or_insert_with(|| Value::String(user.full_name.clone()));
+        }
+        if merged.get("LX_XN_KHAC_KQ").and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false) {
+            merged.entry("LX_BS_XN_KHAC".to_string()).or_insert_with(|| Value::String(user.full_name.clone()));
         }
     }
 

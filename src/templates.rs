@@ -752,10 +752,8 @@ const LAI_XE_CLINICAL_GROUPS: &[TemplateGroup] = &[
         fields: &[
             TemplateField { key: "KLS_TAM_THAN", label: "1. Tâm thần - Nội dung khám", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
             TemplateField { key: "KL_TAM_THAN", label: "1. Tâm thần - Kết luận", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
-            TemplateField { key: "BS_TAM_THAN", label: "Bác sĩ khám Tâm thần", placeholder: "Họ tên bác sĩ", default_normal: "", kind: TemplateFieldKind::Text },
             TemplateField { key: "KLS_THAN_KINH", label: "2. Thần kinh - Nội dung khám", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
             TemplateField { key: "KL_THAN_KINH", label: "2. Thần kinh - Kết luận", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
-            TemplateField { key: "BS_THAN_KINH", label: "Bác sĩ khám Thần kinh", placeholder: "Họ tên bác sĩ", default_normal: "", kind: TemplateFieldKind::Text },
         ],
     },
     TemplateGroup {
@@ -772,7 +770,6 @@ const LAI_XE_CLINICAL_GROUPS: &[TemplateGroup] = &[
             TemplateField { key: "MAT_SAC_GIAC", label: "Sắc giác", placeholder: "", default_normal: "Bình thường", kind: TemplateFieldKind::Select(OPT_SAC_GIAC) },
             TemplateField { key: "MAT_BENH", label: "Các bệnh về mắt (nếu có, ICD-10)", placeholder: "Chọn mã bệnh ICD-10...", default_normal: "", kind: TemplateFieldKind::Icd10 },
             TemplateField { key: "KL_MAT", label: "Kết luận khám Mắt", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
-            TemplateField { key: "BS_MAT", label: "Bác sĩ khám Mắt", placeholder: "Họ tên bác sĩ", default_normal: "", kind: TemplateFieldKind::Text },
         ],
     },
     TemplateGroup {
@@ -784,7 +781,6 @@ const LAI_XE_CLINICAL_GROUPS: &[TemplateGroup] = &[
             TemplateField { key: "TMH_TP_THAM", label: "Tai phải - Nói thầm (m)", placeholder: "0.5", default_normal: "0.5", kind: TemplateFieldKind::Text },
             TemplateField { key: "TMH_BENH", label: "Các bệnh về Tai - Mũi - Họng (ICD-10)", placeholder: "Chọn mã bệnh ICD-10...", default_normal: "", kind: TemplateFieldKind::Icd10 },
             TemplateField { key: "KL_TMH", label: "Kết luận Tai - Mũi - Họng", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
-            TemplateField { key: "BS_TMH", label: "Bác sĩ khám TMH", placeholder: "Họ tên bác sĩ", default_normal: "", kind: TemplateFieldKind::Text },
         ],
     },
     TemplateGroup {
@@ -792,10 +788,8 @@ const LAI_XE_CLINICAL_GROUPS: &[TemplateGroup] = &[
         fields: &[
             TemplateField { key: "KLS_TIM_MACH", label: "5. Tim mạch - Nội dung khám", placeholder: "Nhịp tim đều, T1 T2 rõ", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
             TemplateField { key: "KL_TIM_MACH", label: "5. Tim mạch - Kết luận", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
-            TemplateField { key: "BS_TIM_MACH", label: "Bác sĩ khám Tim mạch", placeholder: "Họ tên bác sĩ", default_normal: "", kind: TemplateFieldKind::Text },
             TemplateField { key: "KLS_HO_HAP", label: "6. Hô hấp - Nội dung khám", placeholder: "Rì rào phế nang êm dịu", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
             TemplateField { key: "KL_HO_HAP", label: "6. Hô hấp - Kết luận", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
-            TemplateField { key: "BS_HO_HAP", label: "Bác sĩ khám Hô hấp", placeholder: "Họ tên bác sĩ", default_normal: "", kind: TemplateFieldKind::Text },
         ],
     },
     TemplateGroup {
@@ -803,20 +797,16 @@ const LAI_XE_CLINICAL_GROUPS: &[TemplateGroup] = &[
         fields: &[
             TemplateField { key: "KLS_CXK", label: "7. Cơ Xương Khớp - Nội dung khám", placeholder: "Vận động các khớp bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
             TemplateField { key: "KL_CXK", label: "7. Cơ Xương Khớp - Kết luận", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
-            TemplateField { key: "BS_CXK", label: "Bác sĩ khám Cơ Xương Khớp", placeholder: "Họ tên bác sĩ", default_normal: "", kind: TemplateFieldKind::Text },
             TemplateField { key: "KLS_NOI_TIET", label: "8. Nội tiết - Nội dung khám", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
             TemplateField { key: "KL_NOI_TIET", label: "8. Nội tiết - Kết luận", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
-            TemplateField { key: "BS_NOI_TIET", label: "Bác sĩ khám Nội tiết", placeholder: "Họ tên bác sĩ", default_normal: "", kind: TemplateFieldKind::Text },
         ],
     },
     TemplateGroup {
         title: "III. Cận lâm sàng (Ma túy & Nồng độ cồn / Xét nghiệm khác)",
         fields: &[
             TemplateField { key: "XN_MA_TUY", label: "1. Xét nghiệm ma túy (Amphetamin, Marijuana, Morphin, Codein, Heroin)", placeholder: "", default_normal: "Âm tính", kind: TemplateFieldKind::Select(OPT_XN_AM_DUONG) },
-            TemplateField { key: "BS_XN_MA_TUY", label: "Bác sĩ / Trưởng bộ phận XN Ma túy", placeholder: "Họ tên bác sĩ", default_normal: "", kind: TemplateFieldKind::Text },
             TemplateField { key: "XN_KHAC_KQ", label: "2a. XN Nồng độ cồn / Huyết học / Sinh hóa / X-quang (Kết quả)", placeholder: "Nồng độ cồn: 0 mg/100ml máu...", default_normal: "Bình thường (Nồng độ cồn: Âm tính)", kind: TemplateFieldKind::Text },
             TemplateField { key: "XN_KHAC_KL", label: "2b. Kết luận Xét nghiệm khác", placeholder: "Bình thường", default_normal: "Bình thường", kind: TemplateFieldKind::Text },
-            TemplateField { key: "BS_XN_KHAC", label: "Bác sĩ / Trưởng bộ phận XN khác", placeholder: "Họ tên bác sĩ", default_normal: "", kind: TemplateFieldKind::Text },
         ],
     },
 ];
@@ -828,7 +818,6 @@ const LAI_XE_CONCLUSION_GROUPS: &[TemplateGroup] = &[
             TemplateField { key: "KET_LUAN_SK", label: "Kết luận điều kiện sức khỏe lái xe", placeholder: "", default_normal: "Đủ điều kiện sức khỏe lái xe hạng", kind: TemplateFieldKind::Select(OPT_KL_LAI_XE) },
             TemplateField { key: "HANG_BANG_LAI_KL", label: "Hạng xe đủ điều kiện lái (A1, A, B1, B, C1, C, D...)", placeholder: "B1, B2, C...", default_normal: "B", kind: TemplateFieldKind::Text },
             TemplateField { key: "KET_LUAN_BENH", label: "Tình trạng bệnh, tật (nếu có, ICD-10)", placeholder: "Chọn mã bệnh ICD-10...", default_normal: "", kind: TemplateFieldKind::Icd10 },
-            TemplateField { key: "BS_KET_LUAN", label: "Người kết luận (Họ tên Bác sĩ)", placeholder: "BS. Nguyễn Văn A", default_normal: "", kind: TemplateFieldKind::Text },
         ],
     },
 ];
