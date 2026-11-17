@@ -21,6 +21,7 @@ pub const VALID_ROLES: &[&str] = &[
     "bs_rhm",
     "bs_cls",
     "bs_ketluan",
+    "bs_nhi",
 ];
 
 /// Danh sách 123 cột chuẩn xuất CSV theo Quyết định 3176/QĐ-BYT & Quyết định 1804/QĐ-BYT
@@ -448,6 +449,9 @@ pub fn field_section_name(field: &str) -> &'static str {
 pub fn can_user_roles_edit_field(user_roles_str: &str, field: &str) -> bool {
     let roles: Vec<&str> = user_roles_str.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
     if roles.contains(&"admin") {
+        return true;
+    }
+    if field == "BAC_SI_KHAM" && roles.contains(&"bs_nhi") {
         return true;
     }
     if field.starts_with("D6_")

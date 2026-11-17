@@ -1166,8 +1166,13 @@ pub async fn save_record_handler(
         }
 
         // 1. Phân quyền theo Section nếu client chỉ định
+        let is_pediatric_record = ["DUOI_6", "TU_6_DUOI_18", "MAU_GIAO", "HS_PHO_THONG"]
+            .iter()
+            .any(|t| rec.exam_templates.contains(t) || req.exam_templates.as_deref().unwrap_or("").contains(t));
         if let Some(sec) = req.section.as_deref() {
-            if sec == "clinical_all" {
+            if is_pediatric_record && user.has_role("bs_nhi") && sec != "reception" {
+                // Bác sĩ Nhi khoa có quyền khám và lưu các biểu mẫu Học sinh, Mẫu giáo, Dưới 6 tuổi, 6–18 tuổi
+            } else if sec == "clinical_all" {
                 let has_clinical = user.has_role("admin")
                     || user.has_role("bs_noi")
                     || user.has_role("bs_ngoai")
@@ -1317,7 +1322,15 @@ pub async fn save_record_handler(
         }
     }
 
-    // Tự động điền bác sĩ cho mẫu Lái xe & Học sinh/Mẫu giáo nếu có dữ liệu
+    if user.has_role("bs_nhi")
+        && (merged.keys().any(|k| {
+            k.starts_with("D6_") || k.starts_with("U18_") || k.starts_with("MG_") || k.starts_with("HS_")
+        }))
+    {
+        merged
+            .entry("BAC_SI_KHAM".to_string())
+            .or_insert_with(|| Value::String(user.full_name.clone()));
+    }
     if (user.has_role("bs_ketluan") || user.has_role("admin"))
         && (req.section.as_deref().map(|s| s == "conclusion" || s.ends_with("_conclusion")).unwrap_or(false)
             || merged.get("LX_KET_LUAN_SK").and_then(|v| v.as_str()).map(|s| !s.trim().is_empty()).unwrap_or(false)

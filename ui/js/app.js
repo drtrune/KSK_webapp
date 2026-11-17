@@ -510,7 +510,11 @@ function kskApp() {
     get isDoctorRhm() { return this.hasRole('bs_rhm'); },
     get isDoctorCls() { return this.hasRole('bs_cls'); },
     get isDoctorKetLuan() { return this.hasRole('bs_ketluan'); },
+    get isDoctorNhi() { return this.hasRole('bs_nhi'); },
     get isAdmin() { return this.hasRole('admin'); },
+    get isPediatricTemplate() {
+      return ['DUOI_6', 'TU_6_DUOI_18', 'MAU_GIAO', 'HS_PHO_THONG'].includes(this.activeRecordTemplate);
+    },
 
     // Phân quyền sửa từng Tab (khi hồ sơ đã lưu thì phải bấm nút 'Sửa' của mục đó mới cho phép sửa)
     get canEditReception() {
@@ -693,6 +697,7 @@ function kskApp() {
         'bs_rhm': { tab: 'clinical', subTab: 'rhm' },
         'bs_cls': { tab: 'paraclinical', subTab: 'noi' },
         'bs_ketluan': { tab: 'conclusion', subTab: 'noi' },
+        'bs_nhi': { tab: 'history', subTab: 'noi' },
       };
 
       // Duyệt danh sách quyền được phân, lấy vai trò đầu tiên có trong bảng cấu hình
@@ -745,6 +750,9 @@ function kskApp() {
       }
       if (this.canEditClinicalRhm) {
         this.form.BS_RHM = docName;
+      }
+      if (this.isDoctorNhi && this.isPediatricTemplate) {
+        this.form.BAC_SI_KHAM = docName;
       }
       if (this.canEditPhysical) {
         this.form.BS_THE_LUC = docName;
@@ -3349,6 +3357,9 @@ function kskApp() {
     canEditCurrentTabRole() {
       if (this.isLocked || !this.currentUser) return false;
       if (this.isAdmin) return true;
+      if (this.isDoctorNhi && this.isPediatricTemplate && ['history', 'physical', 'clinical', 'conclusion'].includes(this.activeTab)) {
+        return true;
+      }
       if (this.activeTab === 'reception') return this.isReceptionist;
       if (this.activeTab === 'history') return this.isTiensuRole;
       if (this.activeTab === 'physical') return this.isDoctorTheLuc;
