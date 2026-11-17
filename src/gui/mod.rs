@@ -3962,13 +3962,43 @@ impl KskGpuiApp {
 }
 
 impl Render for KskGpuiApp {
+    /// Kết xuất khung cửa sổ gồm thanh tiêu đề (TitleBar) để kéo, thu nhỏ, phóng to và nội dung chính.
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if self.needs_first_setup {
-            return self.render_first_time_setup(window, cx);
-        }
-        if self.current_user.is_none() {
-            return self.render_login(window, cx);
-        }
+        let win_title = if self.cfg.ten_cskcb.trim().is_empty() {
+            "Quản Lý Khám Sức Khỏe (KSK)".to_string()
+        } else {
+            format!("Quản Lý Khám Sức Khỏe (KSK) - {}", self.cfg.ten_cskcb.trim())
+        };
+
+        let body = if self.needs_first_setup {
+            self.render_first_time_setup(window, cx)
+        } else if self.current_user.is_none() {
+            self.render_login(window, cx)
+        } else {
+            self.render_main_shell(window, cx)
+        };
+
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .child(
+                gpui_component::TitleBar::new().child(
+                    div()
+                        .text_xs()
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(rgb(text_main()))
+                        .child(win_title),
+                ),
+            )
+            .child(div().flex_1().min_h_0().overflow_hidden().child(body))
+    }
+}
+
+impl KskGpuiApp {
+    /// Kết xuất giao diện làm việc chính (thanh điều hướng, nội dung tab và các hộp thoại).
+    fn render_main_shell(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
 
         let user = self.current_user.clone().unwrap();
         let is_admin = user.has_role("admin");
@@ -4454,9 +4484,7 @@ impl Render for KskGpuiApp {
             )
             .into_any_element()
     }
-}
 
-impl KskGpuiApp {
     fn render_ux_modals(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         if let Some((is_docx, is_reception)) = self.print_modal_action {
             let record_tpls = crate::templates::parse_template_list(&self.current_record_templates);

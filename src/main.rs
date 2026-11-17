@@ -164,12 +164,13 @@ fn main() {
             gpui::size(gpui::px(1360.0), gpui::px(840.0)),
             cx,
         );
+        let mut tb_opts = gpui_component::TitleBar::title_bar_options();
+        tb_opts.title = Some(window_title.clone().into());
         let options = gpui::WindowOptions {
             window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
-            titlebar: Some(gpui::TitlebarOptions {
-                title: Some(window_title.clone().into()),
-                ..Default::default()
-            }),
+            titlebar: Some(tb_opts),
+            is_movable: true,
+            is_resizable: true,
             ..Default::default()
         };
 
