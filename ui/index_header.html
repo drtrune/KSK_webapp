@@ -316,7 +316,7 @@
           <span>📤 Xuất CSV</span>
         </button>
 
-        <button x-show="isAdmin" type="button" @click="activeTab = 'admin'; loadServerBackups()"
+        <button x-show="isAdmin" type="button" @click="activeTab = 'admin'; loadServerBackups(); loadPhanLoaiTree()"
           :class="activeTab === 'admin' ? 'active' : ''" class="yt-chip text-[#8E44AD]">
           <span>⚙ Quản trị</span>
         </button>

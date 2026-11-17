@@ -3587,6 +3587,43 @@ function kskApp() {
       return reqCustom.every(s => set.includes(s));
     },
 
+    buildPhanLoaiTreeFromLocal() {
+      const cfg = this.getPlConfig();
+      const specs = cfg.specialties || [];
+      const diseases = cfg.diseases || [];
+      const cls = cfg.classifications || [];
+      const diseasesBySpec = (specId) => diseases
+        .filter(d => d.specialtyId === specId)
+        .map(d => ({
+          id: d.id,
+          name: d.name,
+          specialtyId: d.specialtyId,
+          classifications: cls.filter(c => c.diseaseId === d.id)
+        }));
+      const tree = specs.filter(s => !s.parentId).map(root => ({
+        id: root.id,
+        name: root.name,
+        parentId: root.parentId || null,
+        note: root.note || null,
+        children: specs.filter(c => c.parentId === root.id).map(sub => ({
+          id: sub.id,
+          name: sub.name,
+          parentId: sub.parentId,
+          note: sub.note || null,
+          diseases: diseasesBySpec(sub.id)
+        })),
+        diseases: diseasesBySpec(root.id)
+      }));
+      return {
+        tree,
+        stats: {
+          specialties: specs.length,
+          diseases: diseases.length,
+          classifications: cls.length
+        }
+      };
+    },
+
     async loadPhanLoaiTree() {
       try {
         const res = await fetch('/api/phan-loai/tree', {
@@ -3594,10 +3631,29 @@ function kskApp() {
         });
         if (res.ok) {
           const data = await res.json();
-          this.phanLoaiTree = data.tree || [];
-          this.phanLoaiStats = data.stats || {};
+          if (data && Array.isArray(data.tree) && data.tree.length > 0) {
+            this.phanLoaiTree = data.tree;
+            this.phanLoaiStats = data.stats || {};
+            return;
+          }
         }
       } catch (_) {}
+      const local = this.buildPhanLoaiTreeFromLocal();
+      this.phanLoaiTree = local.tree;
+      this.phanLoaiStats = local.stats;
+    },
+
+    expandAllPhanLoai(open) {
+      const next = {};
+      if (open) {
+        for (const root of (this.phanLoaiTree || [])) {
+          next[root.id] = true;
+          for (const sub of (root.children || [])) {
+            next[sub.id] = true;
+          }
+        }
+      }
+      this.phanLoaiExpanded = next;
     },
 
     async reloadPhanLoaiXlsx() {

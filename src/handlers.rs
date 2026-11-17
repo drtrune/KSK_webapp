@@ -3436,7 +3436,7 @@ pub async fn list_catalogs_handler(
         .unwrap_or_default()
     } else {
         sqlx::query_as(
-            "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type != 'ICD10' AND cat_type != 'TIEU_CHUAN_PL' ORDER BY cat_type ASC, code ASC LIMIT ?",
+            "SELECT id, cat_type, code, name, parent_code, is_active, is_default FROM catalogs WHERE cat_type NOT IN ('ICD10', 'TIEU_CHUAN_PL', 'CHUYEN_KHOA', 'BENH_TAT') ORDER BY cat_type ASC, code ASC LIMIT ?",
         )
         .bind(limit)
         .fetch_all(&*db)

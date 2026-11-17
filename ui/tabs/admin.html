@@ -378,9 +378,6 @@
         <label class="label-title">Chọn loại danh mục:</label>
         <select x-model="adminCatalogCatType" @change="fetchAdminCatalogItems()" class="input-box text-xs">
           <option value="ICD10">ICD-10 Bệnh tật (15,844 mã từ asset)</option>
-          <option value="CHUYEN_KHOA">Chuyên khoa khám (phan_loai.xlsx)</option>
-          <option value="BENH_TAT">Bệnh tật theo Chuyên khoa (phan_loai.xlsx)</option>
-          <option value="TIEU_CHUAN_PL">Tiêu chuẩn phân loại KSK I-V (phan_loai.xlsx)</option>
           <option value="DOI_TUONG">Đối tượng khám sức khỏe (16 mã)</option>
           <option value="NGUON_CHI_TRA">Nguồn kinh phí chi trả (1-9)</option>
           <option value="DAN_TOC">Dân tộc (60 dân tộc)</option>
@@ -519,9 +516,6 @@
           <label class="label-title">Loại danh mục import:</label>
           <select x-model="bulkCatType" class="input-box text-xs">
             <option value="ICD10">ICD-10 (Bệnh tật)</option>
-            <option value="CHUYEN_KHOA">Chuyên khoa khám</option>
-            <option value="BENH_TAT">Bệnh tật theo chuyên khoa</option>
-            <option value="TIEU_CHUAN_PL">Tiêu chuẩn phân loại KSK</option>
             <option value="DOI_TUONG">Đối tượng KSK</option>
             <option value="NGUON_CHI_TRA">Nguồn chi trả</option>
             <option value="DAN_TOC">Dân tộc</option>
@@ -558,8 +552,10 @@
           <span x-text="(phanLoaiStats.specialties || 0) + ' chuyên khoa · ' + (phanLoaiStats.diseases || 0) + ' bệnh tật · ' + (phanLoaiStats.classifications || 0) + ' tiêu chuẩn'"></span>
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <input type="text" x-model="phanLoaiSearch" placeholder="Tìm chuyên khoa, bệnh tật, quy tắc..." class="input-box text-xs w-64" />
+        <button type="button" @click="expandAllPhanLoai(true)" class="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">Mở tất cả</button>
+        <button type="button" @click="expandAllPhanLoai(false)" class="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">Thu gọn</button>
         <button type="button" @click="reloadPhanLoaiXlsx()" :disabled="phanLoaiReloading"
                 class="px-3.5 py-2 bg-[#0F766E] hover:bg-[#115E59] disabled:opacity-50 text-white rounded-lg text-xs font-semibold whitespace-nowrap">
           <span x-text="phanLoaiReloading ? 'Đang đồng bộ...' : '↻ Đồng bộ từ phan_loai.xlsx'"></span>
