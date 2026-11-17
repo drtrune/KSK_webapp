@@ -115,14 +115,17 @@ pub async fn login_handler(
     .unwrap_or(None);
 
     let Some(user) = user else {
+        tracing::warn!("Đăng nhập thất bại: không tìm thấy tài khoản '{}'", username);
         return api_error(StatusCode::UNAUTHORIZED, "Tên đăng nhập hoặc mật khẩu không đúng");
     };
 
     if user.password_hash != p_hash {
+        tracing::warn!("Đăng nhập thất bại: sai mật khẩu cho tài khoản '{}'", username);
         return api_error(StatusCode::UNAUTHORIZED, "Tên đăng nhập hoặc mật khẩu không đúng");
     }
 
     if user.is_locked != 0 {
+        tracing::warn!("Đăng nhập bị từ chối: tài khoản '{}' đang bị khóa", username);
         return api_error(
             StatusCode::FORBIDDEN,
             "Tài khoản này đã bị khóa. Vui lòng liên hệ Quản trị viên.",
@@ -1452,6 +1455,14 @@ pub async fn save_record_handler(
                 format!("Lỗi cập nhật hồ sơ KSK: {}", e),
             );
         }
+        tracing::info!(
+            "Lưu hồ sơ KSK id={} ma_tn='{}' section={:?} templates='{}' by='{}'",
+            rec.id,
+            ma_tn,
+            req.section,
+            exam_templates_val,
+            user.username
+        );
         rec.id
     } else {
         match sqlx::query(

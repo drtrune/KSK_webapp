@@ -44,6 +44,28 @@ const INDEX_HTML: &str = concat!(
     include_str!("../ui/index_footer.html"),
 );
 
+async fn http_logging_middleware(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+    let start = std::time::Instant::now();
+    let resp = next.run(req).await;
+    if path.starts_with("/api/") {
+        let status = resp.status();
+        let ms = start.elapsed().as_millis();
+        if status.is_server_error() {
+            tracing::error!("{} {} -> {} ({}ms)", method, path, status.as_u16(), ms);
+        } else if status.is_client_error() {
+            tracing::warn!("{} {} -> {} ({}ms)", method, path, status.as_u16(), ms);
+        } else {
+            tracing::info!("{} {} -> {} ({}ms)", method, path, status.as_u16(), ms);
+        }
+    }
+    resp
+}
+
 async fn index_ui_handler() -> Html<&'static str> {
     Html(INDEX_HTML)
 }
@@ -284,6 +306,7 @@ async fn main() {
         .route("/api/admin/catalogs/reload-asset", post(reload_asset_catalogs_handler))
         .route("/api/phan-loai/tree", get(get_phan_loai_tree_handler))
         .route("/api/admin/phan-loai/reload-xlsx", post(reload_phan_loai_xlsx_handler))
+        .layer(axum::middleware::from_fn(http_logging_middleware))
         .layer(cors)
         .with_state(state);
 

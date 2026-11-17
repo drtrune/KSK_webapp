@@ -1434,6 +1434,24 @@ function kskApp() {
 
       this.form = { ...this.form, ...payload, id: rec.id };
       this.form.MA_TIEP_NHAN = rec.ma_tiep_nhan || this.form.MA_TIEP_NHAN;
+      if (payload.PHAN_LOAI_SK !== undefined && payload.PHAN_LOAI_SK !== null && String(payload.PHAN_LOAI_SK).trim() !== '') {
+        this.form.PHAN_LOAI_SK = String(payload.PHAN_LOAI_SK).trim();
+      }
+
+      // Khôi phục cây phân loại bệnh đã lưu (nếu có) trước khi tính toán hiển thị
+      if (payload.SELECTED_CLASSIFICATIONS_JSON) {
+        try {
+          const parsedSel = typeof payload.SELECTED_CLASSIFICATIONS_JSON === 'string'
+            ? JSON.parse(payload.SELECTED_CLASSIFICATIONS_JSON)
+            : payload.SELECTED_CLASSIFICATIONS_JSON;
+          if (parsedSel && typeof parsedSel === 'object') {
+            this.selectedClassifications = parsedSel;
+          }
+        } catch (_) {}
+      } else {
+        this.selectedClassifications = {};
+        this.initDefaultClassifications();
+      }
 
       // Nạp xã phường của tỉnh tương ứng nếu có
       if (this.form.MATINH_CU_TRU) {
@@ -1441,9 +1459,14 @@ function kskApp() {
       }
 
       this.syncAllSelects();
-      this.recalcVisionScore();
-      this.recalcHearingScore();
-      this.recalcCardioScores();
+      this._loadingRecord = true;
+      try {
+        this.recalcVisionScore();
+        this.recalcHearingScore();
+        this.recalcCardioScores();
+      } finally {
+        this._loadingRecord = false;
+      }
     },
 
     resetForm() {
@@ -1552,6 +1575,9 @@ function kskApp() {
       try {
         const tplsStr = (this.recordTemplates && this.recordTemplates.length ? this.recordTemplates : [this.activeRecordTemplate]).join(',');
         this.form._EXAM_TEMPLATES = tplsStr;
+        if (this.clinicalInputMode === 'full' && this.selectedClassifications) {
+          this.form.SELECTED_CLASSIFICATIONS_JSON = JSON.stringify(this.selectedClassifications);
+        }
         const bodyData = {
           id: this.form.id,
           ma_tiep_nhan: this.form.MA_TIEP_NHAN,
@@ -2907,6 +2933,10 @@ function kskApp() {
     // ĐỒNG BỘ 2 CHIỀU VÀO 121 CHỈ TIÊU (FORM.*)
     // ===================================================================
     syncClinicalToForm() {
+      // Không ghi đè các trường *_PL đã lưu khi đang nạp hồ sơ hoặc đang nhập ở chế độ Tối giản
+      if (this._loadingRecord || this.clinicalInputMode !== 'full') {
+        return;
+      }
       // 1. Phân khoa Nội khoa (khớp chính xác 8 phân khoa trong danh mục)
       const noiMap = [
         { id: 'CK_NOI_TIM_MACH', field: 'NOI_KHOA_TUAN_HOAN', plField: 'NOI_KHOA_TUAN_HOAN_PL' },

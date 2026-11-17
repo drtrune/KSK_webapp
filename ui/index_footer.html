@@ -98,10 +98,7 @@
           <div class="flex flex-wrap items-center gap-1.5 lg:gap-2">
             <button x-show="activeTab !== 'reception'" type="button" @click="quickFillNormalDefaults()"
                     class="px-2.5 lg:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-medium"
-                    title="Điền mặc định bình thường cho mục đang mở">⚡ Mặc định BT mục này</button>
-            <button type="button" @click="quickFillAllNormalDefaults()"
-                    class="px-2.5 lg:px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold"
-                    title="Điền mặc định bình thường cho toàn bộ các mục của mẫu phiếu đang chọn">⚡ Mặc định BT toàn phiếu</button>
+                    title="Điền mặc định bình thường cho mục đang xem">⚡ Mặc định bình thường</button>
             <button type="button" @click="cancelCurrentTabEdit()"
                     class="px-2.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-medium">✕ Hủy</button>
             <button type="button" @click="saveCurrentSection(false)"
@@ -131,10 +128,7 @@
           <div class="flex items-center gap-1">
             <button x-show="activeTab !== 'reception'" type="button" @click="quickFillNormalDefaults()"
                     class="px-2.5 py-1.5 bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-medium whitespace-nowrap"
-                    title="Điền mặc định bình thường mục này">⚡ BT</button>
-            <button type="button" @click="quickFillAllNormalDefaults()"
-                    class="px-2.5 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold whitespace-nowrap"
-                    title="Điền mặc định bình thường toàn phiếu">⚡ BT Full</button>
+                    title="Điền mặc định bình thường cho tab đang xem">⚡ Mặc định BT</button>
             <button type="button" @click="cancelCurrentTabEdit()" aria-label="Hủy sửa"
                     class="px-2 py-1.5 text-slate-600 bg-slate-50 rounded-lg text-xs font-medium">✕</button>
             <button type="button" @click="saveCurrentSection(false)"
