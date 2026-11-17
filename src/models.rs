@@ -454,6 +454,7 @@ pub fn can_user_roles_edit_field(user_roles_str: &str, field: &str) -> bool {
         || field.starts_with("U18_")
         || field.starts_with("MG_")
         || field.starts_with("HS_")
+        || field.starts_with("LX_")
     {
         return !roles.is_empty();
     }
@@ -508,9 +509,15 @@ pub fn merge_payload_by_roles(
 
     // Chỉ cập nhật các trường thuộc quyền hạn của người dùng (Multi-role), KHÔNG tự tạo dữ liệu giả ở backend
     for (k, v) in incoming {
-        if k == "SELECTED_CLASSIFICATIONS_JSON" || k == "_EXAMINED_SECTIONS" {
-            if let Value::String(s) = v {
-                base.insert(k.clone(), Value::String(s.clone()));
+        if k == "SELECTED_CLASSIFICATIONS_JSON" || k == "_EXAMINED_SECTIONS" || k == "_EXAM_TEMPLATES" {
+            match v {
+                Value::String(s) => {
+                    base.insert(k.clone(), Value::String(s.clone()));
+                }
+                Value::Array(_) | Value::Object(_) => {
+                    base.insert(k.clone(), v.clone());
+                }
+                _ => {}
             }
             continue;
         }
@@ -733,6 +740,7 @@ pub struct KskRecordDto {
     pub status: i64,
     pub exam_mode: String,
     pub contract_id: Option<i64>,
+    pub exam_templates: String,
     pub payload: Value,
     pub updated_by: String,
     pub created_at: String,
@@ -759,6 +767,7 @@ impl From<KskRecordRow> for KskRecordDto {
                 row.exam_mode
             },
             contract_id: row.contract_id,
+            exam_templates: row.exam_templates,
             payload,
             updated_by: row.updated_by,
             created_at: row.created_at,
@@ -851,6 +860,7 @@ pub struct SaveRecordRequest {
     pub ma_tiep_nhan: Option<String>,
     pub payload: Map<String, Value>,
     pub section: Option<String>,
+    pub exam_templates: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1063,6 +1073,17 @@ pub fn phan_loai_config() -> &'static PhanLoaiConfig {
         let raw = include_str!("../asset/phan_loai_config.json");
         serde_json::from_str(raw).expect("Invalid embedded asset/phan_loai_config.json")
     })
+}
+
+/// Đọc cấu hình phân loại bệnh từ `asset/phan_loai_config.json` trên ổ đĩa nếu có,
+/// fallback về bản nhúng trong binary nếu chưa tồn tại hoặc lỗi đọc.
+pub fn load_phan_loai_config_live() -> PhanLoaiConfig {
+    if let Ok(raw) = std::fs::read_to_string("asset/phan_loai_config.json") {
+        if let Ok(cfg) = serde_json::from_str::<PhanLoaiConfig>(&raw) {
+            return cfg;
+        }
+    }
+    phan_loai_config().clone()
 }
 
 pub fn parse_adjust_delta(adjust: &Option<Value>) -> i64 {

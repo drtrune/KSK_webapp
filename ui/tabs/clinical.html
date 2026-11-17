@@ -1,134 +1,89 @@
 <!-- TAB 4: KHÁM LÂM SÀNG CÁC CHUYÊN KHOA -->
-<div x-show="activeTab === 'clinical'" class="space-y-4 no-print relative">
+<div x-show="activeTab === 'clinical' && activeRecordTemplate === 'TREN_18'" class="space-y-4 no-print relative">
 
+  <div class="flex flex-col md:flex-row gap-4 items-start">
+    <!-- ============================================================== -->
+    <!-- 1. THANH ĐIỀU HƯỚNG CHUYÊN KHOA DỌC BÊN TRÁI (LEFT RAIL)        -->
+    <!-- ============================================================== -->
+    <aside class="w-full md:w-56 shrink-0 bg-white border border-slate-200 shadow-xs rounded-xl p-2.5 space-y-2 md:sticky md:top-16">
+      <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-2 pt-1">Chuyên khoa lâm sàng</div>
+      <div class="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
+        <button type="button" @click="clinicalSubTab = 'noi'"
+          :class="clinicalSubTab === 'noi' ? 'bg-[#3498DB] text-white font-semibold shadow-xs' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+          class="px-3 py-2 rounded-lg text-xs transition-colors shrink-0 flex items-center justify-between gap-2 text-left">
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'noi' ? 'bg-white' : 'bg-blue-500'"></span><span>🫀 1. Nội khoa</span></span>
+          <span class="text-[11px] font-bold" x-text="form.NOI_KHOA_TUAN_HOAN ? '✓' : '○'"></span>
+        </button>
 
-  <!-- ============================================================== -->
-  <!-- 1. THANH SUB-TAB CHUYÊN KHOA CỐ ĐỊNH Ở ĐỈNH (STICKY TOP-0)       -->
-  <!-- ============================================================== -->
-  <div class="sticky top-0 z-30 bg-white/95 backdrop-blur-xs border-b border-slate-200 shadow-xs flex items-center justify-between gap-2 overflow-x-auto px-4 py-2 rounded-xl mb-4">
-    <!-- Cụm các nút chuyên khoa -->
-    <div class="flex items-center gap-1.5 overflow-x-auto shrink-0">
-      <!-- 1. Nội khoa -->
-      <button
-        type="button"
-        @click="clinicalSubTab = 'noi'"
-        :class="clinicalSubTab === 'noi' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-      >
-        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'noi' ? 'bg-white' : 'bg-blue-500'"></span>
-        <span>1. Nội khoa</span>
-        <span x-show="form.NOI_KHOA_TUAN_HOAN" class="text-[10px] opacity-90 font-bold">✓</span>
-      </button>
+        <button type="button" @click="clinicalSubTab = 'ngoai'"
+          :class="clinicalSubTab === 'ngoai' ? 'bg-[#3498DB] text-white font-semibold shadow-xs' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+          class="px-3 py-2 rounded-lg text-xs transition-colors shrink-0 flex items-center justify-between gap-2 text-left">
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'ngoai' ? 'bg-white' : 'bg-orange-500'"></span><span>🦴 2. Ngoại khoa</span></span>
+          <span class="text-[11px] font-bold" x-text="form.KET_QUA_KHAM_NGOAI_KHOA ? '✓' : '○'"></span>
+        </button>
 
-      <!-- 2. Ngoại khoa -->
-      <button
-        type="button"
-        @click="clinicalSubTab = 'ngoai'"
-        :class="clinicalSubTab === 'ngoai' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-      >
-        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'ngoai' ? 'bg-white' : 'bg-orange-500'"></span>
-        <span>2. Ngoại khoa</span>
-        <span x-show="form.KET_QUA_KHAM_NGOAI_KHOA" class="text-[10px] opacity-90 font-bold">✓</span>
-      </button>
+        <button type="button" @click="clinicalSubTab = 'dalieu'"
+          :class="clinicalSubTab === 'dalieu' ? 'bg-[#3498DB] text-white font-semibold shadow-xs' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+          class="px-3 py-2 rounded-lg text-xs transition-colors shrink-0 flex items-center justify-between gap-2 text-left">
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'dalieu' ? 'bg-white' : 'bg-teal-500'"></span><span>🧴 3. Da liễu</span></span>
+          <span class="text-[11px] font-bold" x-text="form.KET_QUA_KHAM_DA_LIEU ? '✓' : '○'"></span>
+        </button>
 
-      <!-- 3. Da liễu -->
-      <button
-        type="button"
-        @click="clinicalSubTab = 'dalieu'"
-        :class="clinicalSubTab === 'dalieu' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-      >
-        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'dalieu' ? 'bg-white' : 'bg-teal-500'"></span>
-        <span>3. Da liễu</span>
-        <span x-show="form.KET_QUA_KHAM_DA_LIEU" class="text-[10px] opacity-90 font-bold">✓</span>
-      </button>
+        <button x-show="form.GIOI_TINH === '2'" type="button" @click="clinicalSubTab = 'san'"
+          :class="clinicalSubTab === 'san' ? 'bg-[#E84393] text-white font-semibold shadow-xs' : 'bg-pink-50 text-pink-700 hover:bg-pink-100'"
+          class="px-3 py-2 rounded-lg text-xs transition-colors shrink-0 flex items-center justify-between gap-2 text-left" x-cloak>
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'san' ? 'bg-white' : 'bg-pink-500'"></span><span>🌸 4. Sản phụ khoa</span></span>
+          <span class="text-[11px] font-bold" x-text="form.KET_QUA_KHAM_SAN_PHU_KHOA ? '✓' : '○'"></span>
+        </button>
 
-      <!-- 4. Sản phụ khoa (Chỉ hiển thị khi là Nữ: form.GIOI_TINH === '2') -->
-      <button
-        x-show="form.GIOI_TINH === '2'"
-        type="button"
-        @click="clinicalSubTab = 'san'"
-        :class="clinicalSubTab === 'san' ? 'bg-[#E84393] text-white font-medium shadow-xs' : 'bg-pink-100 text-pink-700 hover:bg-pink-200'"
-        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-        x-cloak
-      >
-        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'san' ? 'bg-white' : 'bg-pink-500'"></span>
-        <span>4. Sản phụ khoa</span>
-        <span x-show="form.KET_QUA_KHAM_SAN_PHU_KHOA" class="text-[10px] opacity-90 font-bold">✓</span>
-      </button>
+        <button type="button" @click="clinicalSubTab = 'mat'"
+          :class="clinicalSubTab === 'mat' ? 'bg-[#3498DB] text-white font-semibold shadow-xs' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+          class="px-3 py-2 rounded-lg text-xs transition-colors shrink-0 flex items-center justify-between gap-2 text-left">
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'mat' ? 'bg-white' : 'bg-cyan-500'"></span><span>👁 5. Mắt</span></span>
+          <span class="text-[11px] font-bold" x-text="form.KHONG_KINH_MAT_PHAI ? '✓' : '○'"></span>
+        </button>
 
-      <!-- 5. Mắt -->
-      <button
-        type="button"
-        @click="clinicalSubTab = 'mat'"
-        :class="clinicalSubTab === 'mat' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-      >
-        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'mat' ? 'bg-white' : 'bg-cyan-500'"></span>
-        <span>5. Mắt</span>
-        <span x-show="form.KHONG_KINH_MAT_PHAI" class="text-[10px] opacity-90 font-bold">✓</span>
-      </button>
+        <button type="button" @click="clinicalSubTab = 'tmh'"
+          :class="clinicalSubTab === 'tmh' ? 'bg-[#3498DB] text-white font-semibold shadow-xs' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+          class="px-3 py-2 rounded-lg text-xs transition-colors shrink-0 flex items-center justify-between gap-2 text-left">
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'tmh' ? 'bg-white' : 'bg-violet-500'"></span><span>👂 6. Tai - Mũi - Họng</span></span>
+          <span class="text-[11px] font-bold" x-text="form.TAI_TRAI_NOI_THUONG ? '✓' : '○'"></span>
+        </button>
 
-      <!-- 6. Tai - Mũi - Họng -->
-      <button
-        type="button"
-        @click="clinicalSubTab = 'tmh'"
-        :class="clinicalSubTab === 'tmh' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-      >
-        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'tmh' ? 'bg-white' : 'bg-violet-500'"></span>
-        <span>6. Tai - Mũi - Họng</span>
-        <span x-show="form.TAI_TRAI_NOI_THUONG" class="text-[10px] opacity-90 font-bold">✓</span>
-      </button>
+        <button type="button" @click="clinicalSubTab = 'rhm'"
+          :class="clinicalSubTab === 'rhm' ? 'bg-[#3498DB] text-white font-semibold shadow-xs' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+          class="px-3 py-2 rounded-lg text-xs transition-colors shrink-0 flex items-center justify-between gap-2 text-left">
+          <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'rhm' ? 'bg-white' : 'bg-rose-500'"></span><span>🦷 7. Răng - Hàm - Mặt</span></span>
+          <span class="text-[11px] font-bold" x-text="form.HAM_TREN ? '✓' : '○'"></span>
+        </button>
 
-      <!-- 7. Răng - Hàm - Mặt -->
-      <button
-        type="button"
-        @click="clinicalSubTab = 'rhm'"
-        :class="clinicalSubTab === 'rhm' ? 'bg-[#3498DB] text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-      >
-        <span class="w-2 h-2 rounded-full" :class="clinicalSubTab === 'rhm' ? 'bg-white' : 'bg-rose-500'"></span>
-        <span>7. Răng - Hàm - Mặt</span>
-        <span x-show="form.HAM_TREN" class="text-[10px] opacity-90 font-bold">✓</span>
-      </button>
+        <button type="button" @click="clinicalSubTab = 'all'"
+          :class="clinicalSubTab === 'all' ? 'bg-slate-800 text-white font-semibold shadow-xs' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'"
+          class="px-3 py-2 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-2 text-left border-t border-slate-100 mt-1">
+          <span>📑 Xem tất cả</span>
+        </button>
+      </div>
 
-      <!-- Xem tất cả -->
-      <button
-        type="button"
-        @click="clinicalSubTab = 'all'"
-        :class="clinicalSubTab === 'all' ? 'bg-slate-800 text-white font-medium shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-        class="px-3 py-1.5 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5"
-        title="Hiển thị tất cả chuyên khoa trên một trang"
-      >
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-        <span>Xem tất cả</span>
-      </button>
-    </div>
+      <!-- Chế độ nhập liệu -->
+      <div class="pt-2 border-t border-slate-100 space-y-1">
+        <div class="text-[10.5px] font-semibold text-slate-400 uppercase px-2">Chế độ nhập</div>
+        <div class="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <button type="button" @click="setClinicalInputMode('minimal')"
+            class="px-2 py-1 rounded text-[11px] transition-all cursor-pointer"
+            :class="clinicalInputMode === 'minimal' ? 'bg-white text-sky-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'">
+            📋 Tối giản
+          </button>
+          <button type="button" @click="setClinicalInputMode('full')"
+            class="px-2 py-1 rounded text-[11px] transition-all cursor-pointer"
+            :class="clinicalInputMode === 'full' ? 'bg-white text-sky-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'">
+            📑 Chi tiết
+          </button>
+        </div>
+      </div>
+    </aside>
 
-    <!-- Cụm chọn Chế độ nhập liệu bên phải (Segmented Control 2 nút) -->
-    <div class="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0 ml-auto">
-      <button
-        type="button"
-        @click="setClinicalInputMode('minimal')"
-        class="px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 cursor-pointer"
-        :class="clinicalInputMode === 'minimal' ? 'bg-white text-sky-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'"
-        title="Tối thiểu (Minimal Mode - Phiếu giấy truyền thống QĐ 1613/BYT)"
-      >
-        <span>📋 Phiếu giấy</span>
-      </button>
-      <button
-        type="button"
-        @click="setClinicalInputMode('full')"
-        class="px-2.5 py-1 rounded-md text-xs transition-all flex items-center gap-1 cursor-pointer"
-        :class="clinicalInputMode === 'full' ? 'bg-white text-sky-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'"
-        title="Chi tiết (Full Mode - Toàn bộ cây danh mục chuyên khoa & bệnh tật)"
-      >
-        <span>📑 Chi tiết</span>
-      </button>
-    </div>
-  </div>
+    <!-- CỘT PHẢI: NỘI DUNG NHẬP LIỆU CHUYÊN KHOA -->
+    <div class="flex-1 min-w-0 space-y-4 w-full">
 
   <!-- THANH PHÂN KHOA CON NỘI KHOA (SUB-TABS KHI KHÁM NỘI KHOA Ở CHẾ ĐỘ FULL) -->
   <div x-show="clinicalInputMode === 'full' && clinicalSubTab === 'noi'" class="bg-white/80 border border-slate-200 shadow-2xs rounded-xl p-1.5 flex items-center gap-1 overflow-x-auto no-print" x-cloak>
@@ -874,56 +829,6 @@
     </div>
 
 
-  </div>
-
-
-  <!-- 3. THANH NÚT LƯU KẾT QUẢ KHÁM LÂM SÀNG CỐ ĐỊNH Ở ĐÁY -->
-  <div class="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm sticky bottom-0 z-20 mt-4">
-    <div class="text-xs text-slate-500 hidden sm:block">
-      <span>Đang khám chuyên khoa: </span>
-      <span class="font-semibold text-slate-800 uppercase" x-text="clinicalSubTab === 'noi' ? 'Nội khoa' : (clinicalSubTab === 'ngoai' ? 'Ngoại khoa' : (clinicalSubTab === 'dalieu' ? 'Da liễu' : (clinicalSubTab === 'san' ? 'Sản phụ khoa' : (clinicalSubTab === 'mat' ? 'Mắt' : (clinicalSubTab === 'tmh' ? 'Tai Mũi Họng' : (clinicalSubTab === 'rhm' ? 'Răng Hàm Mặt' : 'Tất cả chuyên khoa'))))))"></span>
-    </div>
-
-    <div class="flex items-center gap-2 ml-auto">
-      <!-- Nút SỬA: Hiển thị khi hồ sơ đã lưu và chưa mở sửa chuyên khoa này -->
-      <template x-if="isSaved && !isCurrentClinicalEditing">
-        <button
-          type="button"
-          @click="toggleCurrentClinicalEdit()"
-          :disabled="isLocked || !canUnlockCurrentClinicalSubTab"
-          class="px-5 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
-          title="Bấm để mở quyền chỉnh sửa kết quả chuyên khoa này"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-          <span x-text="'Sửa ' + (clinicalSubTab === 'noi' ? 'Nội khoa' : (clinicalSubTab === 'ngoai' ? 'Ngoại khoa' : (clinicalSubTab === 'dalieu' ? 'Da liễu' : (clinicalSubTab === 'san' ? 'Sản phụ khoa' : (clinicalSubTab === 'mat' ? 'Mắt' : (clinicalSubTab === 'tmh' ? 'Tai Mũi Họng' : (clinicalSubTab === 'rhm' ? 'Răng Hàm Mặt' : 'Lâm sàng')))))))"></span>
-        </button>
-      </template>
-
-      <!-- Nút LƯU: Hiển thị khi đang ở chế độ sửa (hoặc hồ sơ mới chưa lưu) -->
-      <template x-if="!isSaved || isCurrentClinicalEditing">
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            @click="handleSave(clinicalSubTab === 'all' ? 'clinical_all' : getCurrentClinicalSectionKey())"
-            :disabled="isLocked || !canEditCurrentClinicalSubTab || saving"
-            class="px-5 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg font-medium text-xs flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
-            <span x-text="saving ? 'Đang lưu...' : 'Lưu kết quả khám lâm sàng'"></span>
-          </button>
-          <button
-            x-show="isSaved"
-            type="button"
-            @click="toggleCurrentClinicalEdit()"
-            class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors"
-            title="Hủy bỏ chế độ sửa"
-          >
-            Hủy
-          </button>
-        </div>
-      </template>
     </div>
   </div>
-
-
 </div>

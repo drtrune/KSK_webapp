@@ -1089,7 +1089,8 @@ pub async fn save_record_handler(
     };
     let cfg = state.config.read().await.clone();
 
-    let existing: Option<KskRecordRow> = if let Some(id) = req.id {
+    let mk = *state.master_key.read().await;
+    let mut existing: Option<KskRecordRow> = if let Some(id) = req.id {
         sqlx::query_as("SELECT * FROM ksk_records WHERE id = ?")
             .bind(id)
             .fetch_optional(&*db)
@@ -1109,11 +1110,15 @@ pub async fn save_record_handler(
         None
     };
 
+    if let Some(ref mut rec) = existing {
+        crate::crypto::decrypt_record_row(mk.as_ref(), rec);
+    }
+
     if let Some(ref rec) = existing {
-        if rec.status == 1 {
+        if rec.status == 2 {
             return api_error(
                 StatusCode::FORBIDDEN,
-                "Hồ sơ này đã được Ký / Khóa (status = 1). Chỉ Admin mới có quyền Mở khóa để chỉnh sửa.",
+                "Hồ sơ này đã được Ký / Khóa (status = 2). Chỉ Admin mới có quyền Mở khóa để chỉnh sửa.",
             );
         }
 
@@ -1152,8 +1157,18 @@ pub async fn save_record_handler(
         let target_section_fields = req.section.as_deref().map(get_section_fields);
 
         for (k, v) in &req.payload {
-            // Bỏ qua các trường hệ thống không thuộc bệnh án
-            if k == "id" || k == "MA_CSKCB" || k == "MA_GTIN_CSKCB" || k == "status" || k == "created_at" || k == "updated_at" || k == "updated_by" {
+            // Bỏ qua các trường hệ thống không thuộc bệnh án hoặc metadata trạng thái khám
+            if k == "id"
+                || k == "MA_CSKCB"
+                || k == "MA_GTIN_CSKCB"
+                || k == "status"
+                || k == "created_at"
+                || k == "updated_at"
+                || k == "updated_by"
+                || k == "_EXAMINED_SECTIONS"
+                || k == "_EXAM_TEMPLATES"
+                || k == "SELECTED_CLASSIFICATIONS_JSON"
+            {
                 continue;
             }
             if k == "MA_TIEP_NHAN" {
@@ -1165,7 +1180,12 @@ pub async fn save_record_handler(
 
             // Nếu người dùng gửi theo section cụ thể, các trường ngoài section đó không áp dụng
             if let Some(sec_fields) = target_section_fields {
-                if !sec_fields.is_empty() && !sec_fields.contains(&k.as_str()) {
+                let is_custom_tpl_field = k.starts_with("D6_")
+                    || k.starts_with("U18_")
+                    || k.starts_with("MG_")
+                    || k.starts_with("HS_")
+                    || k.starts_with("LX_");
+                if !is_custom_tpl_field && !sec_fields.is_empty() && !sec_fields.contains(&k.as_str()) {
                     continue;
                 }
             }
@@ -1292,7 +1312,38 @@ pub async fn save_record_handler(
     };
 
     let payload_json = serde_json::to_string(&merged).unwrap_or_else(|_| "{}".to_string());
-    let mk = *state.master_key.read().await;
+    let exam_templates_val = req
+        .exam_templates
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            merged.get("_EXAM_TEMPLATES").and_then(|v| match v {
+                Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
+                Value::Array(arr) => {
+                    let list: Vec<String> = arr
+                        .iter()
+                        .filter_map(|x| x.as_str().map(|s| s.trim().to_string()))
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    if list.is_empty() {
+                        None
+                    } else {
+                        Some(list.join(","))
+                    }
+                }
+                _ => None,
+            })
+        })
+        .or_else(|| {
+            existing
+                .as_ref()
+                .map(|r| r.exam_templates.trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
+        .unwrap_or_else(|| "TREN_18".to_string());
+
     let (enc_ho_ten, enc_ngay_sinh, enc_so_cccd, enc_payload_json) =
         crate::crypto::encrypt_record_fields(
             mk.as_ref(),
@@ -1307,7 +1358,7 @@ pub async fn save_record_handler(
             r#"
             UPDATE ksk_records
             SET ma_tiep_nhan = ?, ma_y_te = ?, ho_ten = ?, gioi_tinh = ?, ngay_sinh = ?,
-                so_cccd = ?, ngay_vao = ?, payload_json = ?, updated_by = ?,
+                so_cccd = ?, ngay_vao = ?, exam_templates = ?, payload_json = ?, updated_by = ?,
                 updated_at = datetime('now', 'localtime')
             WHERE id = ?
             "#,
@@ -1319,6 +1370,7 @@ pub async fn save_record_handler(
         .bind(&enc_ngay_sinh)
         .bind(&enc_so_cccd)
         .bind(&ngay_vao)
+        .bind(&exam_templates_val)
         .bind(&enc_payload_json)
         .bind(&user.full_name)
         .bind(rec.id)
@@ -1336,8 +1388,8 @@ pub async fn save_record_handler(
             r#"
             INSERT INTO ksk_records (
                 ma_tiep_nhan, ma_y_te, ho_ten, gioi_tinh, ngay_sinh,
-                so_cccd, ngay_vao, status, payload_json, updated_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                so_cccd, ngay_vao, status, exam_templates, payload_json, updated_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
             "#,
         )
         .bind(&ma_tn)
@@ -1347,6 +1399,7 @@ pub async fn save_record_handler(
         .bind(&enc_ngay_sinh)
         .bind(&enc_so_cccd)
         .bind(&ngay_vao)
+        .bind(&exam_templates_val)
         .bind(&enc_payload_json)
         .bind(&user.full_name)
         .execute(&*db)
@@ -1397,7 +1450,7 @@ pub async fn lock_record_handler(
     }
 
     let res = sqlx::query(
-        "UPDATE ksk_records SET status = 1, updated_by = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+        "UPDATE ksk_records SET status = 2, updated_by = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
     )
     .bind(&user.full_name)
     .bind(record_id)
@@ -1406,11 +1459,47 @@ pub async fn lock_record_handler(
 
     match res {
         Ok(_) => Json(json!({
-            "message": "Đã Ký và Khóa hồ sơ thành công (status = 1)",
-            "status": 1
+            "message": "Đã Ký và Khóa hồ sơ thành công (status = 2)",
+            "status": 2
         }))
         .into_response(),
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("Lỗi khóa hồ sơ: {}", e)),
+    }
+}
+
+pub async fn complete_record_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(record_id): Path<i64>,
+) -> Response {
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+
+    if !user.has_role("admin") && !user.has_role("bs_ketluan") {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            "Chỉ Bác sĩ Kết luận (bs_ketluan) hoặc Quản trị viên (admin) mới có quyền Hoàn tất hồ sơ.",
+        );
+    }
+
+    let res = sqlx::query(
+        "UPDATE ksk_records SET status = 1, updated_by = ?, updated_at = datetime('now', 'localtime') WHERE id = ? AND status < 2",
+    )
+    .bind(&user.full_name)
+    .bind(record_id)
+    .execute(&*db)
+    .await;
+
+    match res {
+        Ok(_) => Json(json!({
+            "message": "Đã đánh dấu Hoàn tất hồ sơ (status = 1)",
+            "status": 1
+        }))
+        .into_response(),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("Lỗi hoàn tất hồ sơ: {}", e)),
     }
 }
 
@@ -4536,6 +4625,233 @@ pub async fn delete_db_backup_handler(
         Ok(_) => Json(json!({ "ok": true })).into_response(),
         Err(e) => api_error(StatusCode::BAD_REQUEST, e),
     }
+}
+
+// ============================================================================
+// 11. DANH MỤC PHÂN LOẠI BỆNH ĐA CẤP (TỪ asset/phan_loai.xlsx)
+// ============================================================================
+
+pub async fn get_phan_loai_tree_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+) -> Response {
+    let db = state.db.read().await;
+    if let Err(resp) = authenticate(&*db, &headers, None).await {
+        return resp;
+    }
+
+    let cfg = load_phan_loai_config_live();
+    let diseases_by_spec = |spec_id: &str| -> Vec<Value> {
+        cfg.diseases
+            .iter()
+            .filter(|d| d.specialty_id == spec_id)
+            .map(|d| {
+                let cls: Vec<&ClassificationDef> = cfg
+                    .classifications
+                    .iter()
+                    .filter(|c| c.disease_id == d.id)
+                    .collect();
+                json!({
+                    "id": d.id,
+                    "name": d.name,
+                    "specialtyId": d.specialty_id,
+                    "classifications": cls,
+                })
+            })
+            .collect()
+    };
+
+    let tree: Vec<Value> = cfg
+        .specialties
+        .iter()
+        .filter(|s| s.parent_id.is_none())
+        .map(|root| {
+            let children: Vec<Value> = cfg
+                .specialties
+                .iter()
+                .filter(|c| c.parent_id.as_deref() == Some(root.id.as_str()))
+                .map(|sub| {
+                    json!({
+                        "id": sub.id,
+                        "name": sub.name,
+                        "parentId": sub.parent_id,
+                        "note": sub.note,
+                        "diseases": diseases_by_spec(&sub.id),
+                    })
+                })
+                .collect();
+            json!({
+                "id": root.id,
+                "name": root.name,
+                "parentId": root.parent_id,
+                "note": root.note,
+                "children": children,
+                "diseases": diseases_by_spec(&root.id),
+            })
+        })
+        .collect();
+
+    Json(json!({
+        "tree": tree,
+        "stats": {
+            "specialties": cfg.specialties.len(),
+            "diseases": cfg.diseases.len(),
+            "classifications": cfg.classifications.len(),
+        }
+    }))
+    .into_response()
+}
+
+fn cell_to_clean_str(cell: Option<&calamine::Data>) -> String {
+    use calamine::Data;
+    match cell {
+        Some(Data::String(s)) => s.trim().to_string(),
+        Some(Data::Int(i)) => i.to_string(),
+        Some(Data::Float(f)) => {
+            if f.fract() == 0.0 {
+                format!("{}", *f as i64)
+            } else {
+                format!("{}", f)
+            }
+        }
+        Some(Data::Bool(b)) => b.to_string(),
+        _ => String::new(),
+    }
+}
+
+pub async fn reload_phan_loai_xlsx_handler(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+) -> Response {
+    use calamine::{open_workbook_auto, Reader};
+    let db = state.db.read().await;
+    let user = match authenticate(&*db, &headers, None).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !user.has_role("admin") {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            "Chỉ Quản trị viên (admin) mới được đồng bộ danh mục phân loại từ Excel.",
+        );
+    }
+
+    let xlsx_path = "asset/phan_loai.xlsx";
+    let mut wb = match open_workbook_auto(xlsx_path) {
+        Ok(w) => w,
+        Err(e) => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                format!("Không mở được file '{}': {}", xlsx_path, e),
+            );
+        }
+    };
+
+    let mut specialties = Vec::new();
+    if let Ok(range) = wb.worksheet_range("Chuyên khoa") {
+        for row in range.rows().skip(1) {
+            let id = cell_to_clean_str(row.first());
+            let name = cell_to_clean_str(row.get(1));
+            if id.is_empty() || name.is_empty() {
+                continue;
+            }
+            let parent = cell_to_clean_str(row.get(2));
+            let note = cell_to_clean_str(row.get(3));
+            specialties.push(SpecialtyDef {
+                id,
+                name,
+                parent_id: if parent.is_empty() { None } else { Some(parent) },
+                note: if note.is_empty() { None } else { Some(note) },
+            });
+        }
+    }
+
+    let mut diseases = Vec::new();
+    if let Ok(range) = wb.worksheet_range("Bệnh tật") {
+        for row in range.rows().skip(1) {
+            let id = cell_to_clean_str(row.first());
+            let spec_id = cell_to_clean_str(row.get(1));
+            let name = cell_to_clean_str(row.get(2));
+            if id.is_empty() || name.is_empty() {
+                continue;
+            }
+            diseases.push(DiseaseDef {
+                id,
+                name,
+                specialty_id: spec_id,
+            });
+        }
+    }
+
+    let mut classifications = Vec::new();
+    if let Ok(range) = wb.worksheet_range("Phân loại") {
+        for row in range.rows().skip(1) {
+            let id = cell_to_clean_str(row.first());
+            let disease_id = cell_to_clean_str(row.get(1));
+            let name = cell_to_clean_str(row.get(4));
+            if id.is_empty() || disease_id.is_empty() || name.is_empty() {
+                continue;
+            }
+            let score_str = cell_to_clean_str(row.get(5));
+            let score = score_str.parse::<i64>().ok();
+            let ref_rule = cell_to_clean_str(row.get(6));
+            let ref_disease_id = cell_to_clean_str(row.get(7));
+            let adj_str = cell_to_clean_str(row.get(8));
+            let adjust = if adj_str.is_empty() {
+                None
+            } else if let Ok(n) = adj_str.parse::<i64>() {
+                Some(Value::Number(n.into()))
+            } else {
+                Some(Value::String(adj_str))
+            };
+            classifications.push(ClassificationDef {
+                id,
+                disease_id,
+                name,
+                score,
+                ref_rule: if ref_rule.is_empty() { None } else { Some(ref_rule) },
+                ref_disease_id: if ref_disease_id.is_empty() { None } else { Some(ref_disease_id) },
+                adjust,
+            });
+        }
+    }
+
+    if specialties.is_empty() || diseases.is_empty() || classifications.is_empty() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "File phan_loai.xlsx không hợp lệ hoặc thiếu dữ liệu ở một trong 3 sheet.",
+        );
+    }
+
+    let cfg = PhanLoaiConfig {
+        specialties,
+        diseases,
+        classifications,
+    };
+    let json_str = match serde_json::to_string_pretty(&cfg) {
+        Ok(s) => s,
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    };
+    if let Err(e) = fs::write("asset/phan_loai_config.json", &json_str) {
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Không ghi được asset/phan_loai_config.json: {}", e),
+        );
+    }
+
+    Json(json!({
+        "message": format!(
+            "Đã đồng bộ từ {}: {} chuyên khoa, {} bệnh tật, {} tiêu chuẩn phân loại",
+            xlsx_path,
+            cfg.specialties.len(),
+            cfg.diseases.len(),
+            cfg.classifications.len()
+        ),
+        "specialties": cfg.specialties.len(),
+        "diseases": cfg.diseases.len(),
+        "classifications": cfg.classifications.len(),
+    }))
+    .into_response()
 }
 
 #[cfg(test)]

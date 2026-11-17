@@ -143,6 +143,13 @@ function kskApp() {
     serverBackupNote: '',
     serverBackupLoading: false,
 
+    // Danh mục Phân loại Bệnh Đa cấp (phan_loai.xlsx)
+    phanLoaiTree: [],
+    phanLoaiStats: {},
+    phanLoaiSearch: '',
+    phanLoaiExpanded: {},
+    phanLoaiReloading: false,
+
     isSectionEditing(secKey) {
       if (!this.isSaved) return true; // Hồ sơ mới chưa lưu: luôn ở chế độ nhập/sửa
       return !!this.editingSections[secKey];
@@ -644,7 +651,7 @@ function kskApp() {
       }
     },
 
-    get isLocked() { return this.recordStatus === 1; },
+    get isLocked() { return this.recordStatus === 2; },
     get isSaved() { return !!this.recordId; },
 
     /**
@@ -1432,9 +1439,12 @@ function kskApp() {
 
       this.saving = true;
       try {
+        const tplsStr = (this.recordTemplates && this.recordTemplates.length ? this.recordTemplates : [this.activeRecordTemplate]).join(',');
+        this.form._EXAM_TEMPLATES = tplsStr;
         const bodyData = {
           id: this.form.id,
           ma_tiep_nhan: this.form.MA_TIEP_NHAN,
+          exam_templates: tplsStr,
           payload: this.form
         };
         if (sec) {
@@ -1488,8 +1498,8 @@ function kskApp() {
         });
         const data = await res.json();
         if (res.ok) {
-          this.recordStatus = 1;
-          this.toast('Hồ sơ đã được KÝ VÀ KHÓA THÀNH CÔNG (status = 1)!');
+          this.recordStatus = 2;
+          this.toast('Hồ sơ đã được KÝ VÀ KHÓA THÀNH CÔNG (status = 2)!');
           await this.loadRecordsList();
         } else {
           this.toast(data.error || 'Lỗi khi khóa hồ sơ', 'error');
@@ -2433,16 +2443,42 @@ function kskApp() {
       return (this.getPlConfig().classifications || []).filter(c => c.diseaseId === diseaseId);
     },
 
-    calcClassificationScore(c) {
-      if (!c) return 1;
-      if (c.refDiseaseId === 'BT_MAT_THI_LUC') {
-        const vs = this.visionState.baseVisionScore || 1;
-        let delta = 0;
-        if (c.refAdjustment && c.refAdjustment.includes('+1')) delta = 1;
-        else if (c.refAdjustment && c.refAdjustment.includes('+2')) delta = 2;
-        return Math.min(5, Math.max(1, vs + delta));
+    calcClassificationScore(c, depth = 0) {
+      if (!c || depth > 5) return 1;
+      if (c.score !== null && c.score !== undefined && c.score !== '') {
+        return parseInt(c.score, 10) || 1;
       }
-      return parseInt(c.score || '1', 10);
+      if (c.refDiseaseId) {
+        let base = 1;
+        if (c.refDiseaseId === 'BT_MAT_THI_LUC') {
+          if (c.refRule && c.refRule.toLowerCase().includes('có kính')) {
+            const cr = parseFloat(this.visionState?.correctedRight || this.form.CO_KINH_MAT_PHAI || '');
+            const cl = parseFloat(this.visionState?.correctedLeft || this.form.CO_KINH_MAT_TRAI || '');
+            if (!isNaN(cr) || !isNaN(cl)) {
+              const sum = (isNaN(cr) ? 10 : cr) + (isNaN(cl) ? 10 : cl);
+              base = sum >= 19 ? 1 : (sum >= 16 ? 2 : (sum >= 13 ? 3 : (sum >= 10 ? 4 : (sum >= 6 ? 5 : 6))));
+            } else {
+              base = this.visionState?.baseVisionScore || 1;
+            }
+          } else {
+            base = this.visionState?.baseVisionScore || 1;
+          }
+        } else {
+          const refClsId = this.selectedClassifications?.[c.refDiseaseId];
+          const refCls = (this.getPlConfig().classifications || []).find(x => x.id === refClsId);
+          base = refCls ? this.calcClassificationScore(refCls, depth + 1) : 1;
+        }
+        let delta = 0;
+        const adj = c.adjust !== undefined && c.adjust !== null ? c.adjust : c.refAdjustment;
+        if (typeof adj === 'number') {
+          delta = adj;
+        } else if (typeof adj === 'string') {
+          const m = adj.match(/[+-]?\d+/);
+          if (m) delta = parseInt(m[0], 10) || 0;
+        }
+        return Math.min(6, Math.max(1, base + delta));
+      }
+      return 1;
     },
 
     initDefaultClassifications() {
@@ -3249,7 +3285,66 @@ function kskApp() {
     canPrintFullKsk() {
       if (!this.recordId) return false;
       if (this.recordStatus >= 1) return true;
-      return this.isSectionExamined('conclusion');
+      const set = (this.form._EXAMINED_SECTIONS || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (this.activeRecordTemplate === 'TREN_18') {
+        const req = ['reception', 'history', 'physical', 'clin_noi', 'clin_ngoai', 'clin_dalieu', 'clin_mat', 'clin_tmh', 'clin_rhm', 'paraclinical', 'conclusion'];
+        if (this.form.GIOI_TINH === '2') req.push('clin_san');
+        return req.every(s => set.includes(s));
+      }
+      const reqCustom = ['reception', 'history', 'physical', 'clinical', 'conclusion'];
+      return reqCustom.every(s => set.includes(s));
+    },
+
+    async loadPhanLoaiTree() {
+      try {
+        const res = await fetch('/api/phan-loai/tree', {
+          headers: { 'Authorization': `Bearer ${this.token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          this.phanLoaiTree = data.tree || [];
+          this.phanLoaiStats = data.stats || {};
+        }
+      } catch (_) {}
+    },
+
+    async reloadPhanLoaiXlsx() {
+      this.phanLoaiReloading = true;
+      try {
+        const res = await fetch('/api/admin/phan-loai/reload-xlsx', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${this.token}` }
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this.toast(data.message || 'Đã đồng bộ từ phan_loai.xlsx');
+          await this.loadPhanLoaiTree();
+        } else {
+          this.toast(data.error || 'Lỗi đồng bộ phan_loai.xlsx', 'error');
+        }
+      } catch (e) {
+        this.toast('Lỗi kết nối khi đồng bộ phan_loai.xlsx', 'error');
+      } finally {
+        this.phanLoaiReloading = false;
+      }
+    },
+
+    togglePhanLoaiNode(id) {
+      this.phanLoaiExpanded[id] = !this.phanLoaiExpanded[id];
+    },
+
+    filteredPhanLoaiTree() {
+      const q = (this.phanLoaiSearch || '').trim().toLowerCase();
+      if (!q) return this.phanLoaiTree || [];
+      return (this.phanLoaiTree || []).filter(root => {
+        if ((root.name || '').toLowerCase().includes(q) || (root.note || '').toLowerCase().includes(q)) return true;
+        if ((root.diseases || []).some(d => (d.name || '').toLowerCase().includes(q) || (d.classifications || []).some(c => (c.name || '').toLowerCase().includes(q) || (c.refRule || '').toLowerCase().includes(q)))) return true;
+        return (root.children || []).some(sub =>
+          (sub.name || '').toLowerCase().includes(q) ||
+          (sub.note || '').toLowerCase().includes(q) ||
+          (sub.diseases || []).some(d => (d.name || '').toLowerCase().includes(q) || (d.classifications || []).some(c => (c.name || '').toLowerCase().includes(q) || (c.refRule || '').toLowerCase().includes(q)))
+        );
+      });
     },
 
     printRecordPdf(isReception) {

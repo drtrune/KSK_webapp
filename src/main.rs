@@ -37,7 +37,6 @@ const INDEX_HTML: &str = concat!(
     include_str!("../ui/tabs/clinical.html"),
     include_str!("../ui/tabs/paraclinical.html"),
     include_str!("../ui/tabs/conclusion.html"),
-    include_str!("../ui/tabs/group.html"),
     include_str!("../ui/tabs/export_csv.html"),
     include_str!("../ui/tabs/admin.html"),
     include_str!("../ui/tabs/print.html"),
@@ -240,6 +239,7 @@ async fn main() {
         .route("/api/records", get(list_records_handler).post(save_record_handler))
         .route("/api/records/by-ma-tn/:ma_tn", get(get_record_by_ma_tn_handler))
         .route("/api/records/:id", get(get_record_handler))
+        .route("/api/records/:id/complete", post(complete_record_handler))
         .route("/api/records/:id/lock", post(lock_record_handler))
         .route("/api/records/:id/unlock", post(unlock_record_handler))
         .route("/api/records/:id/templates", put(update_record_templates_handler))
@@ -281,6 +281,8 @@ async fn main() {
             get(download_db_backup_handler).delete(delete_db_backup_handler),
         )
         .route("/api/admin/catalogs/reload-asset", post(reload_asset_catalogs_handler))
+        .route("/api/phan-loai/tree", get(get_phan_loai_tree_handler))
+        .route("/api/admin/phan-loai/reload-xlsx", post(reload_phan_loai_xlsx_handler))
         .layer(cors)
         .with_state(state);
 
