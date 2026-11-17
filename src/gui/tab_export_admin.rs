@@ -765,12 +765,19 @@ impl KskGpuiApp {
             .into_any_element()
     }
 
+    /// Hiển thị giao diện quản lý, tạo mới, chỉnh sửa và reset mật khẩu tài khoản nhân viên.
     fn render_admin_users(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let users = self.users_list.clone();
+        let edit_card = if self.adm_edit_user_id.is_some() {
+            Some(self.render_edit_user_card(cx))
+        } else {
+            None
+        };
         div()
             .flex()
             .flex_col()
             .gap(px(14.0))
+            .children(edit_card)
             .child(
                 card_box()
                     .child(
@@ -902,6 +909,15 @@ impl KskGpuiApp {
                                         badge("Đã khóa", DANGER_BG, DANGER_COL)
                                     })
                                     .child(
+                                        Button::new(SharedString::from(format!("btn-edit-u-{}", uid)))
+                                            .label("Sửa / Reset MK")
+                                            .small()
+                                            .secondary()
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.start_edit_user(uid, window, cx);
+                                            })),
+                                    )
+                                    .child(
                                         Button::new(SharedString::from(format!("btn-toggle-u-{}", uid)))
                                             .label(if is_active { "Khóa" } else { "Mở khóa" })
                                             .small()
@@ -912,6 +928,93 @@ impl KskGpuiApp {
                                     ),
                             )
                     })),
+            )
+            .into_any_element()
+    }
+
+    /// Hiển thị thẻ chỉnh sửa thông tin, phân quyền và reset mật khẩu cho tài khoản đang chọn.
+    fn render_edit_user_card(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let username = self.adm_edit_username.clone();
+        card_box()
+            .border_color(rgb(PRIMARY_COL))
+            .child(
+                div()
+                    .text_base()
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .child(format!("Chỉnh sửa tài khoản & Reset mật khẩu: {}", username)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(12.0))
+                    .child(
+                        div()
+                            .flex_1()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.0))
+                            .child(field_label("Họ tên / Chức danh", true))
+                            .child(Input::new(&self.adm_edit_fullname).small()),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.0))
+                            .child(field_label("Mật khẩu mới (để trống nếu giữ nguyên)", false))
+                            .child(Input::new(&self.adm_edit_pw).small()),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .gap(px(8.0))
+                    .children(VALID_ROLES.iter().map(|r| {
+                        let checked = self.adm_edit_roles.contains(&r.to_string());
+                        let role_s = r.to_string();
+                        Checkbox::new(SharedString::from(format!("edit-role-{}", r)))
+                            .label(role_label_vi(r))
+                            .checked(checked)
+                            .on_change(cx.listener(move |this, val, _, cx| {
+                                if *val {
+                                    if !this.adm_edit_roles.contains(&role_s) {
+                                        this.adm_edit_roles.push(role_s.clone());
+                                    }
+                                } else {
+                                    this.adm_edit_roles.retain(|x| x != &role_s);
+                                }
+                                cx.notify();
+                            }))
+                    })),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .justify_end()
+                    .gap(px(8.0))
+                    .child(
+                        Button::new("btn-adm-cancel-edit-user")
+                            .label("Hủy")
+                            .small()
+                            .secondary()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.cancel_edit_user(window, cx);
+                            })),
+                    )
+                    .child(
+                        Button::new("btn-adm-save-edit-user")
+                            .label("Lưu thay đổi")
+                            .small()
+                            .primary()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.save_edit_user(window, cx);
+                            })),
+                    ),
             )
             .into_any_element()
     }

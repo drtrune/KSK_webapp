@@ -547,6 +547,11 @@ pub struct KskGpuiApp {
     pub adm_new_pw: Entity<InputState>,
     pub adm_new_fullname: Entity<InputState>,
     pub adm_new_roles: Vec<String>,
+    pub adm_edit_user_id: Option<i64>,
+    pub adm_edit_username: String,
+    pub adm_edit_fullname: Entity<InputState>,
+    pub adm_edit_pw: Entity<InputState>,
+    pub adm_edit_roles: Vec<String>,
     pub catalogs: Vec<CatalogItem>,
     pub adm_cat_type: String,
     pub adm_cat_code: Entity<InputState>,
@@ -727,6 +732,13 @@ impl KskGpuiApp {
                 .masked(true)
         });
         let adm_new_fullname = cx.new(|cx| InputState::new(window, cx).placeholder("BS. Nguyễn Văn A"));
+        let adm_edit_fullname =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Họ tên / Chức danh"));
+        let adm_edit_pw = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Mật khẩu mới (để trống nếu không đổi)")
+                .masked(true)
+        });
 
         let adm_cat_code = cx.new(|cx| InputState::new(window, cx).placeholder("Mã (vd: 11221, I10)"));
         let adm_cat_name = cx.new(|cx| InputState::new(window, cx).placeholder("Tên hiển thị"));
@@ -997,6 +1009,11 @@ impl KskGpuiApp {
             adm_new_pw,
             adm_new_fullname,
             adm_new_roles: vec!["reception".into()],
+            adm_edit_user_id: None,
+            adm_edit_username: String::new(),
+            adm_edit_fullname,
+            adm_edit_pw,
+            adm_edit_roles: Vec::new(),
             catalogs: Vec::new(),
             adm_cat_type: "TINH_TP".into(),
             adm_cat_code,
@@ -2649,18 +2666,133 @@ impl KskGpuiApp {
         }
     }
 
+    /// Khóa hoặc mở khóa tài khoản nhân viên theo ID.
     pub fn toggle_user_active(&mut self, user_id: i64, lock: bool, cx: &mut Context<Self>) {
+        if lock && self.current_user.as_ref().map(|u| u.id) == Some(user_id) {
+            self.show_toast("Không thể tự khóa tài khoản đang đăng nhập!", true, cx);
+            return;
+        }
         let val = if lock { 1i64 } else { 0i64 };
         let state = self.state.clone();
         let _ = self.run_sync(async move {
             let pool = state.db.read().await;
-            sqlx::query("UPDATE users SET is_locked = ? WHERE id = ?")
+            let _ = sqlx::query("UPDATE users SET is_locked = ? WHERE id = ?")
                 .bind(val)
                 .bind(user_id)
                 .execute(&*pool)
-                .await
+                .await;
+            if lock {
+                let _ = sqlx::query("DELETE FROM sessions WHERE user_id = ?")
+                    .bind(user_id)
+                    .execute(&*pool)
+                    .await;
+            }
         });
         self.refresh_users(cx);
+    }
+
+    /// Mở biểu mẫu chỉnh sửa thông tin và reset mật khẩu cho một tài khoản nhân viên.
+    pub fn start_edit_user(&mut self, user_id: i64, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(u) = self.users_list.iter().find(|u| u.id == user_id).cloned() else {
+            return;
+        };
+        self.adm_edit_user_id = Some(u.id);
+        self.adm_edit_username = u.username.clone();
+        self.adm_edit_roles = u.roles();
+        self.adm_edit_fullname
+            .update(cx, |s, cx| s.set_value(&u.full_name, window, cx));
+        self.adm_edit_pw
+            .update(cx, |s, cx| s.set_value("", window, cx));
+        cx.notify();
+    }
+
+    /// Hủy chỉnh sửa tài khoản và xóa trắng biểu mẫu sửa.
+    pub fn cancel_edit_user(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.adm_edit_user_id = None;
+        self.adm_edit_username.clear();
+        self.adm_edit_roles.clear();
+        self.adm_edit_fullname
+            .update(cx, |s, cx| s.set_value("", window, cx));
+        self.adm_edit_pw
+            .update(cx, |s, cx| s.set_value("", window, cx));
+        cx.notify();
+    }
+
+    /// Lưu thông tin chỉnh sửa (họ tên, quyền) và reset mật khẩu (nếu có nhập) cho tài khoản.
+    pub fn save_edit_user(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(user_id) = self.adm_edit_user_id else {
+            return;
+        };
+        let full_name = self.adm_edit_fullname.read(cx).value().trim().to_string();
+        let new_pw = self.adm_edit_pw.read(cx).value().trim().to_string();
+        if full_name.is_empty() {
+            self.show_toast("Họ tên / Chức danh không được để trống!", true, cx);
+            return;
+        }
+        if self.adm_edit_roles.is_empty() {
+            self.show_toast("Vui lòng chọn ít nhất một quyền cho tài khoản!", true, cx);
+            return;
+        }
+        let roles_csv = self.adm_edit_roles.join(",");
+
+        let pw_update: Option<(String, String)> = if !new_pw.is_empty() {
+            let hash = db::hash_password(&new_pw);
+            let wrapped_mk = match self.master_key {
+                Some(ref mk) => match crate::crypto::wrap_master_key(mk, &new_pw) {
+                    Ok(w) => w,
+                    Err(e) => {
+                        self.show_toast(&format!("Lỗi bọc Master Key: {}", e), true, cx);
+                        return;
+                    }
+                },
+                None => String::new(),
+            };
+            Some((hash, wrapped_mk))
+        } else {
+            None
+        };
+
+        let reset_pw_flag = pw_update.is_some();
+        let state = self.state.clone();
+        let res: Result<(), String> = self.run_sync(async move {
+            let pool = state.db.read().await;
+            sqlx::query("UPDATE users SET full_name = ?, role = ? WHERE id = ?")
+                .bind(&full_name)
+                .bind(&roles_csv)
+                .bind(user_id)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            if let Some((hash, wrapped_mk)) = pw_update {
+                sqlx::query("UPDATE users SET password_hash = ?, wrapped_mk = ? WHERE id = ?")
+                    .bind(&hash)
+                    .bind(&wrapped_mk)
+                    .bind(user_id)
+                    .execute(&*pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let _ = sqlx::query("DELETE FROM sessions WHERE user_id = ?")
+                    .bind(user_id)
+                    .execute(&*pool)
+                    .await;
+            }
+            Ok(())
+        });
+
+        match res {
+            Ok(()) => {
+                self.cancel_edit_user(window, cx);
+                self.refresh_users(cx);
+                let msg = if reset_pw_flag {
+                    "Đã cập nhật thông tin và reset mật khẩu tài khoản!"
+                } else {
+                    "Đã cập nhật thông tin tài khoản!"
+                };
+                self.show_toast(msg, false, cx);
+            }
+            Err(e) => self.show_toast(&format!("Lỗi cập nhật tài khoản: {}", e), true, cx),
+        }
     }
 
     pub fn query_catalog_items(
